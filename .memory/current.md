@@ -7,10 +7,10 @@
 [Phase P01](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md)
 
 ## Active Task
-[T02 state and save](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T02-state-and-save.md)
+[T03 equipment and economy](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T03-equipment-economy.md)
 
 ## Status
-- T01 app shell completed; validation passed.
+- T01 and T02 completed; production build passed.
 
 ## Next Step (IMPORTANT)
-Read the active task blueprint T02-state-and-save.md, implement its state model and localStorage persistence, and run the specified validation.
+Read T03-equipment-economy.md, implement gear generation, inventory, equip, dismantle, and upgrade rules, then run its validation.
