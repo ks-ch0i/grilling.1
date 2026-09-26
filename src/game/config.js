@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene.js';
+import { TownScene } from './scenes/TownScene.js';
 
 export function createGameConfig(parent) {
   return {
@@ -8,10 +9,7 @@ export function createGameConfig(parent) {
     height: 720,
     parent,
     backgroundColor: '#17202b',
-    scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-    },
-    scene: [BootScene],
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scene: [BootScene, TownScene],
   };
 }

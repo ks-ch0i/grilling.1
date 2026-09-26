@@ -7,10 +7,10 @@
 [Phase P01](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md)
 
 ## Active Task
-[T05 town interface](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T05-town-ui.md)
+[T06 battle scene](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T06-battle-scene.md)
 
 ## Status
-- T01 through T04 completed; build and core domain checks passed.
+- T01 through T05 completed; town scene compiles and build passes.
 
 ## Next Step (IMPORTANT)
-Read T05-town-ui.md and implement the Korean town, equipment management, and stage selection interface, then run its validation.
+Read T06-battle-scene.md and implement the side-view contact battle, movement, enemies, boss, knockback, and battle HUD.
