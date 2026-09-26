@@ -62,3 +62,19 @@ body {
     height: min(100vh, 56.25vw);
   }
 }
+#save-warning {
+  display: none;
+  position: fixed;
+  z-index: 10;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #d8ba77;
+  border-radius: 0.5rem;
+  background: #202d3b;
+  color: #f4e6bf;
+  box-shadow: 0 8px 32px #0008;
+}
+#save-warning.is-visible { display: block; }

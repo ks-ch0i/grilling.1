@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { RARITY_COLOR } from '../data/balance.js';
 
 export function createButton(scene, { x, y, width, height, label, onClick, enabled = true }) {
-  const container = scene.add.container(x, y);
+  const container = scene.add.container(x, y).setScrollFactor(0);
   const background = scene.add.rectangle(width / 2, height / 2, width, height, enabled ? 0x344355 : 0x252c35, 1);
   background.setStrokeStyle(1, enabled ? 0x8392a2 : 0x535b64);
   const text = scene.add.text(width / 2, height / 2, label, {
@@ -26,7 +26,7 @@ export function createButton(scene, { x, y, width, height, label, onClick, enabl
 }
 
 export function createPanel(scene, { x, y, width, height, title }) {
-  const container = scene.add.container(x, y);
+  const container = scene.add.container(x, y).setScrollFactor(0);
   const background = scene.add.rectangle(width / 2, height / 2, width, height, 0x1a2531, 0.94);
   background.setStrokeStyle(1, 0x47576a);
   const heading = scene.add.text(width / 2, 20, title, {

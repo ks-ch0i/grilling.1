@@ -1,4 +1,4 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
 import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
 import { stageId } from '../domain/progression.js';
@@ -31,11 +31,12 @@ export class TownScene extends Phaser.Scene {
   }
 
   init(data = {}) {
+    this.transitioning = false;
     this.gameState = data.gameState ?? createInitialState();
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.selectedStageId = data.unlockedStageId ?? stageId(
-      this.gameState.progression.unlockedChapter,
-      this.gameState.progression.unlockedStage,
+      this.gameState.progression.chapter,
+      this.gameState.progression.currentStage,
     );
     this.replayXpMultiplier = data.replayXpMultiplier ?? BALANCE.replayXpMultiplier;
   }
@@ -59,10 +60,6 @@ export class TownScene extends Phaser.Scene {
 
   refresh() {
     this.children.removeAll(true);
-    if (this.inventoryMaskGraphics) {
-      this.inventoryMaskGraphics.destroy();
-      this.inventoryMaskGraphics = null;
-    }
     this.renderTown();
   }
 
@@ -107,10 +104,7 @@ export class TownScene extends Phaser.Scene {
   renderInventory() {
     const inventory = this.gameState.inventory;
     const viewport = { x:479, y:132, width:410, height:458 };
-    this.inventoryMaskGraphics = this.make.graphics({ x:0, y:0, add:false });
-    this.inventoryMaskGraphics.fillRect(viewport.x, viewport.y, viewport.width, viewport.height);
-    const mask = this.inventoryMaskGraphics.createGeometryMask();
-    const grid = this.add.container(0, 0).setMask(mask);
+    const grid = this.add.container(0, 0);
     inventory.forEach((item, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2) - Math.floor(this.inventoryOffset / 2);
@@ -193,10 +187,24 @@ export class TownScene extends Phaser.Scene {
     createButton(this,{x:688,y:630,width:250,height:58,label:'다음/선택 스테이지 ▶',enabled:options.length>1,onClick:()=>{
       this.selectedStageId=options[(selectedIndex+1)%options.length];this.refresh();
     }});
-    createButton(this,{x:1000,y:630,width:248,height:58,label:'전투 출발',onClick:()=>{
-      const [chapter,stage]=this.selectedStageId.split('-').map(Number);
-      this.scene.start('BattleScene',{gameState:this.gameState,saveState:this.saveState,chapter,stage,isReplay});
-    }});
+    createButton(this,{x:1000,y:630,width:248,height:58,label:'전투 출발',onClick:()=>this.startBattle(this.selectedStageId)});
+  }
+
+  startBattle(selectedStageId) {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    const [chapter, stage] = selectedStageId.split('-').map(Number);
+    const isReplay = this.gameState.progression.clearedStageIds.includes(selectedStageId);
+    const gameState = {
+      ...this.gameState,
+      progression: { ...this.gameState.progression, chapter, currentStage:stage },
+    };
+    this.saveState(gameState);
+    const stageSnapshot = typeof structuredClone === 'function'
+      ? structuredClone(gameState)
+      : JSON.parse(JSON.stringify(gameState));
+    this.scene.start('BattleScene', {
+      gameState, saveState:this.saveState, chapter, stage, isReplay, stageSnapshot,
+    });
   }
 }
-

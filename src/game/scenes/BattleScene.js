@@ -1,4 +1,4 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
@@ -29,6 +29,7 @@ export class BattleScene extends Phaser.Scene {
     this.chapter = data.chapter ?? this.gameState.progression.chapter;
     this.stage = data.stage ?? this.gameState.progression.currentStage;
     this.isReplay = Boolean(data.isReplay);
+    this.transitioning = false;
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.stageSnapshot = data.stageSnapshot ?? this.gameState;
     this.normalDefeated = 0;
@@ -55,7 +56,9 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerupoutside', () => { this.touchDirection = 0; });
     this.createHud();
     if (this.isPortrait()) this.combatPaused = true;
-    this.scale.on('resize', () => this.updatePortraitState());
+    this.resizeHandler = () => this.updatePortraitState();
+    this.scale.on('resize', this.resizeHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', this.resizeHandler));
   }
 
   isPortrait() {
@@ -247,7 +250,7 @@ export class BattleScene extends Phaser.Scene {
       this.applyKnockback(enemy.x);
       this.updateHud();
       if (this.player.currentHp <= 0) {
-        this.gameState = { ...this.gameState, player:{ ...this.gameState.player, currentHp:0 } };
+        this.gameState = retryStage(this.stageSnapshot, this.gameState).state;
         this.saveState(this.gameState);
         this.showGameOver();
         return;
@@ -274,8 +277,10 @@ export class BattleScene extends Phaser.Scene {
     enemy.active = false;
     enemy.view.setVisible(false);
     this.normalDefeated += enemy.isBoss ? 0 : 1;
-    const reward = grantXp(this.gameState, BALANCE.xpRewards.normalEnemy, this.isReplay);
-    if (reward.ok) this.gameState = reward.state;
+    if (!enemy.isBoss) {
+      const reward = grantXp(this.gameState, BALANCE.xpRewards.normalEnemy, this.isReplay);
+      if (reward.ok) this.gameState = reward.state;
+    }
     if (enemy.isBoss) {
       this.dropGear(enemy.x, true);
       this.finishStage();
@@ -320,6 +325,7 @@ export class BattleScene extends Phaser.Scene {
     this.levelModal.add(this.add.rectangle(640, 355, 470, 300, 0x202d3b).setStrokeStyle(2, 0xd8ba77));
     this.levelModal.add(this.add.text(640, 250, '레벨 업!  능력치를 선택하세요', { fontFamily:'sans-serif',fontSize:'23px',color:'#ffdf94' }).setOrigin(0.5));
     const choices=[['attack','공격력 +2'],['defense','방어력 +5'],['maxHp','최대 HP +10']];
+    this.levelModalButtons=[];
     choices.forEach(([key,label],index)=>{
       const button=createButton(this,{x:445,y:292+index*66,width:390,height:52,label,onClick:()=>{
         const result=chooseLevelUpStat(this.gameState,key);
@@ -330,6 +336,8 @@ export class BattleScene extends Phaser.Scene {
         this.player.currentHp=Math.min(this.player.maxHp,this.gameState.player.currentHp);
         this.gameState={...this.gameState,player:{...this.gameState.player,currentHp:this.player.currentHp}};
         this.saveState(this.gameState);
+        this.levelModalButtons.forEach((levelButton)=>levelButton.destroy());
+        this.levelModalButtons=[];
         this.levelModal.destroy();
         this.levelModal=null;
         this.combatPaused=this.isPortrait();
@@ -337,7 +345,8 @@ export class BattleScene extends Phaser.Scene {
         else if(this.pendingStageClear){const next=this.pendingStageClear;this.pendingStageClear=null;this.showStageClear(next.nextChapter,next.nextStage);}
         this.updateHud();
       }});
-      this.levelModal.add(button);
+      button.setDepth(201);
+      this.levelModalButtons.push(button);
     });
   }
 
@@ -357,7 +366,7 @@ export class BattleScene extends Phaser.Scene {
     this.combatPaused=true;
     const completed=completeStage(this.gameState,this.chapter,this.stage);
     if (!completed.ok) return;
-    this.gameState=completed.state;
+    this.gameState={...completed.state,progression:{...completed.state.progression,chapter:completed.nextChapter,currentStage:completed.nextStage}};
     this.player.currentHp=this.gameState.player.currentHp;
     this.saveState(this.gameState);
     this.updateHud();
@@ -373,12 +382,17 @@ export class BattleScene extends Phaser.Scene {
     overlay.add(this.add.rectangle(640,345,560,300,0x202d3b).setStrokeStyle(2,0xd8ba77));
     overlay.add(this.add.text(640,245,'스테이지 완료',{fontFamily:'sans-serif',fontSize:'30px',color:'#ffdf94'}).setOrigin(0.5));
     overlay.add(this.add.text(640,290,this.chapter+'-'+this.stage+' 클리어 · XP +'+BALANCE.xpRewards.stageClear,{fontFamily:'sans-serif',fontSize:'17px',color:'#e4ebf1'}).setOrigin(0.5));
-    overlay.add(createButton(this,{x:355,y:350,width:230,height:58,label:'마을로',onClick:()=>{
-      this.scene.start('TownScene',{gameState:this.gameState,saveState:this.saveState});
-    }}));
-    overlay.add(createButton(this,{x:600,y:350,width:325,height:58,label:'다음 스테이지 '+nextChapter+'-'+nextStage,onClick:()=>{
-      this.scene.start('BattleScene',{gameState:this.gameState,saveState:this.saveState,chapter:nextChapter,stage:nextStage,isReplay:false,stageSnapshot:this.gameState});
-    }}));
+    createButton(this,{x:355,y:350,width:230,height:58,label:'마을로',onClick:()=>{
+      if(this.transitioning)return;
+      this.transitioning=true;
+      this.scene.start('TownScene',{gameState:this.gameState,saveState:this.saveState,unlockedStageId:nextChapter+'-'+nextStage});
+    }}).setDepth(251);
+    createButton(this,{x:600,y:350,width:325,height:58,label:'다음 스테이지 '+nextChapter+'-'+nextStage,onClick:()=>{
+      if(this.transitioning)return;
+      this.transitioning=true;
+      const snapshot=typeof structuredClone==='function'?structuredClone(this.gameState):JSON.parse(JSON.stringify(this.gameState));
+      this.scene.start('BattleScene',{gameState:this.gameState,saveState:this.saveState,chapter:nextChapter,stage:nextStage,isReplay:false,stageSnapshot:snapshot});
+    }}).setDepth(251);
   }
 
   showGameOver() {
@@ -390,11 +404,12 @@ export class BattleScene extends Phaser.Scene {
     overlay.add(this.add.rectangle(640,345,520,260,0x2b2225).setStrokeStyle(2,0xb65e62));
     overlay.add(this.add.text(640,255,'쓰러졌습니다',{fontFamily:'sans-serif',fontSize:'29px',color:'#ffb6ad'}).setOrigin(0.5));
     overlay.add(this.add.text(640,300,'이번 도전의 장비와 재료는 입장 시점으로 돌아갑니다.',{fontFamily:'sans-serif',fontSize:'15px',color:'#e2d0cd'}).setOrigin(0.5));
-    overlay.add(createButton(this,{x:480,y:365,width:320,height:58,label:'다시 시작',onClick:()=>{
+    createButton(this,{x:480,y:365,width:320,height:58,label:'다시 시작',onClick:()=>{
+      if(this.transitioning)return;
+      this.transitioning=true;
       const result=retryStage(this.stageSnapshot,this.gameState);
       this.saveState(result.state);
       this.scene.restart({gameState:result.state,saveState:this.saveState,chapter:this.chapter,stage:this.stage,isReplay:this.isReplay,stageSnapshot:result.state});
-    }}));
+    }}).setDepth(251);
   }
 }
-
