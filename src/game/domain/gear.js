@@ -1,4 +1,4 @@
-import { BALANCE, GEAR_SLOT, RARITY, STAT_KEYS, getStageDropWeights } from '../data/balance.js';
+﻿import { BALANCE, GEAR_SLOT, RARITY, STAT_KEYS, getStageDropWeights } from '../data/balance.js';
 
 const RARITIES = Object.values(RARITY);
 const SLOTS = Object.values(GEAR_SLOT);
@@ -89,27 +89,19 @@ export function getGearStatSummary(item) {
 }
 
 export function createInitialState(idFactory) {
-  return {
+  const state = {
     schemaVersion: 1,
     player: {
-      level: 1,
-      xp: 0,
-      xpToNext: 100,
-      pendingLevelUps: 0,
+      level: 1, xp: 0, xpToNext: 100, pendingLevelUps: 0,
       currentHp: BALANCE.basePlayer.maxHp,
       baseStats: { ...BALANCE.basePlayer },
     },
     equipment: createStarterEquipment(idFactory),
-    inventory: [],
-    materials: 0,
-    progression: {
-      chapter: 1,
-      currentStage: 1,
-      unlockedChapter: 1,
-      unlockedStage: 1,
-      clearedStageIds: [],
-    },
+    inventory: [], materials: 0,
+    progression: { chapter: 1, currentStage: 1, unlockedChapter: 1, unlockedStage: 1, clearedStageIds: [] },
   };
+  state.player.currentHp = derivePlayerStats(state).maxHp;
+  return state;
 }
 
 export function equipGear(state, itemId) {
@@ -236,3 +228,4 @@ export function tryStoreDrop(state, item) {
   }
   return { ok: true, state: { ...state, inventory: [...state.inventory, item] } };
 }
+

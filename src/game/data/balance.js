@@ -10,6 +10,7 @@ export const BALANCE = freezeRecord({
  basePlayer:freezeRecord({maxHp:100,attack:10,defense:5,critChance:0.05,critMultiplier:2,moveSpeed:200}),
  levelUp:freezeRecord({attack:2,defense:5,maxHp:10}), critChanceCap:1, gearMaxLevel:30,
  normalEnemyCount:10, normalDropChance:0.2, bossDropCount:1, knockbackPixels:96,
+ enemyBaseStats:freezeRecord({maxHp:60,attack:12,defense:10}), xpRewards:freezeRecord({normalEnemy:10,stageClear:100,boss:200}),
  contactInvulnerabilityMs:0, enemyStageGrowth:0.1, chapterGrowth:0.5,
  bossMultipliers:freezeRecord({maxHp:5,attack:2,defense:2}), healAfterStage:0.5, replayXpMultiplier:0.3,
  gearRarityMultipliers:freezeRecord({common:1,uncommon:1.5,rare:2,unique:3,legendary:5}),
@@ -26,5 +27,6 @@ export function getStageDropWeights(stage) {
  const progress=(clampedStage-1)/9;
  return stageOneDropWeights.map((weight,index)=>weight+(stageTenDropWeights[index]-weight)*progress);
 }
+
 
 
