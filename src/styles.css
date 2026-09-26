@@ -1,0 +1,64 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Noto Sans KR", sans-serif;
+  background: #10161e;
+  color: #f4e6bf;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, #273443, #10161e 72%);
+}
+
+#game {
+  width: min(100vw, 177.78vh);
+  height: min(100vh, 56.25vw);
+  overflow: hidden;
+  touch-action: none;
+  box-shadow: 0 18px 80px #0009;
+}
+
+#game canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+#rotate-message {
+  display: none;
+  position: fixed;
+  inset: auto 0 0;
+  margin: 0;
+  padding: 1rem;
+  background: #10161eed;
+  color: #f4e6bf;
+  text-align: center;
+  z-index: 2;
+}
+
+@media (orientation: portrait) {
+  body.is-portrait #rotate-message {
+    display: block;
+  }
+
+  body.is-portrait #game {
+    width: min(100vw, 177.78vh);
+    height: min(100vh, 56.25vw);
+  }
+}
