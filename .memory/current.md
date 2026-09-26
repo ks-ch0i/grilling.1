@@ -7,10 +7,10 @@
 [Phase P01](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md)
 
 ## Active Task
-[T03 equipment and economy](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T03-equipment-economy.md)
+[T04 combat and progression](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T04-combat-progression.md)
 
 ## Status
-- T01 and T02 completed; production build passed.
+- T01 through T03 completed; build and gear economy checks passed.
 
 ## Next Step (IMPORTANT)
-Read T03-equipment-economy.md, implement gear generation, inventory, equip, dismantle, and upgrade rules, then run its validation.
+Read T04-combat-progression.md, implement contact combat, XP/level rewards, and stage progression rules, then validate them.

@@ -1,4 +1,4 @@
-const freezeRecord = (value) => Object.freeze(value);
+﻿const freezeRecord = (value) => Object.freeze(value);
 export const GEAR_SLOT = freezeRecord({ HELMET:'helmet', ARMOR:'armor', GLOVES:'gloves', BOOTS:'boots', SPEAR:'spear', HORSE:'horse' });
 export const RARITY = freezeRecord({ COMMON:'common', UNCOMMON:'uncommon', RARE:'rare', UNIQUE:'unique', LEGENDARY:'legendary' });
 export const RARITY_COLOR = freezeRecord({ common:0x858b91, uncommon:0xf2f2f2, rare:0x4294ff, unique:0xb45cff, legendary:0xffcf45 });
@@ -19,10 +19,12 @@ export const BALANCE = freezeRecord({
   gloves:freezeRecord({critChance:0.03,critMultiplier:0.15}), boots:freezeRecord({critChance:0.02,critMultiplier:0.25}),
   spear:freezeRecord({attack:8}), horse:freezeRecord({moveSpeedPercent:0.2}),
  }),
- gearRollRange:freezeRecord({min:0.75,max:1.25}),
+ effectValues:freezeRecord({bonusDamage:freezeRecord({common:0.05,uncommon:0.08,rare:0.12,unique:0.18,legendary:0.25}),lifeSteal:freezeRecord({common:0.02,uncommon:0.03,rare:0.05,unique:0.08,legendary:0.12}),damageReduction:freezeRecord({common:0.02,uncommon:0.03,rare:0.05,unique:0.08,legendary:0.12}),thorns:freezeRecord({common:0.03,uncommon:0.05,rare:0.08,unique:0.12,legendary:0.18})}), gearRollRange:freezeRecord({min:0.75,max:1.25}),
 });
 export function getStageDropWeights(stage) {
  const clampedStage=Math.min(10,Math.max(1,stage));
  const progress=(clampedStage-1)/9;
  return stageOneDropWeights.map((weight,index)=>weight+(stageTenDropWeights[index]-weight)*progress);
 }
+
+
