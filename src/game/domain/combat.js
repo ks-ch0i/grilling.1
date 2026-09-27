@@ -45,7 +45,7 @@ export function resolveContact({ playerStats, enemyStats, playerEffects = [], rn
   const enemyDefeated = remainingEnemyHp <= 0;
   const currentPlayerHp = Math.max(0, playerStats.currentHp ?? playerStats.maxHp ?? 0);
   const maxPlayerHp = playerStats.maxHp ?? currentPlayerHp;
-  const playerDamage = enemyDefeated ? 0 : Math.min(currentPlayerHp, playerDamageAfterReduction);
+  const playerDamage = Math.min(currentPlayerHp, playerDamageAfterReduction);
   const lifeStealHealing = Math.floor(Math.min(strikeEnemyDamage, Math.max(0, enemyHp)) * effects.lifeSteal);
   const remainingPlayerHp = Math.min(maxPlayerHp, Math.max(0, currentPlayerHp - playerDamage + lifeStealHealing));
 

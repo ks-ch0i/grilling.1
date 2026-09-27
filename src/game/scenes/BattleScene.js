@@ -209,6 +209,7 @@ export class BattleScene extends Phaser.Scene {
     this.player.x = Phaser.Math.Clamp(this.player.x + direction * this.player.stats.moveSpeed * (delta / 1000), 45, WORLD_WIDTH - 45);
     this.player.view.x = this.player.x;
     this.handleContacts();
+    if (this.finished) return;
     this.collectDrops();
     this.updateHud();
     if (this.player.currentHp <= 0) this.showGameOver();
@@ -246,15 +247,15 @@ export class BattleScene extends Phaser.Scene {
         this.time.delayedCall(110, () => this.player?.view?.setAlpha(1));
       }
       this.showDamageText(enemy.x, FLOOR_Y - 115, result.enemyDamage, result.critical, 0xffd36e);
-      if (result.enemyDefeated) this.defeatEnemy(enemy);
-      this.applyKnockback(enemy.x);
-      this.updateHud();
       if (this.player.currentHp <= 0) {
         this.gameState = retryStage(this.stageSnapshot, this.gameState).state;
         this.saveState(this.gameState);
         this.showGameOver();
         return;
       }
+      if (result.enemyDefeated) this.defeatEnemy(enemy);
+      this.applyKnockback(enemy.x);
+      this.updateHud();
     }
   }
 
