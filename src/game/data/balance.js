@@ -9,6 +9,15 @@ export const BALANCE = freezeRecord({
  canvas:freezeRecord({width:1280,height:720}), inventoryCapacity:20,
  basePlayer:freezeRecord({maxHp:100,attack:10,defense:5,critChance:0.05,critMultiplier:2,moveSpeed:200}),
  levelUp:freezeRecord({attack:2,defense:5,maxHp:10}), critChanceCap:1, gearMaxLevel:30,
+ gearUpgrade:freezeRecord({
+  ordinaryIncrease:freezeRecord({min:0.01,max:0.05}), greatSuccessChance:0.05,
+  specialIncrease:freezeRecord({
+   critChance:freezeRecord({min:0.001,max:0.01}), critMultiplier:freezeRecord({min:0.01,max:0.1}),
+   moveSpeedPercent:freezeRecord({min:0.01,max:0.05}), bonusDamage:freezeRecord({min:0.01,max:0.05}),
+   damageReduction:freezeRecord({min:0.001,max:0.01}), lifeSteal:freezeRecord({min:0.001,max:0.01}),
+   thorns:freezeRecord({min:0.01,max:0.03}),
+  }),
+ }),
  normalEnemyCount:10, normalDropChance:0.2, bossDropCount:1, knockbackPixels:96,
  enemyBaseStats:freezeRecord({maxHp:60,attack:12,defense:10}), xpRewards:freezeRecord({normalEnemy:10,stageClear:100,boss:200}),
  contactInvulnerabilityMs:0, enemyStageGrowth:0.2, chapterGrowth:0.8,
