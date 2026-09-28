@@ -11,7 +11,7 @@ export const BALANCE = freezeRecord({
  levelUp:freezeRecord({attack:2,defense:5,maxHp:10}), critChanceCap:1, gearMaxLevel:30,
  normalEnemyCount:10, normalDropChance:0.2, bossDropCount:1, knockbackPixels:96,
  enemyBaseStats:freezeRecord({maxHp:60,attack:12,defense:10}), xpRewards:freezeRecord({normalEnemy:10,stageClear:100,boss:200}),
- contactInvulnerabilityMs:0, enemyStageGrowth:0.1, chapterGrowth:0.5,
+ contactInvulnerabilityMs:0, enemyStageGrowth:0.2, chapterGrowth:0.8,
  bossMultipliers:freezeRecord({maxHp:5,attack:2,defense:2}), healAfterStage:0.5, replayXpMultiplier:0.3,
  gearRarityMultipliers:freezeRecord({common:1,uncommon:1.5,rare:2,unique:3,legendary:5}),
  stageDropWeights:freezeRecord({first:stageOneDropWeights,tenth:stageTenDropWeights}),
@@ -20,7 +20,7 @@ export const BALANCE = freezeRecord({
   gloves:freezeRecord({critChance:0.03,critMultiplier:0.15}), boots:freezeRecord({critChance:0.02,critMultiplier:0.25}),
   spear:freezeRecord({attack:8}), horse:freezeRecord({moveSpeedPercent:0.2}),
  }),
- effectValues:freezeRecord({bonusDamage:freezeRecord({common:0.05,uncommon:0.08,rare:0.12,unique:0.18,legendary:0.25}),lifeSteal:freezeRecord({common:0.02,uncommon:0.03,rare:0.05,unique:0.08,legendary:0.12}),damageReduction:freezeRecord({common:0.02,uncommon:0.03,rare:0.05,unique:0.08,legendary:0.12}),thorns:freezeRecord({common:0.03,uncommon:0.05,rare:0.08,unique:0.12,legendary:0.18})}), gearRollRange:freezeRecord({min:0.75,max:1.25}),
+ effectValues:freezeRecord({bonusDamage:freezeRecord({common:0.05,uncommon:0.08,rare:0.12,unique:0.18,legendary:0.25}),lifeSteal:freezeRecord({common:0,uncommon:0,rare:0.01,unique:0.03,legendary:0.05}),damageReduction:freezeRecord({common:0.02,uncommon:0.03,rare:0.05,unique:0.08,legendary:0.12}),thorns:freezeRecord({common:0.03,uncommon:0.05,rare:0.08,unique:0.12,legendary:0.18})}), gearRollRange:freezeRecord({min:0.75,max:1.25}),
 });
 export function getStageDropWeights(stage) {
  const clampedStage=Math.min(10,Math.max(1,stage));
