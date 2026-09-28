@@ -1,18 +1,17 @@
-# Current Context
+﻿# Current Context
 
 ## Active Plan
-[Player Lethal Contact](./plans/2026-09-27-player-lethal-contact.md) - complete
+[Game Balance Adjustment](./plans/2026-09-28-game-balance.md)
 
 ## Active Phase
-[P01 Lethal Contact](./phases/2026-09-27-player-lethal-contact/P01-lethal-contact/phase.md) - complete
+[P01 Balance Implementation](./phases/2026-09-28-game-balance/P01-balance/phase.md)
 
 ## Active Task
-None - all tasks are complete.
+[All tasks complete](./phases/2026-09-28-game-balance/P01-balance/phase.md)
 
 ## Status
-- Lethal player damage is calculated independently from enemy defeat.
-- Lethal contacts enter game over before enemy drops, XP, or stage-clear rewards.
-- Production build and focused combat checks passed.
+- Plan complete: 3/3 tasks done
+- Manual browser visual inspection unavailable; see T03 validation notes.
 
 ## Next Step (IMPORTANT)
-No active task remains. Start the next feature with the grill-me interview.
+No remaining task in the active plan.

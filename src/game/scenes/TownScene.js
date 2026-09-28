@@ -32,6 +32,7 @@ export class TownScene extends Phaser.Scene {
 
   init(data = {}) {
     this.transitioning = false;
+    this.upgradeFeedback = null;
     this.gameState = data.gameState ?? createInitialState();
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.selectedStageId = data.unlockedStageId ?? stageId(
@@ -164,9 +165,21 @@ export class TownScene extends Phaser.Scene {
     const upgradeY = selected.type === 'inventory' ? y + 58 : y;
     createButton(this, { x:936,y:upgradeY,width:296,height:48,label:item.level >= BALANCE.gearMaxLevel ? '최대 레벨' : '강화 · 재료 ' + cost,enabled:canUpgrade,onClick:() => {
       const result=upgradeGear(this.gameState,item.id);
-      if(result.ok){this.selectedItem={...selected};this.commitState(result.state);}
+      if (!result.ok) {
+        this.upgradeFeedback = null;
+        this.refresh();
+        return;
+      }
+      this.upgradeFeedback = result.greatSuccess
+        ? { itemId:item.id, message:'강화 대성공!' }
+        : null;
+      this.selectedItem={...selected};
+      this.commitState(result.state);
     }});
-    this.add.text(943, upgradeY + 53, '성공 확정 · 능력치/효과 각각 1~5% 상승', { fontFamily:'sans-serif', fontSize:'11px', color:'#9eacba' });
+    this.add.text(943, upgradeY + 53, '일반 능력치 1~5% · 특수 능력별 상승량\n대성공 5% · 상승량 2배', { fontFamily:'sans-serif', fontSize:'11px', color:'#9eacba' });
+    if (this.upgradeFeedback?.itemId === item.id) {
+      this.add.text(943, upgradeY + 82, this.upgradeFeedback.message, { fontFamily:'sans-serif', fontSize:'13px', color:'#ffcf45' });
+    }
   }
 
   getStageOptions() {
