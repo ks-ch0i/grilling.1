@@ -15,7 +15,9 @@ export function createButton(scene, { x, y, width, height, label, onClick, enabl
   container.add([background, text]);
   container.setSize(width, height);
   if (enabled) {
-    container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
+    // Container hit testing normalizes coordinates by its centered display origin,
+    // while these children are laid out from the container's top-left.
+    container.setInteractive(new Phaser.Geom.Rectangle(width / 2, height / 2, width, height), Phaser.Geom.Rectangle.Contains);
     container.on('pointerdown', onClick);
     container.on('pointerover', () => background.setFillStyle(0x455a70));
     container.on('pointerout', () => background.setFillStyle(0x344355));

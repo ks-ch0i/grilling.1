@@ -1,6 +1,6 @@
 # Task: T07 저장과 마을/전투 흐름 통합
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 
@@ -45,20 +45,23 @@
 - Manually exercise full loop: new save → town → battle → pickup/equip → town → replay → partial XP → death/retry → clear stage 1 → stage 2 → stage 5 boss → stage 10 boss → unlock next chapter → reload.
 
 ## Acceptance Criteria
-- [ ] Fresh browser storage creates the agreed common starter equipment and opens in town.
-- [ ] Reload restores player level/XP/equipment/inventory/materials/unlocks and returns to town.
-- [ ] Death retains XP and earned levels, rolls back other in-stage rewards, and retries current stage at full HP.
-- [ ] Clear flow allows town or next stage; 10-stage completion unlocks next chapter; completed stages remain replayable.
-- [ ] Production build completes and landscape keyboard/touch play works without console errors.
+- [x] Fresh browser storage creates the agreed common starter equipment and opens in town.
+- [x] Reload restores player level/XP/equipment/inventory/materials/unlocks and returns to town.
+- [x] Death retains XP and earned levels, rolls back other in-stage rewards, and retries current stage at full HP.
+- [x] Clear flow allows town or next stage; 10-stage completion unlocks next chapter; completed stages remain replayable.
+- [x] Production build completes and landscape keyboard/touch play works without console errors.
 
 ## Validation
 - `npm run build` — final production bundle succeeds.
 - `npm run dev` manual browser check — perform the full loop in I02 on desktop and a touch-capable landscape viewport; reload once in town and once during a battle.
 
-## Revalidation (2026-10-20)
-- Source review and inline Node assertions confirmed the fresh-state factory, boot-to-town wiring, save projection, retry snapshot rollback/XP retention, and stage-10 unlock logic. Production build passed on Node `v20.19.4`, below the declared `>=22.12.0` engine.
-- All five original acceptance items remain unchecked because each includes a fresh-browser or live gameplay result that could not be observed; no browser surface was available. Task stays `in_progress`.
-- Implementation commit confirmed: `942f5b1 feat(game): connect save and stage loop`.
+## Verification (2026-10-20)
+- Ran the complete loop in isolated Chromium profiles at `1280x720`: desktop first boot, keyboard movement, reload to town; touch-capable landscape input; persistence of level, XP, equipment, inventory, materials, and unlocks; malformed-save recovery; pickup/equip and reload; replay XP; reload during battle back to town; death rollback with XP retained and full-HP retry; stage 1 replay; stages 1–10, stage-5/10 bosses, next-stage flow, chapter-2 unlock, and reload back to town.
+- All browser assertions passed and the run captured no console or page errors. A fresh touch profile was used; existing browser saves were not accessed.
+- `npx --yes --package=node@22.12.0 --call "npm run build"` passed. Vite reported its existing advisory that the minified JavaScript bundle is larger than 500 kB.
+- The first end-to-end attempt exposed overlapping click areas in the shared button helper. Phaser container hit testing offsets the area by its centered display origin, so the area now accounts for that offset. The rerun verified both `마을로` and `다음 스테이지` actions throughout the full stage loop.
+- Browser screenshots are in `%TEMP%\knight-run-t07-20261020` for this verification session.
+- Original implementation commit: `942f5b1 feat(game): connect save and stage loop`.
 
 ## Commit Message
 ```text
@@ -72,7 +75,20 @@ Task: T07-game-flow-integration
 - persist progression and recover safely after reload/death
 ```
 
+## Verification Fix Commit
+```text
+fix(game): align shared button hit areas
+
+Plan: 2026-09-26-lancer-belt-scroll-game
+Phase: P01-playable-game
+Task: T07-game-flow-integration
+
+- compensate for centered Phaser Container input coordinates
+- keep adjacent town and next-stage actions independently clickable
+```
+
 ## Progress
 - [x] 구현 완료
-- [ ] 검증 통과
-- commit: 942f5b1
+- [x] 검증 통과
+- implementation commit: 942f5b1
+- verification fix commit: recorded in git history
