@@ -1,6 +1,6 @@
 # Task: T04 Final Record Sync
 
-## Status: pending
+## Status: done
 
 ## Goal
 
@@ -44,17 +44,24 @@ Cross-check all three audited plans, propagate evidence-based statuses and commi
 
 ## Acceptance Criteria
 
-- [ ] All original task, phase, and plan statuses are consistent with their verified checklist items.
-- [ ] Every original commit field is either a confirmed matching hash or explicitly remains `pending` when no match is proven.
-- [ ] `.memory/current.md` points to the oldest unresolved required verification, or accurately says all three plans are complete.
-- [ ] The new reconciliation phase/plan counts match its task states and the recorded audit outcome.
-- [ ] No gameplay implementation, package configuration, Node installation, or save data changed.
+- [x] All original task, phase, and plan statuses are consistent with their verified checklist items.
+- [x] Every original commit field is either a confirmed matching hash or explicitly remains `pending` when no match is proven.
+- [x] `.memory/current.md` points to the oldest unresolved required verification, or accurately says all three plans are complete.
+- [x] The new reconciliation phase/plan counts match its task states and the recorded audit outcome.
+- [x] No gameplay implementation, package configuration, Node installation, or save data changed.
 
 ## Validation
 
 - Read-only status audit: `rg -n "^## Status:|^\| P[0-9]+ \||^\| T[0-9]+ \||^- done:|^- \[.\] (구현 완료|검증 통과|Implementation complete|Validation passed)|^- commit:|^## Active (Plan|Phase|Task)|^## Status|^## Next Step" .memory/plans .memory/phases .memory/current.md` — all displayed statuses agree with the documented evidence and the current pointer.
 - `git diff --check` — no whitespace errors in memory edits.
 - `git diff -- src` — empty; gameplay source remains unchanged.
+
+## Reconciliation Result (2026-10-20)
+- The 9/26 game phase is `in_progress`, `done: 0/7`; the 9/27 lethal-contact phase is `in_progress`, `done: 0/1`; the 9/28 balance phase is `in_progress`, `done: 2/3`. Each task status, validation box, and implementation commit field matches its recorded evidence.
+- All eleven implementation commit references were confirmed against their Git subjects. No reconciliation commit was written into an implementation task.
+- Cross-plan rules were corrected: the confirmed 9/27 decision supersedes 9/26's killing-hit retaliation rule; the confirmed 9/28 balance decision supersedes the old 9/26 special-stat upgrade and enemy-growth values. The current source matches the newer decisions.
+- `.memory/current.md` now points to the oldest outstanding item, 9/26 T01. Remaining work is a Node `>=22.12.0` build and isolated-browser checks for the current TownScene, landscape 16:9 sizing, and portrait rotation behavior. No browser surface was available in this session.
+- Reconciliation P01 is complete at `4/4`; original plans remain open for their required manual/runtime validation. `git diff --check` passes and `git diff -- src` is empty.
 
 ## Commit Message
 
@@ -71,6 +78,6 @@ Task: T04-final-record-sync
 
 ## Progress
 
-- [ ] Reconciliation complete
-- [ ] Validation passed
+- [x] Reconciliation complete
+- [x] Validation passed
 - commit: pending

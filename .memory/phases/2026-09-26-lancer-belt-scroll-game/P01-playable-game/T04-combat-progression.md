@@ -70,8 +70,8 @@
 
 ## Revalidation (2026-10-20)
 - Inline Node assertions passed for independent contact damage, critical-before-defense order, boss multipliers at 1-1, stage bounds, chapter-2 unlock at a prepared stage-10 state, and death-retry XP retention/reward rollback. Source review confirmed progression and invalid-input guards; build passed on Node `v20.19.4` only.
-- The exact progression-values criterion remains unchecked pending the 9/28 balance-plan reconciliation: the 9/26 decision specifies 10% per stage and +0.5 per chapter, while current `balance.js` has `enemyStageGrowth: 0.2` and `chapterGrowth: 0.8`.
-- Static defect found: `BattleScene.handleContacts` applies `result.playerHp` before handling `result.enemyDefeated`, so a lethal player strike still applies enemy retaliation, contrary to D03. No gameplay code was changed; combat browser scenarios remain unverified.
+- The 9/28 confirmed balance decision intentionally supersedes the 9/26 growth values with 20% per stage and 80% per chapter; its focused value/formula assertions passed. This combined criterion remains open for the required browser checks of replay XP, drops, and progression flow.
+- Correction to the preliminary contact note: the 9/27 confirmed decision supersedes the old 9/26 D03 retaliation rule. Current `BattleScene.handleContacts` routes simultaneous player death to retry/game over before `defeatEnemy` rewards, matching 9/27; this is not a source defect. Browser combat behavior remains unverified.
 - Implementation commit confirmed: `3d46200 feat(game): add combat and chapter progression rules`.
 - Manual gameplay validation — verify weak attack recoil, enemy defeat suppressing retaliation, critical damage before armor, max-HP level-up, replay XP, stage 5/10 boss scaling, and chapter unlock.
 

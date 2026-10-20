@@ -104,4 +104,4 @@ Task: T03-audit-game-balance
 
 - [x] Audit complete
 - [x] Validation recorded
-- commit: pending
+- commit: 12f8b06

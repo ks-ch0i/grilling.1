@@ -62,14 +62,14 @@
 - [x] New drops get stable IDs, a valid slot/rarity, grade-scaled randomized stats, and eligible fixed effects.
 - [x] Starting equipment has all six common slots.
 - [x] Equip swaps slots without losing gear; equipped gear cannot be dismantled; inventory capacity is enforced.
-- [ ] Salvage, 5% double yield, level cap, threshold costs, and random upgrades follow D05–D06 exactly.
+- [x] Salvage, 5% double yield, level cap, threshold costs, and random upgrades follow the later confirmed balance rules: 9/28 supersedes the old D06 special-stat relative increase with per-stat additive ranges.
 
 ## Validation
 - `npm run build` — gear module compiles into the app.
 
 ## Revalidation (2026-10-20)
 - Source review and inline Node assertions passed for six common starter items, gear ID/slot/rarity creation, equip swap, equipped-item dismantle rejection, 20-item capacity behavior, 5% salvage doubling branch, upgrade level/cost/material consumption, and representative costs at levels 1/4/9/29.
-- The full D06 upgrade criterion stays unchecked: this task blueprint specifies a 1–5% increase of each selected value, while current `gear.js` uses `BALANCE.gearUpgrade.specialIncrease` for critical/effect values. Compare that behavior against the later 9/28 balance plan before classifying it as a defect or an intentional update.
+- The special-stat portion of the old 9/26 D06 rule was intentionally superseded by the confirmed 9/28 per-stat additive ranges; the corresponding deterministic upgrade assertions passed in the 9/28 T02 audit. The town interaction checks remain outstanding.
 - The build passed on Node `v20.19.4`, below the declared supported engine. Town UI scenarios for levels 1/4/5/9/10/29 and full-inventory drop handling remain unverified without a browser; task stays `in_progress`.
 - Implementation commit confirmed: `65dde56 feat(game): implement randomized gear and upgrade economy`.
 - Manual TownScene validation — roll gear repeatedly, inspect rarity colors/stats, equip, replace, dismantle, and upgrade at levels 1/4/5/9/10/29. Verify full inventory leaves pickup on the ground.

@@ -16,7 +16,7 @@ Recheck the acceptance criteria and validation records in the three existing loc
 
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | Revalidate existing plan evidence and synchronize records | [P01](../phases/2026-10-20-memory-status-reconciliation/P01-evidence-and-records/phase.md) |
+| P01 | `done` | Audit evidence reconciled; historical plans remain open only for outstanding validation | [P01](../phases/2026-10-20-memory-status-reconciliation/P01-evidence-and-records/phase.md) |
 
 ## Task Order
 

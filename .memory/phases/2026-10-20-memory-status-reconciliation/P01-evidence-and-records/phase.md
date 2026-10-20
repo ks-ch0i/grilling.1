@@ -6,9 +6,9 @@
 | :--- | :--- | :--- | :--- |
 | T01 | `done ✅` | Revalidate the 9/26 playable-game plan and reconcile T01–T07 | [T01](./T01-audit-playable-game.md) |
 | T02 | `done ✅` | Revalidate lethal-contact behavior and reconcile its records | [T02](./T02-audit-lethal-contact.md) |
-| T03 | `in_progress 🔵` | Revalidate balance and town feedback and reconcile its records | [T03](./T03-audit-game-balance.md) |
-| T04 | `pending` | Cross-check plan status, commit references, and current pointer | [T04](./T04-final-record-sync.md) |
+| T03 | `done ✅` | Revalidate balance and town feedback and reconcile its records | [T03](./T03-audit-game-balance.md) |
+| T04 | `done ✅` | Cross-check plan status, commit references, and current pointer | [T04](./T04-final-record-sync.md) |
 
 ## Progress
 
-- done: 2/4 (active: T03)
+- done: 4/4 (complete)

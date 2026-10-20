@@ -58,7 +58,7 @@
 
 ## Revalidation (2026-10-20)
 - Source review confirmed ten normal-enemy placements, boss spawn after the tenth, camera/world bounds, held A/D/touch input paths, one-hit-per-contact tracking, player-only knockback, full-inventory floor retention, level-up pause, and clear/death actions. Inline assertions confirmed the stage-1 boss multipliers; build passed on Node `v20.19.4` only.
-- The contact criterion remains unchecked because the lethal-strike retaliation defect recorded in T04 is present. Movement, visual loot, level-up, stage-clear, stage-5/10 boss, death/retry, and landscape-touch runtime scenarios remain unverified without a browser; task stays `in_progress`.
+- The contact criterion remains unchecked because its one-hit/recoil behavior still requires a browser scenario; source review confirms the 9/27 simultaneous-death precedence and no longer indicates a retaliation defect. Movement, visual loot, level-up, stage-clear, stage-5/10 boss, death/retry, and landscape-touch runtime scenarios remain unverified without a browser; task stays `in_progress`.
 - Implementation commit confirmed: `2d1c0c0 feat(game): add belt-scroll battle scene`.
 
 ## Commit Message
