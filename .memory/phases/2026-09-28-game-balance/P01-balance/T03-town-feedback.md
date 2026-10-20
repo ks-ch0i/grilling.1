@@ -1,6 +1,6 @@
 # Task: T03 Town Upgrade Feedback
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 Correct the town's enhancement guidance to describe the confirmed ordinary/special-stat rules and show a concise `강화 대성공!` message when an upgrade result reports great success.
@@ -48,8 +48,8 @@ Correct the town's enhancement guidance to describe the confirmed ordinary/speci
 
 ## Acceptance Criteria
 - [x] Upgrade guidance no longer claims every stat and effect rises by 1%–5% on every upgrade.
-- [ ] Great success displays `강화 대성공!` only for the just-upgraded selected item and includes no numeric gain.
-- [ ] Ordinary upgrade feedback, selection, state commit, materials, and persistence continue to work.
+- [x] Great success displays `강화 대성공!` only for the just-upgraded selected item and includes no numeric gain.
+- [x] Ordinary upgrade feedback, selection, state commit, materials, and persistence continue to work.
 - [x] Existing saved equipment values are not migrated or reset.
 
 ## Validation
@@ -63,8 +63,15 @@ Correct the town's enhancement guidance to describe the confirmed ordinary/speci
 ## Revalidation (2026-10-20)
 - `node --check src/game/scenes/TownScene.js` and focused source assertions passed for ordinary/special guidance, the exact text `강화 대성공!`, `result.greatSuccess`, matching-item scoping, and removal of the obsolete tooltip.
 - An in-memory save/load round-trip preserved a `lifeSteal: 0.12` value unchanged. `npm run build` passed under Node `v20.19.4` (package requires `>=22.12.0`) with the existing large-chunk warning; Vite on port 4175 returned HTTP 200.
-- Browser rendering, selection changes, visual overlap, and forced great-success feedback remain unverified because no browser surface was available (`chrome` creation unavailable). Keep these acceptance items unchecked and this task/phase/plan in progress.
+- At the earlier status audit, browser rendering, selection changes, visual overlap, and forced great-success feedback could not be checked because no browser surface was available; see the later isolated Chromium verification below.
 - Implementation commit confirmed: `6025bfd feat(ui): show gear enhancement great success`.
+
+## Browser Verification (2026-10-20)
+- In isolated landscape Chromium at 1280x720, selected equipped unique gear and inventory common gear. The ordinary/special upgrade guidance fit below the controls without overlapping item details or buttons.
+- Forced great success through the real town upgrade button with upgrade-only deterministic RNG: inventory defense 10→12, level 1→2, materials 1000→990, and the exact text `강화 대성공!` appeared without numeric gain in the message.
+- Selecting equipped gear hid the inventory item's feedback. A subsequent ordinary upgrade changed defense 12→13, level 2→3, materials 990→978, and cleared the old great-success message.
+- Reload preserved the upgraded inventory values/material count and an existing equipped `lifeSteal: 0.12` value unchanged. Browser console and page errors were empty.
+- Node `22.12.0` production build passed; Vite reported its existing >500 kB minified-bundle advisory. Screenshots are in `%TEMP%\knight-run-residual-20261020`.
 
 ## Commit Message
 ```text
@@ -80,5 +87,6 @@ Task: T03-town-feedback
 
 ## Progress
 - [x] Implementation complete
-- [ ] Validation passed; browser visual inspection remains unavailable
-- commit: 6025bfd
+- [x] Validation passed
+- implementation commit: 6025bfd
+- browser verification commit: to be recorded in Git history
