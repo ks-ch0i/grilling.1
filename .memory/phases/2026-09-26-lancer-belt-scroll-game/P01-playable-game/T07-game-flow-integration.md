@@ -91,4 +91,4 @@ Task: T07-game-flow-integration
 - [x] 구현 완료
 - [x] 검증 통과
 - implementation commit: 942f5b1
-- verification fix commit: recorded in git history
+- verification fix commit: 46087a0

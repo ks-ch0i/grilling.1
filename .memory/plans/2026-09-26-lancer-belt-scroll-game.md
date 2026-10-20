@@ -17,9 +17,9 @@ Phaser 4와 Vite 8을 사용하는 한국어 브라우저 게임을 새로 구�
 
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | 빈 저장소에서 첫 플레이 가능한 게임까지 순차 구성 | [P01](../phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md) |
+| P01 | `done ✅` | 빈 저장소에서 첫 플레이 가능한 게임까지 순차 구성 및 전체 브라우저 검증 완료 | [P01](../phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md) |
 
-> 2026-10-20 상태 대조: 구현 커밋과 소스는 확인했지만 필요한 브라우저 시나리오를 실행할 수 없어 P01은 `done: 0/7`로 유지한다. 세부 근거와 미완료 조건은 P01 T01–T07에 기록했다.
+> 2026-10-20 완료: P01의 7개 task가 모두 구현 및 검증되었다. Node 22.12.0 프로덕션 빌드와 격리 Chromium의 데스크톱/가로 터치 전체 플레이 루프가 통과했다. 상세 결과는 P01 T01–T07에 기록했다.
 
 ## Task Order
 

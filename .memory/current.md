@@ -4,10 +4,10 @@
 [마창기사 벨트스크롤 웹게임](./plans/2026-09-26-lancer-belt-scroll-game.md)
 
 ## Active Phase
-[P01 플레이 가능한 게임](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md)
+[P01 플레이 가능한 게임](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/phase.md) — completed
 
 ## Active Task
-[T07 저장과 마을/전투 통합](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T07-game-flow-integration.md)
+[없음 — 현재 계획의 task 7/7 완료](./phases/2026-09-26-lancer-belt-scroll-game/P01-playable-game/T07-game-flow-integration.md)
 
 ## Status
 - T01 completed on 2026-10-20: isolated Chromium confirmed the TownScene/title, landscape 16:9 layout, and unsupported portrait rotation notice; Node `22.12.0` build passed.
@@ -17,6 +17,8 @@
 - T04 completed on 2026-10-20: isolated Chromium verified independent contact damage, stacked gear effects, lethal-contact retry ordering, max-HP level-up, replay XP, boss scaling, and chapter unlock; Node `22.12.0` build passed. The 9/27 lethal-contact decision and 9/28 growth formula are reconciled in its blueprint.
 - T05 completed on 2026-10-20: isolated Chromium verified new-game TownScene, all rarity colors, equip/swap/dismantle, disabled controls, replay stage launch, and Korean layout at 1280x720; Node `22.12.0` build passed. Existing saves were not accessed.
 - T06 completed on 2026-10-20: isolated Chromium verified A/D and held-touch movement, contact/recontact and critical behavior, loot pickup/full-inventory retention, level-up, stage clear/retry, and stage-5/10 boss appearance; Node `22.12.0` build passed. The 9/27 lethal-contact rule is reconciled in its blueprint.
+- T07 completed on 2026-10-20: isolated Chromium verified fresh/recovered saves, persisted gear/progression, town/battle/replay/retry flows, stage-1–10 clears and bosses, chapter-2 unlock, and reload-to-town; the shared button hit area was corrected in `46087a0`. Node `22.12.0` production build passed with no browser errors.
+- Plan completed: P01 done 7/7; no active task remains.
 
 ## Next Step (IMPORTANT)
-Read the active T07 integration blueprint and verify the complete save/reload/town/battle loop in isolated browser profiles; preserve existing save data.
+No remaining tasks in this plan. Begin new work only when a new task or plan is selected.
