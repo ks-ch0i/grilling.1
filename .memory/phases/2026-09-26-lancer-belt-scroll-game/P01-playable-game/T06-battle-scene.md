@@ -1,6 +1,6 @@
 ﻿# Task: T06 횡스크롤 전투 장면
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 
