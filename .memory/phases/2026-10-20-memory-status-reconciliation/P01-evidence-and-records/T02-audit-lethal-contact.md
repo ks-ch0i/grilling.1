@@ -1,6 +1,6 @@
 # Task: T02 Audit Lethal Contact Plan
 
-## Status: pending
+## Status: done
 
 ## Goal
 
@@ -46,12 +46,12 @@ Recheck the 9/27 lethal-contact change against its source and runtime criteria, 
 
 ## Acceptance Criteria
 
-- [ ] The deterministic `resolveContact` assertion passes with both `enemyDefeated` and `playerDefeated` true and `playerHp` zero.
-- [ ] Source order proves lethal player death reaches game over before `defeatEnemy` and rewards.
-- [ ] Browser lethal and nonlethal exchanges have recorded results; unavailable browser behavior remains unverified.
-- [ ] Retry behavior is verified against the stage snapshot and current player progression.
-- [ ] Original task/phase/plan status, progress, validation notes, and commit reference reflect only confirmed results.
-- [ ] No gameplay source or existing save data is modified.
+- [x] The deterministic `resolveContact` assertion passes with both `enemyDefeated` and `playerDefeated` true and `playerHp` zero.
+- [x] Source order proves lethal player death reaches game over before `defeatEnemy` and rewards.
+- [x] Browser lethal and nonlethal exchanges have recorded results; unavailable browser behavior remains unverified.
+- [x] Retry behavior is verified against the stage snapshot and current player progression.
+- [x] Original task/phase/plan status, progress, validation notes, and commit reference reflect only confirmed results.
+- [x] No gameplay source or existing save data is modified.
 
 ## Validation
 
@@ -75,6 +75,6 @@ Task: T02-audit-lethal-contact
 
 ## Progress
 
-- [ ] Audit complete
-- [ ] Validation recorded
+- [x] Audit complete
+- [x] Validation recorded
 - commit: pending

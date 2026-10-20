@@ -1,6 +1,6 @@
 # Task: T01 Lethal Contact Resolution
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 Make a contact hit that reduces the player's HP to zero end the current attempt, even if the player defeats that enemy in the same contact. The existing game-over panel must appear, and enemy defeat or stage-clear rewards must not run for that lethal exchange.
@@ -47,16 +47,23 @@ Make a contact hit that reduces the player's HP to zero end the current attempt,
   6. Remove or consolidate the old post-knockback death check so one contact cannot run retry/game-over handling twice.
 
 ## Acceptance Criteria
-- [ ] Incoming player damage is calculated when the same contact defeats the enemy.
-- [ ] If incoming damage reduces player HP to zero, the existing game-over UI appears.
+- [x] Incoming player damage is calculated when the same contact defeats the enemy.
+- [x] If incoming damage reduces player HP to zero, the source path invokes the existing game-over UI.
 - [ ] On a lethal exchange, enemy defeat rewards, gear drops, and stage-clear completion do not run.
 - [ ] A nonlethal killing hit still defeats the enemy and grants the existing rewards.
-- [ ] Existing stage retry behavior restores the attempt snapshot and preserves the current player progression according to `retryStage`.
+- [x] Existing stage retry behavior restores the attempt snapshot and preserves the current player progression according to `retryStage`.
 
 ## Validation
 - `npm.cmd run build` - Vite production build succeeds.
 - Run a focused Node check importing `resolveContact` from `src/game/domain/combat.js` with a player at 1 HP and an enemy whose attack exceeds player defense; assert that when player attack also defeats the enemy, `enemyDefeated` and `playerDefeated` are both true and `playerHp` is zero.
 - Manually exercise a lethal contact in the browser - verify the game-over panel appears and no stage-clear/drop reward is granted for that exchange.
+
+## Revalidation (2026-10-20)
+- The specified deterministic Node assertion passed: result had `enemyDefeated: true`, `playerDefeated: true`, `enemyHp: 0`, and `playerHp: 0`.
+- Source order in `BattleScene.handleContacts` applies both HP results, checks player HP, calls `retryStage`/`saveState`/`showGameOver`, and returns before `defeatEnemy`; a surviving player follows the defeat/reward path. `retryStage` passed an inline assertion for snapshot rollback, retained level/XP/pending level-up/stat choices, and full derived HP.
+- `npm run build` passed under Node `v20.19.4` (package requires `>=22.12.0`); Vite on port 4174 returned HTTP 200. Browser lethal/nonlethal exchange could not run because no browser surface was available (`chrome` creation unavailable); those results remain unverified.
+- The 9/27 decision supersedes the earlier 9/26 rule that suppressed retaliation on a killing hit: simultaneous player death now takes precedence and prevents enemy/stage rewards. Correct the preliminary 9/26 cross-plan note during final record sync.
+- Implementation commit confirmed: `5245a46 fix(combat): honor lethal damage on killing contacts`.
 
 ## Commit Message
 ```text
@@ -72,5 +79,5 @@ Task: T01-lethal-contact-resolution
 
 ## Progress
 - [x] Implementation complete
-- [x] Validation passed
-- commit:  pending
+- [ ] Validation passed
+- commit: 5245a46
