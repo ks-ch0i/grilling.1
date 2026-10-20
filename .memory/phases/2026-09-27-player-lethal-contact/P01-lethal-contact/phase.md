@@ -3,7 +3,7 @@
 ## Tasks
 | Task | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| T01 | `in_progress` | Domain/source checks confirmed; lethal and nonlethal browser exchanges remain unverified. | [T01](./T01-lethal-contact-resolution.md) |
+| T01 | `done ✅` | Simultaneous lethal and nonlethal killing contacts verified in isolated Chromium. | [T01](./T01-lethal-contact-resolution.md) |
 
 ## Progress
-- done: 0/1 (browser verification outstanding)
+- done: 1/1 (P01 complete)

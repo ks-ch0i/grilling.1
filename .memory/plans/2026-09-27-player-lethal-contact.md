@@ -6,6 +6,6 @@ Ensure lethal incoming contact damage reduces player HP to zero even when the sa
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | Source and domain check passed; browser lethal/nonlethal scenarios remain unverified. | [P01](../phases/2026-09-27-player-lethal-contact/P01-lethal-contact/phase.md) |
+| P01 | `done ✅` | Source, domain, and lethal/nonlethal browser scenarios verified. | [P01](../phases/2026-09-27-player-lethal-contact/P01-lethal-contact/phase.md) |
 
-> 2026-10-20 status audit: the deterministic domain result and source ordering match the confirmed 9/27 decision; required browser outcomes were unavailable, so P01 remains `done: 0/1`.
+> 2026-10-20 completion: P01 is done 1/1. Isolated Chromium confirmed a lethal killing contact enters game over without kill rewards and a nonlethal killing contact awards XP normally.

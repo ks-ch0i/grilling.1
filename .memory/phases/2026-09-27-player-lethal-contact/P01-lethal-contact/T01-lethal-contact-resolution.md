@@ -87,4 +87,4 @@ Task: T01-lethal-contact-resolution
 - [x] Implementation complete
 - [x] Validation passed
 - implementation commit: 5245a46
-- browser verification commit: to be recorded in Git history
+- browser verification commit: c41f3e9
