@@ -1,6 +1,6 @@
 ﻿# Task: T04 전투와 성장 규칙
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -60,13 +60,19 @@
 - `retryStage` restores gear, inventory, materials, equipment and progression to stage-entry snapshot but preserves XP, levels, and level-up stat choices already earned. HP is restored to max. This treats level-ups as a consequence of retained XP.
 
 ## Acceptance Criteria
-- [ ] Contact calculation implements both comparisons independently and applies enemy HP loss before player HP loss.
-- [ ] Critical strike is rolled only for player attack and occurs before enemy defense comparison.
+- [x] Contact calculation implements both comparisons independently and applies enemy HP loss before player HP loss.
+- [x] Critical strike is rolled only for player attack and occurs before enemy defense comparison.
 - [ ] Player progression, stage/replay XP, gear drops, boss scaling, chapter unlock, and half-heal use the exact values above.
-- [ ] Functions validate unknown stat keys/stage numbers and return explicit errors without partially mutating state.
+- [x] Functions validate unknown stat keys/stage numbers and return explicit errors without partially mutating state.
 
 ## Validation
 - `npm run build` — domain modules compile.
+
+## Revalidation (2026-10-20)
+- Inline Node assertions passed for independent contact damage, critical-before-defense order, boss multipliers at 1-1, stage bounds, chapter-2 unlock at a prepared stage-10 state, and death-retry XP retention/reward rollback. Source review confirmed progression and invalid-input guards; build passed on Node `v20.19.4` only.
+- The exact progression-values criterion remains unchecked pending the 9/28 balance-plan reconciliation: the 9/26 decision specifies 10% per stage and +0.5 per chapter, while current `balance.js` has `enemyStageGrowth: 0.2` and `chapterGrowth: 0.8`.
+- Static defect found: `BattleScene.handleContacts` applies `result.playerHp` before handling `result.enemyDefeated`, so a lethal player strike still applies enemy retaliation, contrary to D03. No gameplay code was changed; combat browser scenarios remain unverified.
+- Implementation commit confirmed: `3d46200 feat(game): add combat and chapter progression rules`.
 - Manual gameplay validation — verify weak attack recoil, enemy defeat suppressing retaliation, critical damage before armor, max-HP level-up, replay XP, stage 5/10 boss scaling, and chapter unlock.
 
 ## Commit Message
@@ -82,7 +88,7 @@ Task: T04-combat-progression
 ```
 
 ## Progress
-- [ ] 구현 완료
+- [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: 3d46200
 

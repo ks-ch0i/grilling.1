@@ -1,6 +1,6 @@
 ﻿# Task: T03 장비 드롭과 강화 경제
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -59,13 +59,19 @@
 - All functions are immutable: return a new state and do not mutate their input.
 
 ## Acceptance Criteria
-- [ ] New drops get stable IDs, a valid slot/rarity, grade-scaled randomized stats, and eligible fixed effects.
-- [ ] Starting equipment has all six common slots.
-- [ ] Equip swaps slots without losing gear; equipped gear cannot be dismantled; inventory capacity is enforced.
+- [x] New drops get stable IDs, a valid slot/rarity, grade-scaled randomized stats, and eligible fixed effects.
+- [x] Starting equipment has all six common slots.
+- [x] Equip swaps slots without losing gear; equipped gear cannot be dismantled; inventory capacity is enforced.
 - [ ] Salvage, 5% double yield, level cap, threshold costs, and random upgrades follow D05–D06 exactly.
 
 ## Validation
 - `npm run build` — gear module compiles into the app.
+
+## Revalidation (2026-10-20)
+- Source review and inline Node assertions passed for six common starter items, gear ID/slot/rarity creation, equip swap, equipped-item dismantle rejection, 20-item capacity behavior, 5% salvage doubling branch, upgrade level/cost/material consumption, and representative costs at levels 1/4/9/29.
+- The full D06 upgrade criterion stays unchecked: this task blueprint specifies a 1–5% increase of each selected value, while current `gear.js` uses `BALANCE.gearUpgrade.specialIncrease` for critical/effect values. Compare that behavior against the later 9/28 balance plan before classifying it as a defect or an intentional update.
+- The build passed on Node `v20.19.4`, below the declared supported engine. Town UI scenarios for levels 1/4/5/9/10/29 and full-inventory drop handling remain unverified without a browser; task stays `in_progress`.
+- Implementation commit confirmed: `65dde56 feat(game): implement randomized gear and upgrade economy`.
 - Manual TownScene validation — roll gear repeatedly, inspect rarity colors/stats, equip, replace, dismantle, and upgrade at levels 1/4/5/9/10/29. Verify full inventory leaves pickup on the ground.
 
 ## Commit Message
@@ -81,7 +87,7 @@ Task: T03-equipment-economy
 ```
 
 ## Progress
-- [ ] 구현 완료
+- [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: 65dde56
 

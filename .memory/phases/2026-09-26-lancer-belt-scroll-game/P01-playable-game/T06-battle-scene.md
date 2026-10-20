@@ -1,6 +1,6 @@
 ﻿# Task: T06 횡스크롤 전투 장면
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -48,13 +48,18 @@
 ## Acceptance Criteria
 - [ ] Player moves left/right with A/D and held touch halves; camera follows without leaving world bounds.
 - [ ] Contact damage occurs once per contact, uses critical and recoil rules, pushes only player, and has no invulnerability timer.
-- [ ] Ten enemies spawn; stage 5/10 bosses appear after them and use specified multipliers.
+- [x] Ten enemies spawn; stage 5/10 bosses appear after them and use specified multipliers.
 - [ ] Drops are visible and collectible; full inventory leaves them on ground.
 - [ ] Level-up choice pauses combat; stage clear and game over show correct actions and state.
 
 ## Validation
 - `npm run build` — BattleScene compiles.
 - `npm run dev` manual browser check — play 1-1; walk into and away from enemies; check both collision directions, crit, loot pickup, level-up pause, stage clear, stage 5 boss, death/retry, and touch controls in landscape.
+
+## Revalidation (2026-10-20)
+- Source review confirmed ten normal-enemy placements, boss spawn after the tenth, camera/world bounds, held A/D/touch input paths, one-hit-per-contact tracking, player-only knockback, full-inventory floor retention, level-up pause, and clear/death actions. Inline assertions confirmed the stage-1 boss multipliers; build passed on Node `v20.19.4` only.
+- The contact criterion remains unchecked because the lethal-strike retaliation defect recorded in T04 is present. Movement, visual loot, level-up, stage-clear, stage-5/10 boss, death/retry, and landscape-touch runtime scenarios remain unverified without a browser; task stays `in_progress`.
+- Implementation commit confirmed: `2d1c0c0 feat(game): add belt-scroll battle scene`.
 
 ## Commit Message
 ```text
@@ -69,7 +74,7 @@ Task: T06-battle-scene
 ```
 
 ## Progress
-- [ ] 구현 완료
+- [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: 2d1c0c0
 

@@ -1,6 +1,6 @@
 ﻿# Task: T05 마을과 장비 관리 화면
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -45,13 +45,18 @@
 
 ## Acceptance Criteria
 - [ ] New game opens at town with six common equipped items, player stats, level, materials, and empty inventory.
-- [ ] Inventory capacity excludes six equipped slots and respects max 20.
-- [ ] Equip, dismantle, upgrade, and stage selection controls call the domain functions and refresh the UI.
+- [x] Inventory capacity excludes six equipped slots and respects max 20.
+- [x] Equip, dismantle, upgrade, and stage selection controls call the domain functions and refresh the UI.
 - [ ] Rare colors match the five fixed rarity colors; Korean UI text fits at 1280x720.
 
 ## Validation
 - `npm run build` — TownScene and UI components compile.
 - `npm run dev` manual browser check — equip/swap, full inventory, dismantle, upgrade disable states, replay stage selection, and touch-sized buttons.
+
+## Revalidation (2026-10-20)
+- Source review confirmed TownScene renders the current state, enforces the 20-item inventory rule, routes equip/dismantle/upgrade through domain functions, refreshes after state changes, and offers unlocked/replay stages. Inline domain assertions covered the capacity and swap behavior; build passed on Node `v20.19.4` only.
+- New-town rendering and the combined rarity-color/Korean-text-fit criterion remain unchecked; equip, dismantle, upgrade-disabled, replay selection, and touch-size browser checks were unavailable. Task stays `in_progress`.
+- Implementation commit confirmed: `6a6909d feat(game): build village gear and stage management UI`.
 
 ## Commit Message
 ```text
@@ -66,7 +71,7 @@ Task: T05-town-ui
 ```
 
 ## Progress
-- [ ] 구현 완료
+- [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: 6a6909d
 

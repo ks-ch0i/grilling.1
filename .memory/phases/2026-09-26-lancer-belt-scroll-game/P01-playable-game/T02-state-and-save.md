@@ -1,6 +1,6 @@
 ﻿# Task: T02 밸런스와 게임 상태 저장
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -54,13 +54,19 @@
 - Autosave is called on stable state transitions by T07. Refresh during battle resumes saved player/progression in town and restarts current stage from its beginning.
 
 ## Acceptance Criteria
-- [ ] JSDoc schema and constants cover all six gear slots, five rarities, stats, player, inventory, materials, and chapter progress.
-- [ ] Save/load round-trips plain JSON state and recovers safely from corrupt/unsupported data.
-- [ ] No Phaser object is stored or returned by `saveStore.js`.
+- [x] JSDoc schema and constants cover all six gear slots, five rarities, stats, player, inventory, materials, and chapter progress.
+- [x] Save/load round-trips plain JSON state and recovers safely from corrupt/unsupported data.
+- [x] No Phaser object is stored or returned by `saveStore.js`.
 
 ## Validation
 - `npm run build` — modules resolve and Vite builds.
 - Browser DevTools manual check — call save/load from the later TownScene integration; reload and confirm JSON survives. No standalone automated test files are introduced in this plan.
+
+## Revalidation (2026-10-20)
+- Source review confirmed the JSDoc types, six gear slots, five rarities, and the versioned plain-data save projection.
+- Inline Node assertions passed for JSON save/load round-trip and malformed JSON fallback using an isolated in-memory storage mock; the production build also passed on Node `v20.19.4` (below the declared `>=22.12.0` engine).
+- Browser DevTools reload/persistence scenario remains unverified because no browser surface was available; this task stays `in_progress`.
+- Implementation commit confirmed: `ee01e1e feat(game): define game state and local save schema`.
 
 ## Commit Message
 ```text
@@ -75,7 +81,7 @@ Task: T02-state-and-save
 ```
 
 ## Progress
-- [ ] 구현 완료
+- [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: ee01e1e
 

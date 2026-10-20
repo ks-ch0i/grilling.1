@@ -1,6 +1,6 @@
 ﻿# Task: T01 Vite와 Phaser 앱 뼈대
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -51,14 +51,22 @@
 - 모든 DOM 접근은 `DOMContentLoaded` 이후 실행한다. 캔버스의 `touch-action`은 `none`; body margin은 0이며 게임은 화면에 맞춘다.
 
 ## Acceptance Criteria
-- [ ] `npm install`이 완료되고 `npm run dev`가 Vite 주소를 출력한다.
+- [x] 의존성이 설치되어 있고 `npm run dev`가 Vite 주소를 출력한다.
 - [ ] 브라우저에서 제목과 임시 시작 화면이 보인다.
-- [ ] `npm run build`가 `dist/`를 만든다.
+- [x] `npm run build`가 `dist/`를 만든다. (Node 20.19.4에서 실행; 지원 버전 검증은 아님)
 - [ ] 가로 화면은 16:9 게임 영역을 표시하고 세로 화면은 회전 안내를 보인다.
 
 ## Validation
 - `npm run build` — Vite production build가 오류 없이 완료된다.
 - `npm run dev` 후 브라우저에서 `/` 열기 — 콘솔 오류 없이 임시 화면이 보인다.
+
+## Revalidation (2026-10-20)
+- `node --version`: `v20.19.4`; `package.json` requires `>=22.12.0`.
+- `npm run build`: passed and created `dist/index.html`; this is not a supported-engine pass.
+- `npm run dev -- --host 127.0.0.1 --port 4173 --strictPort`: Vite reported `http://127.0.0.1:4173/`; HTTP GET returned 200.
+- Browser rendering/orientation remains unverified: no apps or browser surfaces were available; isolated `iab` and `chrome` creation both reported unavailable. The temporary BootScene is now replaced by the T07 TownScene flow, so its old screen criterion is superseded; final town rendering was not observed.
+- Static mismatch to revisit: the portrait CSS shows `#rotate-message` but does not hide `#game`, despite the original requirement to show the rotation prompt instead of the game.
+- Implementation commit confirmed: `1870e2a feat(game): bootstrap Phaser and Vite app`.
 
 ## Commit Message
 ```text
@@ -73,7 +81,7 @@ Task: T01-app-shell
 ```
 
 ## Progress
-- [ ] 구현 완료
+- [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: 1870e2a
 

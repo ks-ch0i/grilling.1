@@ -1,17 +1,18 @@
 ﻿# Current Context
 
 ## Active Plan
-[Game Balance Adjustment](./plans/2026-09-28-game-balance.md)
+[Memory Status Reconciliation](./plans/2026-10-20-memory-status-reconciliation.md)
 
 ## Active Phase
-[P01 Balance Implementation](./phases/2026-09-28-game-balance/P01-balance/phase.md)
+[P01 Evidence and Records](./phases/2026-10-20-memory-status-reconciliation/P01-evidence-and-records/phase.md)
 
 ## Active Task
-[All tasks complete](./phases/2026-09-28-game-balance/P01-balance/phase.md)
+[T01 Audit Playable Game Plan](./phases/2026-10-20-memory-status-reconciliation/P01-evidence-and-records/T01-audit-playable-game.md)
 
 ## Status
-- Plan complete: 3/3 tasks done
-- Manual browser visual inspection unavailable; see T03 validation notes.
+- T01 ready: revalidate the 9/26 plan's seven tasks and update only their memory records.
+- Build checks will run under Node 20.19.4; `package.json` requires Node >=22.12.0.
+- Manual browser checks must use an isolated profile/origin; unavailable required checks stay open.
 
 ## Next Step (IMPORTANT)
-No remaining task in the active plan.
+Read the T01 audit blueprint and revalidate the 9/26 playable-game task records. Do not change gameplay source.

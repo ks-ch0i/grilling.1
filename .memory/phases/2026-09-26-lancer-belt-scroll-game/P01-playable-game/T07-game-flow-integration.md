@@ -1,6 +1,6 @@
 # Task: T07 저장과 마을/전투 흐름 통합
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 
@@ -45,15 +45,20 @@
 - Manually exercise full loop: new save → town → battle → pickup/equip → town → replay → partial XP → death/retry → clear stage 1 → stage 2 → stage 5 boss → stage 10 boss → unlock next chapter → reload.
 
 ## Acceptance Criteria
-- [x] Fresh browser storage creates the agreed common starter equipment and opens in town.
-- [x] Reload restores player level/XP/equipment/inventory/materials/unlocks and returns to town.
-- [x] Death retains XP and earned levels, rolls back other in-stage rewards, and retries current stage at full HP.
-- [x] Clear flow allows town or next stage; 10-stage completion unlocks next chapter; completed stages remain replayable.
-- [x] Production build completes and landscape keyboard/touch play works without console errors.
+- [ ] Fresh browser storage creates the agreed common starter equipment and opens in town.
+- [ ] Reload restores player level/XP/equipment/inventory/materials/unlocks and returns to town.
+- [ ] Death retains XP and earned levels, rolls back other in-stage rewards, and retries current stage at full HP.
+- [ ] Clear flow allows town or next stage; 10-stage completion unlocks next chapter; completed stages remain replayable.
+- [ ] Production build completes and landscape keyboard/touch play works without console errors.
 
 ## Validation
 - `npm run build` — final production bundle succeeds.
 - `npm run dev` manual browser check — perform the full loop in I02 on desktop and a touch-capable landscape viewport; reload once in town and once during a battle.
+
+## Revalidation (2026-10-20)
+- Source review and inline Node assertions confirmed the fresh-state factory, boot-to-town wiring, save projection, retry snapshot rollback/XP retention, and stage-10 unlock logic. Production build passed on Node `v20.19.4`, below the declared `>=22.12.0` engine.
+- All five original acceptance items remain unchecked because each includes a fresh-browser or live gameplay result that could not be observed; no browser surface was available. Task stays `in_progress`.
+- Implementation commit confirmed: `942f5b1 feat(game): connect save and stage loop`.
 
 ## Commit Message
 ```text
@@ -69,5 +74,5 @@ Task: T07-game-flow-integration
 
 ## Progress
 - [x] 구현 완료
-- [x] 검증 통과
-- commit: pending
+- [ ] 검증 통과
+- commit: 942f5b1
