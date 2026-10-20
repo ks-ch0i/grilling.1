@@ -6,9 +6,9 @@ Apply the confirmed balance changes to enemy growth, life steal, and equipment e
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | T01/T02 assertions pass; town feedback layout and click scenarios remain unverified. | [P01](../phases/2026-09-28-game-balance/P01-balance/phase.md) |
+| P01 | `done ✅` | Balance, enhancement resolution, and town feedback/layout verified. | [P01](../phases/2026-09-28-game-balance/P01-balance/phase.md) |
 
-> 2026-10-20 status audit: T01 and T02 are verified; T03 source/save checks pass, but required browser feedback/layout checks remain unavailable. Phase progress is `done: 2/3`.
+> 2026-10-20 completion: P01 is done 3/3. Isolated Chromium verified great-success feedback, ordinary upgrade feedback, selection changes, layout, and save compatibility.
 
 ## Confirmed Design Constraints
 - Source decision: [2026-09-28-game-balance.md](../decisions/2026-09-28-game-balance.md).

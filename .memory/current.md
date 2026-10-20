@@ -1,13 +1,13 @@
 ﻿# Current Context
 
 ## Active Plan
-[Game Balance Adjustment](./plans/2026-09-28-game-balance.md)
+[Memory Status Reconciliation](./plans/2026-10-20-memory-status-reconciliation.md) — completed
 
 ## Active Phase
-[P01 Balance Implementation](./phases/2026-09-28-game-balance/P01-balance/phase.md)
+[P01 Evidence and Records](./phases/2026-10-20-memory-status-reconciliation/P01-evidence-and-records/phase.md) — completed
 
 ## Active Task
-[T03 Town Upgrade Feedback](./phases/2026-09-28-game-balance/P01-balance/T03-town-feedback.md)
+None — all local plan tasks complete.
 
 ## Status
 - T01 completed on 2026-10-20: isolated Chromium confirmed the TownScene/title, landscape 16:9 layout, and unsupported portrait rotation notice; Node `22.12.0` build passed.
@@ -20,9 +20,9 @@
 - T07 completed on 2026-10-20: isolated Chromium verified fresh/recovered saves, persisted gear/progression, town/battle/replay/retry flows, stage-1–10 clears and bosses, chapter-2 unlock, and reload-to-town; the shared button hit area was corrected in `46087a0`. Node `22.12.0` production build passed with no browser errors.
 - The 2026-09-26 playable-game plan is complete (P01 done 7/7).
 - The 2026-09-27 lethal-contact plan is complete (P01 done 1/1); isolated Chromium verified both simultaneous lethal and nonlethal killing contacts. Verification record commit: `c41f3e9`.
-- The 2026-09-28 game-balance plan has T01/T02 done and T03 `in_progress`: town feedback, selection, layout, and save behavior still need browser verification.
+- The 2026-09-28 game-balance plan is complete (P01 done 3/3); isolated Chromium verified T03 feedback, selection, layout, and persistence. Verification record commit: `05f2537`.
 - Online ranking/asynchronous PvP remains deferred design work from prior cross-session memory; it has no local implementation plan and is outside the current game-loop plans.
-- The 2026-10-20 memory-status reconciliation plan is complete; it left the two original verification tasks open based on the evidence available then.
+- The 2026-10-20 memory-status reconciliation plan is complete, and its two original verification tasks are now closed.
 
 ## Next Step (IMPORTANT)
-Read the active T03 blueprint and verify town upgrade guidance, ordinary/great-success feedback, selection changes, layout, and save persistence in isolated Chromium.
+No active local task remains. Online ranking/asynchronous PvP stays deferred until its recorded preparation conditions are met.
