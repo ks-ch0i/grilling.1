@@ -1,6 +1,6 @@
 ﻿# Task: T01 Vite와 Phaser 앱 뼈대
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 
@@ -52,21 +52,30 @@
 
 ## Acceptance Criteria
 - [x] 의존성이 설치되어 있고 `npm run dev`가 Vite 주소를 출력한다.
-- [ ] 브라우저에서 제목과 임시 시작 화면이 보인다.
-- [x] `npm run build`가 `dist/`를 만든다. (Node 20.19.4에서 실행; 지원 버전 검증은 아님)
-- [ ] 가로 화면은 16:9 게임 영역을 표시하고 세로 화면은 회전 안내를 보인다.
+- [x] 격리 브라우저에서 `마창기사` 제목과 현재 TownScene이 보인다. (임시 BootScene 기준은 후속 T07 흐름으로 대체)
+- [x] Node.js `>=22.12.0`에서 `npm run build`가 `dist/`를 만든다.
+- [x] 가로 화면은 16:9 게임 영역을 표시하고, 미지원 세로 화면에서는 게임 대신 회전 안내를 보인다.
 
 ## Validation
 - `npm run build` — Vite production build가 오류 없이 완료된다.
-- `npm run dev` 후 브라우저에서 `/` 열기 — 콘솔 오류 없이 임시 화면이 보인다.
+- `npm run dev` 후 브라우저에서 `/` 열기 — 콘솔 오류 없이 현재 TownScene이 보인다.
+- `npx --yes node@22.12.0 --test test/portrait-orientation.test.js` — 세로 화면의 게임 숨김·회전 안내 표시 규칙을 확인한다.
+- 격리 Playwright Chromium에서 1280x720 및 390x844 뷰포트를 확인한다 — 현재 TownScene, 16:9 캔버스, 세로 회전 안내, 브라우저 콘솔 오류를 확인한다.
 
 ## Revalidation (2026-10-20)
 - `node --version`: `v20.19.4`; `package.json` requires `>=22.12.0`.
 - `npm run build`: passed and created `dist/index.html`; this is not a supported-engine pass.
 - `npm run dev -- --host 127.0.0.1 --port 4173 --strictPort`: Vite reported `http://127.0.0.1:4173/`; HTTP GET returned 200.
 - Browser rendering/orientation remains unverified: no apps or browser surfaces were available; isolated `iab` and `chrome` creation both reported unavailable. The temporary BootScene is now replaced by the T07 TownScene flow, so its old screen criterion is superseded; final town rendering was not observed.
-- Static mismatch to revisit: the portrait CSS shows `#rotate-message` but does not hide `#game`, despite the original requirement to show the rotation prompt instead of the game.
+- At audit time, portrait CSS showed `#rotate-message` without hiding `#game`; the follow-up below resolves this mismatch.
 - Implementation commit confirmed: `1870e2a feat(game): bootstrap Phaser and Vite app`.
+
+### Follow-up Execution (2026-10-20)
+- Added `body.is-portrait #game { display: none; }` so the unsupported portrait orientation blocks gameplay and shows only the rotate notice.
+- Added `test/portrait-orientation.test.js`; its test failed before the CSS fix and passed after it.
+- `npx --yes --package=node@22.12.0 --call "node --version && npm run build"`: Node `v22.12.0`; build passed. Vite reported the existing Phaser bundle-size advisory (>500 kB).
+- Isolated Playwright Chromium verified the TownScene and `마창기사` title at 1280x720, 16:9 canvas sizing, and a 390x844 portrait viewport with the canvas hidden and `가로 화면으로 돌려 주세요.` displayed. No browser console or page errors occurred.
+- Used a fresh temporary browser profile; existing save data was not accessed or changed.
 
 ## Commit Message
 ```text
@@ -82,6 +91,6 @@ Task: T01-app-shell
 
 ## Progress
 - [x] 구현 완료
-- [ ] 검증 통과
+- [x] 검증 통과
 - commit: 1870e2a
 
