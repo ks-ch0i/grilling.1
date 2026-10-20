@@ -83,17 +83,23 @@ Keep ordinary max HP, attack, and defense upgrades unchanged; use the confirmed 
 - Verify critical chance remains at or below 1 after a large additive increment. Verify `applyGearEffects` returns an uncapped sum of 1.6 for two 0.8 damage-reduction effects and `resolveContact` applies the existing cap so player damage is zero.
 
 ## Acceptance Criteria
-- [ ] Ordinary stats still use a 1%–5% roll and ceiling; great success doubles the actual resulting integer gain.
-- [ ] Each of the seven special values uses its own additive range and six-decimal storage precision.
-- [ ] Great success is rolled once at 5%, doubles each selected increase, and does not change cost or level count.
-- [ ] Critical chance and total damage reduction retain their existing caps; no new save fields or migration are added.
-- [ ] Failure return shapes and item storage location remain compatible.
+- [x] Ordinary stats still use a 1%–5% roll and ceiling; great success doubles the actual resulting integer gain.
+- [x] Each of the seven special values uses its own additive range and six-decimal storage precision.
+- [x] Great success is rolled once at 5%, doubles each selected increase, and does not change cost or level count.
+- [x] Critical chance and total damage reduction retain their existing caps; no new save fields or migration are added.
+- [x] Failure return shapes and item storage location remain compatible.
 
 ## Validation
 - `node --input-type=module -e "import assert from 'node:assert/strict'; import { upgradeGear, getGearUpgradeCost } from './src/game/domain/gear.js'; const makeState=(item)=>({schemaVersion:1,player:{},equipment:{helmet:item,armor:null,gloves:null,boots:null,spear:null,horse:null},inventory:[],materials:1000,progression:{}}); const item={id:'test',slot:'helmet',rarity:'common',level:1,stats:{attack:10},effects:[]}; for (const [rngValues,expected,greatSuccess] of [[[0.5,0,0,0],11,false],[[0,0,0,0],12,true]]) { let i=0; const result=upgradeGear(makeState(item),'test',()=>rngValues[i++] ?? 0); assert.equal(result.ok,true); assert.equal(result.greatSuccess,greatSuccess); assert.equal(result.item.stats.attack,expected); assert.equal(result.item.level,2); assert.equal(result.state.materials,1000-getGearUpgradeCost(1)); }"` - deterministic ordinary-stat and great-success assertions pass.
 - Run the additional unique effect-only injected-RNG case specified in I03 and assert the `lifeSteal` results are `0.031` and `0.032`.
 - Verify a 0.999 critical-chance stat is capped at 1 after an additive upgrade; verify two 0.8 damage-reduction effects aggregate to 1.6 in `applyGearEffects` but cause zero contact damage in `resolveContact`.
 - `npm.cmd run build` - Vite production build succeeds.
+
+## Revalidation (2026-10-20)
+- Deterministic injected-RNG assertions passed for ordinary attack upgrades (10→11 normal, 10→12 great success), unique life-steal upgrades (0.03→0.031 / 0.032), level/material cost, and equipment location.
+- Assertions passed for the critical-chance cap, uncapped 1.6 damage-reduction aggregation with contact damage capped to zero, and unchanged in-memory save/load of `lifeSteal: 0.12`. Source review confirmed failure return shapes and no schema migration.
+- `node --check src/game/scenes/TownScene.js` and `npm run build` passed under Node `v20.19.4` (below the declared engine); the build reported the existing large-chunk warning.
+- Implementation commit confirmed: `4f9a8f4 feat(gear): add stat-specific enhancement rolls`.
 
 ## Commit Message
 ```text
@@ -110,4 +116,4 @@ Task: T02-enhancement-resolution
 ## Progress
 - [x] Implementation complete
 - [x] Validation passed
-- commit: pending
+- commit: 4f9a8f4

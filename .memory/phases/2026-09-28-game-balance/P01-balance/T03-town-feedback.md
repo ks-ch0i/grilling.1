@@ -1,6 +1,6 @@
 # Task: T03 Town Upgrade Feedback
 
-## Status: done
+## Status: in_progress
 
 ## Goal
 Correct the town's enhancement guidance to describe the confirmed ordinary/special-stat rules and show a concise `강화 대성공!` message when an upgrade result reports great success.
@@ -48,8 +48,8 @@ Correct the town's enhancement guidance to describe the confirmed ordinary/speci
 
 ## Acceptance Criteria
 - [x] Upgrade guidance no longer claims every stat and effect rises by 1%–5% on every upgrade.
-- [x] Great success displays `강화 대성공!` only for the just-upgraded selected item and includes no numeric gain.
-- [x] Ordinary upgrade feedback, selection, state commit, materials, and persistence continue to work.
+- [ ] Great success displays `강화 대성공!` only for the just-upgraded selected item and includes no numeric gain.
+- [ ] Ordinary upgrade feedback, selection, state commit, materials, and persistence continue to work.
 - [x] Existing saved equipment values are not migrated or reset.
 
 ## Validation
@@ -59,6 +59,12 @@ Correct the town's enhancement guidance to describe the confirmed ordinary/speci
 - `node 'C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js' run build` - Vite production build succeeds; Vite reports the existing large-bundle warning.
 - `Invoke-WebRequest -Uri 'http://127.0.0.1:5173/' -UseBasicParsing` - local development server returned HTTP 200.
 - Manual visual inspection was unavailable: in-app browser initialization failed with missing `sandboxPolicy` metadata, and the Orca desktop runtime timed out waiting for its window. Layout and click behavior therefore remain visually unverified.
+
+## Revalidation (2026-10-20)
+- `node --check src/game/scenes/TownScene.js` and focused source assertions passed for ordinary/special guidance, the exact text `강화 대성공!`, `result.greatSuccess`, matching-item scoping, and removal of the obsolete tooltip.
+- An in-memory save/load round-trip preserved a `lifeSteal: 0.12` value unchanged. `npm run build` passed under Node `v20.19.4` (package requires `>=22.12.0`) with the existing large-chunk warning; Vite on port 4175 returned HTTP 200.
+- Browser rendering, selection changes, visual overlap, and forced great-success feedback remain unverified because no browser surface was available (`chrome` creation unavailable). Keep these acceptance items unchecked and this task/phase/plan in progress.
+- Implementation commit confirmed: `6025bfd feat(ui): show gear enhancement great success`.
 
 ## Commit Message
 ```text
@@ -74,5 +80,5 @@ Task: T03-town-feedback
 
 ## Progress
 - [x] Implementation complete
-- [x] Validation passed, with browser visual inspection unavailable as recorded above
-- commit: pending
+- [ ] Validation passed; browser visual inspection remains unavailable
+- commit: 6025bfd

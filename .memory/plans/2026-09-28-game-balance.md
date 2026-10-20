@@ -6,7 +6,9 @@ Apply the confirmed balance changes to enemy growth, life steal, and equipment e
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `done` | Update balance data and enemy scaling, implement enhancement rolls, and display great-success feedback. | [P01](../phases/2026-09-28-game-balance/P01-balance/phase.md) |
+| P01 | `in_progress` | T01/T02 assertions pass; town feedback layout and click scenarios remain unverified. | [P01](../phases/2026-09-28-game-balance/P01-balance/phase.md) |
+
+> 2026-10-20 status audit: T01 and T02 are verified; T03 source/save checks pass, but required browser feedback/layout checks remain unavailable. Phase progress is `done: 2/3`.
 
 ## Confirmed Design Constraints
 - Source decision: [2026-09-28-game-balance.md](../decisions/2026-09-28-game-balance.md).

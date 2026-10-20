@@ -1,6 +1,6 @@
 # Task: T03 Audit Game Balance Plan
 
-## Status: pending
+## Status: done
 
 ## Goal
 
@@ -71,12 +71,12 @@ Recheck the 9/28 life-steal/enemy-growth values, additive upgrade behavior, and 
 
 ## Acceptance Criteria
 
-- [ ] Original T01 value/formula assertions pass and save/effect eligibility behavior remains intact.
-- [ ] Original T02 deterministic upgrade, additive range, great-success, cap, return-shape, and schema checks pass.
-- [ ] Original T03 source, save-round-trip, and browser feedback/layout checks have individual recorded results.
-- [ ] Any unavailable required visual check remains unchecked and keeps its Task/phase/plan incomplete.
-- [ ] The original balance phase count, parent plan status, validation notes, and confirmed commit references agree.
-- [ ] No gameplay source or existing save data is modified.
+- [x] Original T01 value/formula assertions pass and save/effect eligibility behavior remains intact.
+- [x] Original T02 deterministic upgrade, additive range, great-success, cap, return-shape, and schema checks pass.
+- [x] Original T03 source, save-round-trip, and browser feedback/layout checks have individual recorded results.
+- [x] Any unavailable required visual check remains unchecked and keeps its Task/phase/plan incomplete.
+- [x] The original balance phase count, parent plan status, validation notes, and confirmed commit references agree.
+- [x] No gameplay source or existing save data is modified.
 
 ## Validation
 
@@ -102,6 +102,6 @@ Task: T03-audit-game-balance
 
 ## Progress
 
-- [ ] Audit complete
-- [ ] Validation recorded
+- [x] Audit complete
+- [x] Validation recorded
 - commit: pending

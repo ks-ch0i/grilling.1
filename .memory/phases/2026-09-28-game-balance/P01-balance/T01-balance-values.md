@@ -49,14 +49,19 @@ Update the life-steal rarity values and enemy growth constants so newly rolled e
 - Assert `getStageEnemyStats(1, 1, true)` gives max HP `300`, attack `24`, and defense `20`.
 
 ## Acceptance Criteria
-- [ ] The five life-steal table entries equal 0, 0, 0.01, 0.03, and 0.05 in rarity order.
-- [ ] Stage and chapter growth constants are 0.20 and 0.80, and the current multiplicative formula is preserved.
-- [ ] Normal and boss enemy values match the listed focused assertions.
-- [ ] Existing save data and effect-generation eligibility are unchanged.
+- [x] The five life-steal table entries equal 0, 0, 0.01, 0.03, and 0.05 in rarity order.
+- [x] Stage and chapter growth constants are 0.20 and 0.80, and the current multiplicative formula is preserved.
+- [x] Normal and boss enemy values match the listed focused assertions.
+- [x] Existing save data and effect-generation eligibility are unchanged.
 
 ## Validation
 - `node --input-type=module -e "import assert from 'node:assert/strict'; import { BALANCE } from './src/game/data/balance.js'; import { getStageEnemyStats } from './src/game/domain/progression.js'; assert.deepEqual(Object.values(BALANCE.effectValues.lifeSteal), [0, 0, 0.01, 0.03, 0.05]); assert.deepEqual(getStageEnemyStats(1, 1), {maxHp:60,hp:60,currentHp:60,attack:12,defense:10,isBoss:false}); for (const [chapter,stage,hp,attack,defense] of [[1,10,168,34,28],[2,1,108,22,18]]) { const e=getStageEnemyStats(chapter,stage); assert.equal(e.maxHp,hp); assert.equal(e.attack,attack); assert.equal(e.defense,defense); } const b=getStageEnemyStats(1,1,true); assert.equal(b.maxHp,300); assert.equal(b.attack,24); assert.equal(b.defense,20);"` - all focused assertions pass.
 - `npm.cmd run build` - Vite production build succeeds.
+
+## Revalidation (2026-10-20)
+- The focused assertions for life-steal rarity values, stage/chapter growth, 1-1 and 1-10 / 2-1 normal-enemy values, and the 1-1 boss passed.
+- Source review confirmed effects remain unique/legendary-only and saved equipment is not rewritten on load. `npm run build` passed under Node `v20.19.4` (declared engine is `>=22.12.0`).
+- Implementation commit confirmed: `7f89d05 feat(balance): tune life steal and enemy growth`.
 
 ## Commit Message
 ```text
@@ -73,4 +78,4 @@ Task: T01-balance-values
 ## Progress
 - [x] Implementation complete
 - [x] Validation passed
-- commit: pending
+- commit: 7f89d05
