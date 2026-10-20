@@ -1,6 +1,6 @@
 # Task: T01 Lethal Contact Resolution
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 Make a contact hit that reduces the player's HP to zero end the current attempt, even if the player defeats that enemy in the same contact. The existing game-over panel must appear, and enemy defeat or stage-clear rewards must not run for that lethal exchange.
@@ -49,8 +49,8 @@ Make a contact hit that reduces the player's HP to zero end the current attempt,
 ## Acceptance Criteria
 - [x] Incoming player damage is calculated when the same contact defeats the enemy.
 - [x] If incoming damage reduces player HP to zero, the source path invokes the existing game-over UI.
-- [ ] On a lethal exchange, enemy defeat rewards, gear drops, and stage-clear completion do not run.
-- [ ] A nonlethal killing hit still defeats the enemy and grants the existing rewards.
+- [x] On a lethal exchange, enemy defeat rewards, gear drops, and stage-clear completion do not run.
+- [x] A nonlethal killing hit still defeats the enemy and grants the existing rewards.
 - [x] Existing stage retry behavior restores the attempt snapshot and preserves the current player progression according to `retryStage`.
 
 ## Validation
@@ -61,9 +61,15 @@ Make a contact hit that reduces the player's HP to zero end the current attempt,
 ## Revalidation (2026-10-20)
 - The specified deterministic Node assertion passed: result had `enemyDefeated: true`, `playerDefeated: true`, `enemyHp: 0`, and `playerHp: 0`.
 - Source order in `BattleScene.handleContacts` applies both HP results, checks player HP, calls `retryStage`/`saveState`/`showGameOver`, and returns before `defeatEnemy`; a surviving player follows the defeat/reward path. `retryStage` passed an inline assertion for snapshot rollback, retained level/XP/pending level-up/stat choices, and full derived HP.
-- `npm run build` passed under Node `v20.19.4` (package requires `>=22.12.0`); Vite on port 4174 returned HTTP 200. Browser lethal/nonlethal exchange could not run because no browser surface was available (`chrome` creation unavailable); those results remain unverified.
-- The 9/27 decision supersedes the earlier 9/26 rule that suppressed retaliation on a killing hit: simultaneous player death now takes precedence and prevents enemy/stage rewards. Correct the preliminary 9/26 cross-plan note during final record sync.
+- At the earlier status audit, `npm run build` passed under Node `v20.19.4` (package requires `>=22.12.0`); Vite on port 4174 returned HTTP 200. Browser lethal/nonlethal exchange could not run at that time; see the later isolated Chromium verification below.
+- The 9/27 decision supersedes the earlier 9/26 rule that suppressed retaliation on a killing hit: simultaneous player death now takes precedence and prevents enemy/stage rewards. The T04/T06 records now reflect that rule, and this task directly verifies both lethal and nonlethal killing contacts.
 - Implementation commit confirmed: `5245a46 fix(combat): honor lethal damage on killing contacts`.
+
+## Browser Verification (2026-10-20)
+- In isolated Chromium at 1280x720, forced a same-contact lethal exchange (player HP 1, attack 1000, defense 0 against the first stage-1 enemy). The game-over panel displayed `쓰러졌습니다`; saved XP stayed 0, stage 1 remained uncleared, and retry restored HP to 100 while preserving the 17-material entry snapshot.
+- In a separate fresh profile, forced a nonlethal killing contact (player HP 100, attack 1000, defense 100). The first enemy was defeated, XP increased by 10, and the player remained alive with HP 100; no stage clear was recorded.
+- Both browser runs captured no page or console errors. Screenshots are in `%TEMP%\knight-run-residual-20261020`.
+- The Node `22.12.0` production build passed in the same checkout during T07 integration verification; no game source changed for this verification.
 
 ## Commit Message
 ```text
@@ -79,5 +85,6 @@ Task: T01-lethal-contact-resolution
 
 ## Progress
 - [x] Implementation complete
-- [ ] Validation passed
-- commit: 5245a46
+- [x] Validation passed
+- implementation commit: 5245a46
+- browser verification commit: to be recorded in Git history
