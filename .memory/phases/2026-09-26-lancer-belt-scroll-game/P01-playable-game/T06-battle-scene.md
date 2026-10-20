@@ -9,7 +9,7 @@
 ## Decision Summary
 
 - 전투 world는 1차원 수평 이동으로 표현한다. 모든 캐릭터/장비는 Phaser geometric shapes다.
-- 피해는 T04 도메인 함수를 사용하고, UI 장면은 임의로 계산하지 않는다. player만 knockback되고 접촉 후 무적 시간은 없다.
+- 피해는 T04 도메인 함수를 사용하고, UI 장면은 임의로 계산하지 않는다. 접촉 양쪽 피해는 독립 적용하며 적을 처치해도 플레이어 피해를 취소하지 않는다. 치명 접촉은 처치 보상보다 사망/재도전을 먼저 처리한다 (2026-09-27 결정 D01-D03). 생존한 player만 knockback되고 접촉 후 무적 시간은 없다.
 
 ## Implementation
 
@@ -37,7 +37,7 @@
   - `src/game/domain/gear.js` :: `rollGear`, `tryStoreDrop`; read-only
   - `src/game/domain/progression.js` :: XP/stage helpers; read-only
 - At each update, compare player/enemy AABBs. Keep a `Set<enemyId>` of current contact pairs. Call `resolveContact` only on transition from separated to overlapping; remove ID after separation. This prevents per-frame hits but does not add an invulnerability window.
-- Apply enemy HP result first. If enemy dies, suppress player damage as specified. Otherwise update player HP. Push player 96 px away from enemy, clamp world boundary. Do not push enemy.
+- Apply both damage results independently. If player HP reaches zero, route to game over/retry before enemy defeat rewards as specified in the 2026-09-27 decision. For a surviving player, push the player 96 px away from the enemy and clamp to world bounds. Do not push the enemy.
 - Player HUD: chapter-stage, player HP bar/current/max, level and XP, enemy count, selected stage replay marker. Enemy health bar appears above each active enemy; boss bar is wider. Show crit flash using color/tint only, no audio.
 - On enemy death award 10 XP (or 30% on replay), roll normal gear drop at 20%, and create a floor item shape with rarity color. On boss death award additional 200 XP and create exactly one gear drop. Touching a floor item calls `tryStoreDrop`; if full, leave it on floor.
 - Pause movement when XP crosses a level threshold. Show modal with `공격력 +2`, `방어력 +5`, `최대 HP +10`; after valid selection resume.
@@ -46,20 +46,25 @@
 - Portrait rotation message from T01 stays visible; battle input only active in landscape.
 
 ## Acceptance Criteria
-- [ ] Player moves left/right with A/D and held touch halves; camera follows without leaving world bounds.
-- [ ] Contact damage occurs once per contact, uses critical and recoil rules, pushes only player, and has no invulnerability timer.
-- [x] Ten enemies spawn; stage 5/10 bosses appear after them and use specified multipliers.
-- [ ] Drops are visible and collectible; full inventory leaves them on ground.
-- [ ] Level-up choice pauses combat; stage clear and game over show correct actions and state.
+- [x] Player moves left/right with A/D and held touch halves; camera follows within its world bounds.
+- [x] Contact damage occurs once per contact, uses critical and recoil rules, pushes only the player, and has no invulnerability timer.
+- [x] Ten enemies spawn; stage 5/10 bosses appear after them and use the specified multipliers.
+- [x] Drops are visible and collectible; full inventory leaves them on the ground.
+- [x] Level-up choice pauses combat; stage clear and game over show the correct actions and state.
 
 ## Validation
 - `npm run build` — BattleScene compiles.
 - `npm run dev` manual browser check — play 1-1; walk into and away from enemies; check both collision directions, crit, loot pickup, level-up pause, stage clear, stage 5 boss, death/retry, and touch controls in landscape.
 
 ## Revalidation (2026-10-20)
-- Source review confirmed ten normal-enemy placements, boss spawn after the tenth, camera/world bounds, held A/D/touch input paths, one-hit-per-contact tracking, player-only knockback, full-inventory floor retention, level-up pause, and clear/death actions. Inline assertions confirmed the stage-1 boss multipliers; build passed on Node `v20.19.4` only.
-- The contact criterion remains unchecked because its one-hit/recoil behavior still requires a browser scenario; source review confirms the 9/27 simultaneous-death precedence and no longer indicates a retaliation defect. Movement, visual loot, level-up, stage-clear, stage-5/10 boss, death/retry, and landscape-touch runtime scenarios remain unverified without a browser; task stays `in_progress`.
+- In isolated landscape Chromium at 1280x720, A/D and held pointer input on both screen halves moved the player; the camera followed during rightward travel. Source review confirmed camera bounds and player x-clamping. The recoil screenshot shows the player displaced while the enemy stays in place.
+- Contact/recontact checks passed: the weak first contact changed HP 100→78; waiting while separated caused no additional hit; re-entering contact changed HP 78→56. A guaranteed critical showed `치명타 60`. No invulnerability delay was introduced.
+- A normal-enemy floor drop was collected into inventory. With all 20 slots occupied, another drop remained visible on the ground and inventory stayed at 20. The drop probe forced only the normal drop-chance call; Phaser's other random calls remained untouched.
+- Level-up paused combat and displayed all three choices; selecting max HP changed level 1→2, max HP 100→110, and HP 50→60. Lethal second contact showed game over, retained the first enemy's 10 XP, restored HP to 100, and rolled back the stage-entry inventory/material snapshot; `다시 시작` restarted the stage with those values.
+- Stage 1 completion recorded `1-1`, awarded 200 total XP, healed HP to 50, unlocked 1-2, and displayed both `마을로` and `다음 스테이지 1-2`; choosing next started stage 2. Stages 5 and 10 each defeated ten normal enemies before the boss appeared; screenshots show the boss and HUD. Boss values match the T04 assertions: stage 5 HP540/ATK44/DEF36; stage 10 HP840/ATK68/DEF56.
+- Browser console and page errors were empty. Production build passed with Node `22.12.0`; Vite emitted its existing advisory that the minified JavaScript chunk exceeds 500 kB. Browser runs used an isolated profile and did not access existing saves.
 - Implementation commit confirmed: `2d1c0c0 feat(game): add belt-scroll battle scene`.
+- Manual gameplay scenarios completed: A/D and touch movement, contact/recoil/recontact, critical display, drop pickup and full-inventory retention, level-up, stage clear/next action, game-over/retry, and stage-5/10 bosses.
 
 ## Commit Message
 ```text
@@ -75,6 +80,6 @@ Task: T06-battle-scene
 
 ## Progress
 - [x] 구현 완료
-- [ ] 검증 통과
+- [x] 검증 통과
 - commit: 2d1c0c0
 
