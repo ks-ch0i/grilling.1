@@ -1,6 +1,6 @@
 ﻿# Task: T05 마을과 장비 관리 화면
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 
@@ -44,19 +44,22 @@
 - Responsive logical canvas retains 1280x720 FIT layout. Ensure touch target minimum is 48x48 logical px and inventory list can scroll vertically.
 
 ## Acceptance Criteria
-- [ ] New game opens at town with six common equipped items, player stats, level, materials, and empty inventory.
+- [x] New game opens at town with six common equipped items, player stats, level, materials, and empty inventory.
 - [x] Inventory capacity excludes six equipped slots and respects max 20.
 - [x] Equip, dismantle, upgrade, and stage selection controls call the domain functions and refresh the UI.
-- [ ] Rare colors match the five fixed rarity colors; Korean UI text fits at 1280x720.
+- [x] Rare colors match the five fixed rarity colors; Korean UI text fits at 1280x720.
 
 ## Validation
 - `npm run build` — TownScene and UI components compile.
 - `npm run dev` manual browser check — equip/swap, full inventory, dismantle, upgrade disable states, replay stage selection, and touch-sized buttons.
 
 ## Revalidation (2026-10-20)
-- Source review confirmed TownScene renders the current state, enforces the 20-item inventory rule, routes equip/dismantle/upgrade through domain functions, refreshes after state changes, and offers unlocked/replay stages. Inline domain assertions covered the capacity and swap behavior; build passed on Node `v20.19.4` only.
-- New-town rendering and the combined rarity-color/Korean-text-fit criterion remain unchecked; equip, dismantle, upgrade-disabled, replay selection, and touch-size browser checks were unavailable. Task stays `in_progress`.
+- Fresh isolated Chromium profile opened directly into the new-game town: all six equipped slots were common, the player was level 1 with XP 0/100, materials and inventory were empty, and the unlocked stage was 1-1. The 1280x720 capture shows the player stats and Korean labels fit within the layout.
+- Rendered common, uncommon, rare, unique, and legendary inventory cards; their frame colors matched `RARITY_COLOR` (gray, white, blue, purple, gold). Equip/swap moved the replaced starter helmet into inventory; dismantling a rare item removed it and awarded 4 materials.
+- Clicked disabled upgrade controls for insufficient materials and max level, and a disabled equip control with a full 20-item inventory; all left saved state unchanged. A cleared-stage selection showed the 30% replay XP label and launched stage 1-2. All action buttons meet the 48px logical minimum; cards and stage controls are larger.
+- Browser console and page errors were empty. `npm run build` passed with Node `22.12.0`; Vite emitted its existing advisory that the minified JavaScript chunk exceeds 500 kB. All browser checks used a fresh isolated profile and did not access existing saves.
 - Implementation commit confirmed: `6a6909d feat(game): build village gear and stage management UI`.
+- Manual browser checks completed: new-game town, rarity colors/text fit, equip/swap, dismantle, upgrade disabled states, full-inventory equip disabled state, replay selection/departure, and touch-target sizing.
 
 ## Commit Message
 ```text
@@ -72,6 +75,6 @@ Task: T05-town-ui
 
 ## Progress
 - [x] 구현 완료
-- [ ] 검증 통과
+- [x] 검증 통과
 - commit: 6a6909d
 
