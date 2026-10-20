@@ -1,6 +1,6 @@
 ﻿# Task: T02 밸런스와 게임 상태 저장
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 
@@ -65,8 +65,14 @@
 ## Revalidation (2026-10-20)
 - Source review confirmed the JSDoc types, six gear slots, five rarities, and the versioned plain-data save projection.
 - Inline Node assertions passed for JSON save/load round-trip and malformed JSON fallback using an isolated in-memory storage mock; the production build also passed on Node `v20.19.4` (below the declared `>=22.12.0` engine).
-- Browser DevTools reload/persistence scenario remains unverified because no browser surface was available; this task stays `in_progress`.
+- At audit time, browser DevTools reload/persistence remained unverified because no browser surface was available; the follow-up below closes that check.
 - Implementation commit confirmed: `ee01e1e feat(game): define game state and local save schema`.
+
+### Follow-up Execution (2026-10-20)
+- In a fresh isolated Playwright Chromium profile, loaded the real `saveGameState` and `loadGameState` module from the TownScene app, saved a state with `materials: 73`, and confirmed `saveGameState` returned `{ok:true}`.
+- Reloaded the app and confirmed schema version 1, all six equipment slots, inventory state, and the `materials: 73` sentinel survived in localStorage. No browser console or page errors occurred.
+- Ran the production build with Node `v22.12.0`; it passed. The existing Phaser chunk-size advisory (>500 kB) remains.
+- Used only the fresh temporary browser profile; existing save data was not accessed or changed.
 
 ## Commit Message
 ```text
@@ -82,6 +88,6 @@ Task: T02-state-and-save
 
 ## Progress
 - [x] 구현 완료
-- [ ] 검증 통과
+- [x] 검증 통과
 - commit: ee01e1e
 
