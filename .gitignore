@@ -3,3 +3,6 @@ dist/
 .env*
 !.env.example
 api/local.settings.json
+/infra/parameters.local.json
+/infra/main.json
+/infra/.artifacts/

@@ -64,4 +64,4 @@ Town, Battle, PvP 화면의 상단에 stage/PvP 상위 5명과 현재 계정의 
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과
-- commit: pending
+- commit: e062d2c

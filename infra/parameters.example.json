@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "eastasia" },
+    "resourceNamePrefix": { "value": "knight-run-int" },
+    "tenantId": { "value": "00000000-0000-0000-0000-000000000000" },
+    "spaClientId": { "value": "00000000-0000-0000-0000-000000000000" },
+    "apiAppId": { "value": "00000000-0000-0000-0000-000000000000" },
+    "additionalSignalrOrigins": { "value": [] },
+    "entraAdminObjectId": { "value": "00000000-0000-0000-0000-000000000000" },
+    "entraAdminDisplayName": { "value": "REPLACE-WITH-ENTRA-ADMIN" },
+    "entraAdminPrincipalType": { "value": "User" },
+    "sqlVcores": { "value": 2 },
+    "sqlMaxSizeGb": { "value": 32 },
+    "functionMaxInstances": { "value": 20 },
+    "functionInstanceMemoryMb": { "value": 2048 }
+  }
+}

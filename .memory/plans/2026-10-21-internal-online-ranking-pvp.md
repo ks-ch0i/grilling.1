@@ -16,8 +16,8 @@
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
 | P01 | `done` | 공유 전투 시뮬레이터와 계정·저장·랭킹·PvP API 구현 | [P01](../phases/2026-10-21-internal-online-ranking-pvp/P01-simulation-and-api/phase.md) |
-| P02 | `in_progress` | 브라우저 로그인, 저장 동기화, 랭킹 전투, PvP, 전광판 연결 | [P02](../phases/2026-10-21-internal-online-ranking-pvp/P02-browser-integration/phase.md) |
-| P03 | `pending` | 전용 Azure 구성 코드와 배포 설정 준비 | [P03](../phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md) |
+| P02 | `done` | 브라우저 로그인, 저장 동기화, 랭킹 전투, PvP, 전광판 연결 | [P02](../phases/2026-10-21-internal-online-ranking-pvp/P02-browser-integration/phase.md) |
+| P03 | `in_progress` | 전용 Azure 구성 코드와 배포 설정 준비 | [P03](../phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md) |
 | P04 | `pending` | 비용 재확인 후 사내 구독 배포 및 실환경 검증 | [P04](../phases/2026-10-21-internal-online-ranking-pvp/P04-internal-rollout/phase.md) |
 
 ## Key Contracts
