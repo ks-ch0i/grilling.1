@@ -78,4 +78,4 @@ Node.js Azure Functions v4 API의 실행 기반을 만들고, 모든 보호 API�
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과
-- commit: pending
+- commit: d8f5ca4

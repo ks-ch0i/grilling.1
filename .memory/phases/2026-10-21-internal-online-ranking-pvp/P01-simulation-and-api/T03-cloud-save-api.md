@@ -1,6 +1,6 @@
 # Task: T03 계정별 클라우드 저장 API
 
-## Status: pending
+## Status: done
 
 ## Goal
 로그인 계정 하나에 저장 상태 하나를 보관하고 revision 기반 조건부 저장을 제공해 클라이언트가 충돌을 감지하고 클라우드 우선 정책을 적용할 수 있게 한다.
@@ -17,6 +17,7 @@
   - api/src/repositories/cloudSaveRepository.js :: getByPlayerId, insertInitial, compareAndSwap — SQL access; new.
   - api/src/services/cloudSaveService.js :: getCurrent, putCurrent — revision rules; new.
   - api/src/functions/cloudSave.js :: GET/PUT /api/saves/current — HTTP routes; new.
+  - api/package.json, api/package-lock.json, api/.npmrc :: install the shared game-rules package as a portable API dependency.
   - api/test/cloudSave/cloudSaveService.test.js :: revision and conflict cases; new.
 - Details:
   - CloudSaveEnvelope: { schemaVersion: 1; revision: integer >= 1; updatedAtUtc: ISO-8601 UTC string; state: SaveStateV1 }.
@@ -36,13 +37,13 @@
   - 같은 revision을 두 요청이 동시에 사용하면 정확히 하나만 성공하고 다른 요청은 409가 되어야 한다.
 
 ## Acceptance Criteria
-- [ ] 저장 API의 사용자 범위는 검증된 tenantId/objectId에만 묶인다.
-- [ ] 클라우드 revision이 바뀐 상태를 덮어쓰지 않고 409로 돌려준다.
-- [ ] 서버는 저장 데이터의 승격·병합·경제 조정을 하지 않는다.
-- [ ] 기존 local save schemaVersion 1 payload가 추가 필드 없이 왕복된다.
+- [x] 저장 API의 사용자 범위는 검증된 tenantId/objectId에만 묶인다.
+- [x] 클라우드 revision이 바뀐 상태를 덮어쓰지 않고 409로 돌려준다.
+- [x] 서버는 저장 데이터의 승격·병합·경제 조정을 하지 않는다.
+- [x] 기존 local save schemaVersion 1 payload가 추가 필드 없이 왕복된다.
 
 ## Validation
-    npm --prefix api test -- cloudSave
+    npm --prefix api test -- test/cloudSave/cloudSaveFunction.test.js test/cloudSave/cloudSaveService.test.js
     npm run build
 
 ## Commit Message
@@ -56,6 +57,6 @@
     - Reject stale revisions and return the current cloud copy
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: cloud-save 13 tests; API 28 tests on Node 22; npm run build; API syntax checks.
 - commit: pending

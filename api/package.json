@@ -15,6 +15,7 @@
   "dependencies": {
     "@azure/functions": "^4.16.5",
     "@azure/identity": "^4.14.0",
+    "@knight-run/game-rules": "file:../packages/game-rules",
     "jose": "^6.2.13",
     "mssql": "^12.7.10"
   }
