@@ -1,6 +1,6 @@
 # Task: T09 상단 랭킹 전광판
 
-## Status: pending
+## Status: done
 
 ## Goal
 Town, Battle, PvP 화면의 상단에 stage/PvP 상위 5명과 현재 계정의 순위 변화를 번갈아 표시하고 SignalR 연결 복구를 제공한다.
@@ -42,10 +42,10 @@ Town, Battle, PvP 화면의 상단에 stage/PvP 상위 5명과 현재 계정의 
   - Scene shutdown unsubscribes its UI observer only; singleton RankingClient remains connected until game disposal.
 
 ## Acceptance Criteria
-- [ ] Each gameplay scene shows the same marquee without duplicate SignalR connections.
-- [ ] Top-five event updates are immediate; reconnect/poll returns the latest snapshot.
-- [ ] Offline mode displays the last cached ranking and does not run network polling.
-- [ ] UI updates stay below Free message quota in the specified polling cadence and no event is sent per combat tick.
+- [x] Each gameplay scene shows the same marquee without duplicate SignalR connections.
+- [x] Top-five event updates are immediate; reconnect/poll returns the latest snapshot.
+- [x] Offline mode displays the last cached ranking and does not run network polling.
+- [x] UI updates stay below Free message quota in the specified polling cadence and no event is sent per combat tick.
 
 ## Validation
     node --test test/ranking-marquee.test.js api/test/rankings/rankingEvents.test.js
@@ -62,6 +62,6 @@ Town, Battle, PvP 화면의 상단에 stage/PvP 상위 5명과 현재 계정의 
     - Recover authoritative ranking state after SignalR disconnects
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과
 - commit: pending

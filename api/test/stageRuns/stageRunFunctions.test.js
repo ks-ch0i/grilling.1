@@ -93,7 +93,9 @@ test('GET stage top-five returns public ranked fields and route registration is 
   const top = createStageRankingHandler(handlers.dependencies);
   const response = await top(new Request('https://game.internal/api/rankings/stage/top'));
   assert.equal(response.status, 200);
-  assert.deepEqual(parseBody(response), [{ rank: 1, chapter: 1, stage: 1, clearTimeMs: 120000, displayName: 'Player A' }]);
+  assert.deepEqual(parseBody(response).topFive, [{ rank: 1, chapter: 1, stage: 1, clearTimeMs: 120000, displayName: 'Player A' }]);
+  assert.equal(parseBody(response).board, 'stage');
+  assert.match(parseBody(response).revision, /^[0-9a-f]{64}$/);
 
   const { registerStageRunFunctions } = await loadStageRunFunctions();
   const routes = [];
@@ -104,6 +106,7 @@ test('GET stage top-five returns public ranked fields and route registration is 
     ['stage-runs', 'POST'],
     ['stage-runs/{runId}/result', 'POST'],
     ['rankings/stage/top', 'GET'],
+    ['rankings/me', 'GET'],
   ]);
   assert.ok(routes.every(({ options }) => options.authLevel === 'anonymous'));
 });

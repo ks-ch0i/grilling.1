@@ -195,3 +195,20 @@ export async function completeRun(transaction, input) {
 export async function getTopFive(pool) {
   return selectTopFive(pool.request());
 }
+
+export async function getPlayerRank(pool, playerId) {
+  const result = await pool.request()
+    .input('PlayerId', sql.UniqueIdentifier, playerId)
+    .query(`
+      WITH RankedStages AS (
+        SELECT PlayerId,
+          ROW_NUMBER() OVER (ORDER BY Chapter DESC, Stage DESC, ClearTimeMs ASC, PlayerId ASC) AS Rank
+        FROM dbo.StageBests
+      )
+      SELECT sb.Chapter, sb.Stage, sb.ClearTimeMs, ranked.Rank
+      FROM dbo.StageBests AS sb
+      INNER JOIN RankedStages AS ranked ON ranked.PlayerId = sb.PlayerId
+      WHERE sb.PlayerId = @PlayerId;
+    `);
+  return result.recordset?.[0] ?? null;
+}

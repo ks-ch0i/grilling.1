@@ -6,6 +6,7 @@ import { chooseLevelUpStat, completeStage, getStageEnemyStats, grantXp, retrySta
 import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulation';
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
+import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const WORLD_WIDTH = 11200;
 const FLOOR_Y = 560;
@@ -36,6 +37,7 @@ export class BattleScene extends Phaser.Scene {
     this.stageSnapshot = data.stageSnapshot ?? this.gameState;
     this.rankedRunClient = data.rankedRunClient;
     this.pvpClient = data.pvpClient;
+    this.rankingClient = data.rankingClient;
     this.rankedTicket = data.rankedTicket ?? null;
     this.rankedReason = data.rankedReason ?? 'ranking-unavailable';
     this.rankedEligible = Boolean(this.rankedTicket && this.rankedRunClient);
@@ -53,6 +55,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     this.drawWorld();
     this.createPlayer();
@@ -223,7 +226,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   createHud() {
-    this.hud = this.add.container(22, 16).setScrollFactor(0).setDepth(100);
+    this.hud = this.add.container(22, 60).setScrollFactor(0).setDepth(100);
     const bg = this.add.rectangle(260, 48, 520, 92, 0x101820, 0.9).setOrigin(0, 0);
     bg.setStrokeStyle(1, 0x68798a);
     this.chapterText = this.add.text(14, 10, '', { fontFamily:'sans-serif', fontSize:'17px', color:'#f4e6bf' });
@@ -232,7 +235,7 @@ export class BattleScene extends Phaser.Scene {
     this.hpFill = this.add.rectangle(14, 69, 330, 13, 0x54c17a).setOrigin(0, 0);
     this.enemyText = this.add.text(360, 40, '', { fontFamily:'sans-serif', fontSize:'14px', color:'#f2c4a5' });
     this.hud.add([bg,this.chapterText,this.playerText,this.hpBack,this.hpFill,this.enemyText]);
-    this.rankedStatusText = this.add.text(930, 24, '', {
+    this.rankedStatusText = this.add.text(930, 60, '', {
       fontFamily:'sans-serif', fontSize:'14px', color:'#e4ebf1',
       backgroundColor:'#101820', padding:{x:10,y:6},
     }).setScrollFactor(0).setDepth(100);
@@ -632,6 +635,7 @@ export class BattleScene extends Phaser.Scene {
         saveState:this.saveState,
         rankedRunClient:this.rankedRunClient,
         pvpClient:this.pvpClient,
+        rankingClient:this.rankingClient,
         unlockedStageId:nextChapter+'-'+nextStage,
       });
     }}).setDepth(251);
@@ -661,6 +665,7 @@ export class BattleScene extends Phaser.Scene {
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
       pvpClient:this.pvpClient,
+      rankingClient:this.rankingClient,
       rankedTicket:ranked.ranked ? ranked.ticket : null,
       rankedReason:ranked.reason,
       chapter,
@@ -711,6 +716,7 @@ export class BattleScene extends Phaser.Scene {
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
       pvpClient:this.pvpClient,
+      rankingClient:this.rankingClient,
       rankedTicket:ranked.ranked ? ranked.ticket : null,
       rankedReason:ranked.reason,
       chapter:this.chapter,

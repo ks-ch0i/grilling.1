@@ -360,3 +360,21 @@ export async function getPvpTopFive(pool) {
   `);
   return result.recordset ?? [];
 }
+
+export async function getPlayerRank(pool, playerId) {
+  const result = await pool.request()
+    .input('PlayerId', sql.UniqueIdentifier, playerId)
+    .query(`
+      WITH RankedPvp AS (
+        SELECT PlayerId,
+          ROW_NUMBER() OVER (ORDER BY Rating DESC, UpdatedAtUtc ASC, PlayerId ASC) AS Rank
+        FROM dbo.PvpRatings
+      )
+      SELECT ranked.Rank, COALESCE(rating.Rating, 1000) AS Rating
+      FROM dbo.Players AS player
+      LEFT JOIN RankedPvp AS ranked ON ranked.PlayerId = player.PlayerId
+      LEFT JOIN dbo.PvpRatings AS rating ON rating.PlayerId = player.PlayerId
+      WHERE player.PlayerId = @PlayerId;
+    `);
+  return result.recordset?.[0] ?? null;
+}

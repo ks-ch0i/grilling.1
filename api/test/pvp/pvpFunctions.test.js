@@ -128,3 +128,15 @@ test('PvP HTTP routes register with the expected methods and paths', async () =>
   ]);
   assert.ok(routes.every(({ options }) => options.authLevel === 'anonymous'));
 });
+
+test('PvP top-five returns a revisioned public snapshot envelope', async () => {
+  const handlers = await makeHandlers();
+  const response = await handlers.topFive(new Request('https://game.internal/api/rankings/pvp/top'));
+
+  assert.equal(response.status, 200);
+  const ranking = parseBody(response);
+  assert.equal(ranking.board, 'pvp');
+  assert.match(ranking.revision, /^[0-9a-f]{64}$/);
+  assert.deepEqual(ranking.topFive, [{ rank:1, displayName:null, rating:1016 }]);
+  assert.equal(handlers.calls.pools.length, 1);
+});

@@ -4,6 +4,7 @@ import { createInitialState } from './game/domain/stateFactory.js';
 import { createAccountSaveCoordinator } from './game/domain/accountSaveCoordinator.js';
 import { createRankedRunClient } from './game/domain/rankedRunClient.js';
 import { createPvpClient } from './game/domain/pvpClient.js';
+import { createRankingClient } from './game/domain/rankingClient.js';
 import { stageId } from './game/domain/progression.js';
 import { createCloudSaveClient } from './api/cloudSaveClient.js';
 import {
@@ -35,7 +36,7 @@ function showAccountStatus(message = '') {
   notice.hidden = !message;
 }
 
-export function createGame({ gameState, saveState, account, apiClient, rankedRunClient, pvpClient }) {
+export function createGame({ gameState, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient }) {
   const container = document.querySelector('#game');
   if (!container) throw new Error('Game container "#game" was not found.');
   if (!gameState || typeof saveState !== 'function') throw new TypeError('An authenticated account save is required before creating the game.');
@@ -51,11 +52,14 @@ export function createGame({ gameState, saveState, account, apiClient, rankedRun
         apiClient,
         rankedRunClient,
         pvpClient,
+        rankingClient,
         unlockedStageId: stageId(gameState.progression.chapter, gameState.progression.currentStage),
       };
     },
   };
-  return new Phaser.Game(config);
+  const game = new Phaser.Game(config);
+  game.events.once('destroy', () => { void rankingClient?.dispose(); });
+  return game;
 }
 
 function setupOrientationMessage() {
@@ -183,7 +187,13 @@ export async function startApplication({
         reauthenticate: auth.signInInteractively,
       });
       coordinator.setCloudSaveCallback(pvpClient.onCloudSaveSynced);
-      game = createGameInstance({ gameState: loaded.state, saveState, account, apiClient, rankedRunClient, pvpClient });
+      const rankingClient = createRankingClient({
+        apiClient,
+        account,
+        getAccessToken:auth.getApiAccessToken,
+      });
+      game = createGameInstance({ gameState: loaded.state, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient });
+      rankingClient.connect();
       hideAuthGate();
       if (loaded.savedLocally === false) showSaveWarning('이 기기의 저장 공간을 사용할 수 없습니다. 이 브라우저를 닫으면 진행이 저장되지 않을 수 있습니다.');
       if (loaded.legacyOwnerSaved === false) showSaveWarning('기존 저장 소유자를 기록하지 못했습니다. 다른 계정으로 전환하지 말고 저장 공간을 확인해 주세요.');

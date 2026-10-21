@@ -65,6 +65,28 @@ test('submitStageResult replays clear input, records only server elapsed time an
   assert.equal(repository.calls.published[0].chapter, 1);
 });
 
+test('a top-board publish failure does not suppress the player rank event', async () => {
+  const repository = createStageRepository();
+  seedIssuedTicket(repository);
+  const playerEvents = [];
+  const dependencies = createStageDependencies(repository, {
+    publishRankingChanged:async () => { throw new Error('group publish unavailable'); },
+    publishPlayerRankChanged:async (event) => playerEvents.push(event),
+  });
+  const { inputs } = makeClearInputs({
+    runId:RUN_ID, seed:123456, chapter:1, stage:1, simulatorVersion:1,
+    balanceVersion:1, issuedAtUtc:ISSUED_AT.toISOString(),
+  });
+  const { submitStageResult } = await loadStageRunService();
+
+  const result = await submitStageResult({}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), dependencies);
+
+  assert.equal(result.status, 200);
+  assert.equal(playerEvents.length, 1);
+  assert.equal(playerEvents[0].board, 'stage');
+  assert.equal(playerEvents[0].identity, identityA);
+});
+
 test('submitStageResult rejects non-clear, too-fast, expired, foreign and changed-payload replays', async () => {
   const { submitStageResult } = await loadStageRunService();
   const incompleteRepo = createStageRepository();

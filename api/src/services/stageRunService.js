@@ -36,6 +36,7 @@ function dependenciesWithDefaults(dependencies = {}) {
     createRunId: dependencies.createRunId ?? randomUUID,
     createSeed: dependencies.createSeed ?? makeSeed,
     publishRankingChanged: dependencies.publishRankingChanged ?? (async () => {}),
+    publishPlayerRankChanged: dependencies.publishPlayerRankChanged ?? (async () => {}),
   };
 }
 
@@ -247,7 +248,12 @@ export async function submitStageResult(pool, identity, runId, body, receivedAtU
         generatedAtUtc: receivedAt.toISOString(),
       });
     } catch {
-      // Ranking polling remains authoritative if an event transport is unavailable.
+      // Personal rank events are attempted independently; polling remains authoritative.
+    }
+    try {
+      await deps.publishPlayerRankChanged({ identity, board:'stage', generatedAtUtc:receivedAt.toISOString() });
+    } catch {
+      // Ranking polling remains authoritative if the personal event transport is unavailable.
     }
   }
   return resultFromCompletion(write, inputJson, clearTimeMs);
@@ -265,11 +271,25 @@ export async function getStageTopFive(pool, dependencies) {
   }));
 }
 
+export async function getStagePlayerRank(pool, identity, dependencies) {
+  const { repository } = dependenciesWithDefaults(dependencies);
+  const playerId = await repository.findPlayerIdByIdentity(pool, identity);
+  if (!playerId) return { rank:null, chapter:null, stage:null, clearTimeMs:null };
+  const row = await repository.getPlayerRank(pool, playerId);
+  return row ? {
+    rank:Number(row.Rank ?? row.rank),
+    chapter:Number(row.Chapter ?? row.chapter),
+    stage:Number(row.Stage ?? row.stage),
+    clearTimeMs:Number(row.ClearTimeMs ?? row.clearTimeMs),
+  } : { rank:null, chapter:null, stage:null, clearTimeMs:null };
+}
+
 export function createStageRunService(dependencies = {}) {
   return {
     startStageRun: (pool, identity, body) => startStageRun(pool, identity, body, dependencies),
     submitStageResult: (pool, identity, runId, body, receivedAtUtc) =>
       submitStageResult(pool, identity, runId, body, receivedAtUtc, dependencies),
     getStageTopFive: (pool) => getStageTopFive(pool, dependencies),
+    getPlayerRank: (pool, identity) => getStagePlayerRank(pool, identity, dependencies),
   };
 }

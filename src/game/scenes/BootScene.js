@@ -17,6 +17,7 @@ export class BootScene extends Phaser.Scene {
       saveState: bootstrap?.saveState,
       rankedRunClient: bootstrap?.rankedRunClient,
       pvpClient: bootstrap?.pvpClient,
+      rankingClient: bootstrap?.rankingClient,
       unlockedStageId: selectedStage,
     });
   }

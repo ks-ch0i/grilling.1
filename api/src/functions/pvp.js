@@ -13,6 +13,7 @@ import {
 import { createMatchmakingService } from '../services/matchmakingService.js';
 import { createPlayerSnapshotService } from '../services/playerSnapshotService.js';
 import { createPvpResultService } from '../services/pvpResultService.js';
+import { buildRankingSnapshot } from '../services/rankingEvents.js';
 
 const MAX_SMALL_REQUEST_BYTES = 16 * 1024;
 const TRANSIENT_SQL_CODES = new Set(['ETIMEOUT', 'ECONNCLOSED', 'ESOCKET', 'ENOCONN', 'EINSTLOOKUP', 'ECANCEL']);
@@ -175,6 +176,6 @@ export function createPvpHandlers({
       });
     },
     topFive: (request, context = {}) => withUser(request, context, async (_identity, getPool) =>
-      jsonResponse(200, await resultService.getPvpTopFive(await getPool()))),
+      jsonResponse(200, buildRankingSnapshot('pvp', await resultService.getPvpTopFive(await getPool()), clock()))),
   };
 }

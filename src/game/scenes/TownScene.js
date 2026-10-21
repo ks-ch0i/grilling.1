@@ -3,6 +3,7 @@ import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
 import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
 import { stageId } from '../domain/progression.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
+import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const SLOT_LABEL = { helmet:'투구', armor:'갑옷', gloves:'장갑', boots:'신발', spear:'창', horse:'말' };
 const RARITY_LABEL = { common:'커먼', uncommon:'언커먼', rare:'레어', unique:'유니크', legendary:'레전더리' };
@@ -37,6 +38,7 @@ export class TownScene extends Phaser.Scene {
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.rankedRunClient = data.rankedRunClient;
     this.pvpClient = data.pvpClient;
+    this.rankingClient = data.rankingClient;
     this.pvpSearching = false;
     this.selectedStageId = data.unlockedStageId ?? stageId(
       this.gameState.progression.chapter,
@@ -46,8 +48,9 @@ export class TownScene extends Phaser.Scene {
   }
 
   create() {
+    this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
     this.input.on('wheel', (pointer, over, deltaX, deltaY) => {
-      if (pointer.x >= 470 && pointer.x <= 900 && pointer.y >= 130 && pointer.y <= 610) {
+      if (pointer.x >= 470 && pointer.x <= 900 && pointer.y >= 148 && pointer.y <= 612) {
         const maxOffset = Math.max(0, this.gameState.inventory.length - 10);
         this.inventoryOffset = Math.max(0, Math.min(maxOffset, this.inventoryOffset + Math.sign(deltaY) * 2));
         this.refresh();
@@ -82,15 +85,15 @@ export class TownScene extends Phaser.Scene {
     const { progression, player, materials, inventory } = this.gameState;
     const stats = derivePlayerStats(this.gameState);
     this.add.rectangle(640, 360, 1280, 720, 0x121a23);
-    this.add.text(32, 20, '마창기사 · 마을', { fontFamily:'sans-serif', fontSize:'27px', color:'#f4e6bf' });
-    this.add.text(345, 25, progression.chapter + '회차 · 해금 ' + progression.unlockedChapter + '-' + progression.unlockedStage, { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df' });
-    this.add.text(700, 18, 'Lv.' + player.level + '  XP ' + player.xp + '/' + player.xpToNext, { fontFamily:'sans-serif', fontSize:'16px', color:'#f4e6bf' });
-    this.add.text(700, 45, 'HP ' + player.currentHp + '/' + stats.maxHp + '   ATK ' + stats.attack + '   DEF ' + stats.defense + '   치명타 ' + (stats.critChance * 100).toFixed(1) + '%', { fontFamily:'sans-serif', fontSize:'14px', color:'#b8c7d5' });
-    this.add.text(1115, 23, '재료 ' + materials, { fontFamily:'sans-serif', fontSize:'18px', color:'#ffcf45' });
+    this.add.text(32, 58, '마창기사 · 마을', { fontFamily:'sans-serif', fontSize:'27px', color:'#f4e6bf' });
+    this.add.text(345, 58, progression.chapter + '회차 · 해금 ' + progression.unlockedChapter + '-' + progression.unlockedStage, { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df' });
+    this.add.text(700, 58, 'Lv.' + player.level + '  XP ' + player.xp + '/' + player.xpToNext, { fontFamily:'sans-serif', fontSize:'16px', color:'#f4e6bf' });
+    this.add.text(700, 83, 'HP ' + player.currentHp + '/' + stats.maxHp + '   ATK ' + stats.attack + '   DEF ' + stats.defense + '   치명타 ' + (stats.critChance * 100).toFixed(1) + '%', { fontFamily:'sans-serif', fontSize:'14px', color:'#b8c7d5' });
+    this.add.text(1115, 58, '재료 ' + materials, { fontFamily:'sans-serif', fontSize:'18px', color:'#ffcf45' });
 
-    createPanel(this, { x:32, y:92, width:418, height:520, title:'장착 장비' });
-    createPanel(this, { x:465, y:92, width:438, height:520, title:'보관함 ' + inventory.length + '/' + BALANCE.inventoryCapacity });
-    createPanel(this, { x:918, y:92, width:330, height:520, title:'장비 정보' });
+    createPanel(this, { x:32, y:110, width:418, height:502, title:'장착 장비' });
+    createPanel(this, { x:465, y:110, width:438, height:502, title:'보관함 ' + inventory.length + '/' + BALANCE.inventoryCapacity });
+    createPanel(this, { x:918, y:110, width:330, height:502, title:'장비 정보' });
     this.renderEquipment();
     this.renderInventory();
     this.renderSelectedItem();
@@ -101,7 +104,7 @@ export class TownScene extends Phaser.Scene {
     SLOT_ORDER.forEach((slot, index) => {
       const item = this.gameState.equipment[slot];
       const x = 46;
-      const y = 126 + index * 75;
+      const y = 144 + index * 75;
       const card = this.add.rectangle(x + 194, y + 29, 388, 64, 0x263342);
       card.setStrokeStyle(1, 0x56687a);
       this.add.text(x + 12, y + 7, SLOT_LABEL[slot] + ' · ' + (item ? RARITY_LABEL[item.rarity] : '비어 있음'), { fontFamily:'sans-serif', fontSize:'15px', color:item ? rarityHex(item.rarity) : '#9ba7b3' });
@@ -118,13 +121,13 @@ export class TownScene extends Phaser.Scene {
 
   renderInventory() {
     const inventory = this.gameState.inventory;
-    const viewport = { x:479, y:132, width:410, height:458 };
+    const viewport = { x:479, y:150, width:410, height:458 };
     const grid = this.add.container(0, 0);
     inventory.forEach((item, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2) - Math.floor(this.inventoryOffset / 2);
       const x = 478 + column * 204;
-      const y = 136 + row * 86;
+      const y = 154 + row * 86;
       if (y + 78 < viewport.y || y > viewport.y + viewport.height) return;
       const card = this.add.rectangle(x + 96, y + 37, 192, 74, 0x263342);
       card.setStrokeStyle(1, 0x596a7b);
@@ -137,7 +140,7 @@ export class TownScene extends Phaser.Scene {
       });
       grid.add([card, drawRarityFrame(this,x,y,192,74,item.rarity),label,stats,select]);
     });
-    this.add.text(596, 592, inventory.length > 10 ? '마우스 휠로 보관함 스크롤' : '획득 장비는 이곳에 보관됩니다', { fontFamily:'sans-serif', fontSize:'12px', color:'#99a7b4' });
+    this.add.text(596, 608, inventory.length > 10 ? '마우스 휠로 보관함 스크롤' : '획득 장비는 이곳에 보관됩니다', { fontFamily:'sans-serif', fontSize:'12px', color:'#99a7b4' }).setOrigin(0, 1);
   }
 
   renderSelectedItem() {
@@ -148,11 +151,11 @@ export class TownScene extends Phaser.Scene {
         : this.gameState.inventory.find((candidate) => candidate.id === selected.id)
       : null;
     if (!item) {
-      this.add.text(944, 136, '장비를 선택하면\n능력치와 행동을 볼 수 있습니다.', { fontFamily:'sans-serif', fontSize:'16px', color:'#aeb9c4', lineSpacing:8 });
+      this.add.text(944, 154, '장비를 선택하면\n능력치와 행동을 볼 수 있습니다.', { fontFamily:'sans-serif', fontSize:'16px', color:'#aeb9c4', lineSpacing:8 });
       return;
     }
-    this.add.text(940, 132, SLOT_LABEL[item.slot] + ' · ' + RARITY_LABEL[item.rarity] + '\n장비 레벨 ' + item.level + '/' + BALANCE.gearMaxLevel, { fontFamily:'sans-serif', fontSize:'17px', color:'#f4e6bf', lineSpacing:8 });
-    let detailY = 194;
+    this.add.text(940, 150, SLOT_LABEL[item.slot] + ' · ' + RARITY_LABEL[item.rarity] + '\n장비 레벨 ' + item.level + '/' + BALANCE.gearMaxLevel, { fontFamily:'sans-serif', fontSize:'17px', color:'#f4e6bf', lineSpacing:8 });
+    let detailY = 212;
     for (const {key,value} of getGearStatSummary(item)) {
       this.add.text(942, detailY, STAT_LABEL[key] + '  +' + formatStat(key,value), { fontFamily:'sans-serif', fontSize:'14px', color:'#d8e0e8' });
       detailY += 25;
@@ -161,7 +164,7 @@ export class TownScene extends Phaser.Scene {
       this.add.text(942, detailY, (EFFECT_LABEL[effect.id] ?? effect.id) + '  +' + (effect.value * 100).toFixed(1) + '%', { fontFamily:'sans-serif', fontSize:'13px', color:'#d5b2ff' });
       detailY += 23;
     }
-    const y = Math.max(360, detailY + 14);
+    const y = Math.max(378, detailY + 14);
     if (selected.type === 'inventory') {
       const oldItem = this.gameState.equipment[item.slot];
       const canEquip = !oldItem || this.gameState.inventory.length < BALANCE.inventoryCapacity;
@@ -275,6 +278,7 @@ export class TownScene extends Phaser.Scene {
         gameState:this.gameState,
         saveState:this.saveState,
         pvpClient:this.pvpClient,
+        rankingClient:this.rankingClient,
         rankedRunClient:this.rankedRunClient,
       });
       return;
@@ -332,6 +336,7 @@ export class TownScene extends Phaser.Scene {
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
       pvpClient:this.pvpClient,
+      rankingClient:this.rankingClient,
       rankedTicket:ranked.ranked ? ranked.ticket : null,
       rankedReason:ranked.reason,
       chapter,

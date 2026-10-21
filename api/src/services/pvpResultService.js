@@ -21,6 +21,7 @@ function dependenciesWithDefaults(dependencies = {}) {
     repository: dependencies.repository ?? { ...cloudSaveRepository, ...pvpRepository },
     withTransaction: dependencies.withTransaction ?? defaultWithTransaction,
     publishMatchCompleted: dependencies.publishMatchCompleted ?? (async () => {}),
+    publishPlayerRankChanged: dependencies.publishPlayerRankChanged ?? (async () => {}),
   };
 }
 
@@ -117,23 +118,38 @@ export async function submitPvpResult(pool, identity, matchId, body, receivedAtU
   }
 
   const result = resultEnvelope(write.row, replay);
-  try {
-    const topFive = await deps.repository.getPvpTopFive(pool);
-    await deps.publishMatchCompleted({
-      matchId,
-      outcome: result.outcome,
-      rated: result.rated,
-      playerRatingAfter: result.playerRatingAfter,
-      opponentRatingAfter: result.opponentRatingAfter,
-      topFive: topFive.map((entry, index) => ({
-        displayName: entry.DisplayName ?? entry.displayName ?? null,
-        rating: Number(entry.Rating ?? entry.rating),
-        rank: index + 1,
-      })),
-      generatedAtUtc: receivedAt.toISOString(),
-    });
-  } catch {
-    // Result reads remain authoritative when event transport is unavailable.
+  if (result.rated) {
+    let topFive;
+    try {
+      topFive = await deps.repository.getPvpTopFive(pool);
+    } catch {
+      topFive = null;
+    }
+    if (topFive) {
+      try {
+        await deps.publishMatchCompleted({
+          board:'pvp',
+          matchId,
+          outcome: result.outcome,
+          rated: result.rated,
+          playerRatingAfter: result.playerRatingAfter,
+          opponentRatingAfter: result.opponentRatingAfter,
+          topFive: topFive.map((entry, index) => ({
+            displayName: entry.DisplayName ?? entry.displayName ?? null,
+            rating: Number(entry.Rating ?? entry.rating),
+            rank: index + 1,
+          })),
+          generatedAtUtc: receivedAt.toISOString(),
+        });
+      } catch {
+        // Player rank events and authoritative reads remain available independently.
+      }
+    }
+    try {
+      await deps.publishPlayerRankChanged({ identity, board:'pvp', generatedAtUtc:receivedAt.toISOString() });
+    } catch {
+      // Ranking polling remains authoritative if the personal event transport is unavailable.
+    }
   }
   return result;
 }
@@ -148,11 +164,22 @@ export async function getPvpTopFive(pool, dependencies) {
   }));
 }
 
+export async function getPlayerPvpRank(pool, identity, dependencies) {
+  const { repository } = dependenciesWithDefaults(dependencies);
+  const playerId = await repository.findPlayerIdByIdentity(pool, identity);
+  if (!playerId) return { rank:null, rating:1000 };
+  const row = await repository.getPlayerRank(pool, playerId);
+  return row
+    ? { rank:row.Rank === null ? null : Number(row.Rank ?? row.rank), rating:Number(row.Rating ?? row.rating) }
+    : { rank:null, rating:1000 };
+}
+
 export function createPvpResultService(dependencies = {}) {
   return {
     submitPvpResult: (pool, identity, matchId, body, receivedAtUtc) =>
       submitPvpResult(pool, identity, matchId, body, receivedAtUtc, dependencies),
     getPvpTopFive: (pool) => getPvpTopFive(pool, dependencies),
+    getPlayerRank: (pool, identity) => getPlayerPvpRank(pool, identity, dependencies),
   };
 }
 

@@ -100,7 +100,27 @@ test('same-day pair guard makes later results unrated and completed payloads ide
   assert.equal(changed.status, 409);
   assert.equal(second.rated, false);
   assert.equal(second.playerRatingAfter, first.playerRatingAfter);
-  assert.equal(repository.calls.published.length, 2);
+  assert.equal(repository.calls.published.length, 1);
+});
+
+test('a top-board publish failure does not suppress the player rank event', async () => {
+  const repository = createPvpRepository();
+  const row = seedIssuedMatch(repository, { playerSnapshot:strongCombat, opponentSnapshot:weakCombat });
+  const playerEvents = [];
+  const dependencies = createPvpDependencies(repository, {
+    publishMatchCompleted:async () => { throw new Error('group publish unavailable'); },
+    publishPlayerRankChanged:async (event) => playerEvents.push(event),
+  });
+  const trace = makePvpInputs({ matchId:MATCH_A, seed:123456, simulatorVersion:1, issuedAtUtc:row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs:trace.inputs }, new Date('2026-10-21T02:01:00.000Z'), dependencies);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.rated, true);
+  assert.equal(playerEvents.length, 1);
+  assert.equal(playerEvents[0].board, 'pvp');
+  assert.equal(playerEvents[0].identity, identityA);
 });
 
 test('match ownership, expiry and client-supplied result claims are rejected', async () => {

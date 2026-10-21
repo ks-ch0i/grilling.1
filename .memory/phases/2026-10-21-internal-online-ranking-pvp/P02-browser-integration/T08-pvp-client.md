@@ -62,4 +62,4 @@
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: 전체 브라우저 단위 테스트 115개, Functions API 테스트 56개, PvP 클라이언트 6개 추가 검증, Vite build 성공. Entra 실로그인과 브라우저 PvP E2E는 배포 설정 미구성으로 미실행.
-- commit: pending
+- commit: 65404e5

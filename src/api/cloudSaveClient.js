@@ -39,6 +39,7 @@ export function createCloudSaveClient({
   }
 
   return {
+    apiBaseUrl:baseUrl,
     async getCurrent(account) {
       const result = await request(account, '/saves/current');
       if (result.status === 200) return { status: 200, envelope: result.body };
@@ -94,6 +95,15 @@ export function createCloudSaveClient({
         body: JSON.stringify(body),
       });
       return { status: result.status, ...result.body };
+    },
+    async getRankingTop(account, board) {
+      if (!['stage', 'pvp'].includes(board)) throw new TypeError('A ranking board name is required.');
+      const result = await request(account, `/rankings/${board}/top`);
+      return { status:result.status, ...result.body };
+    },
+    async getMyRanks(account) {
+      const result = await request(account, '/rankings/me');
+      return { status:result.status, ...result.body };
     },
   };
 }

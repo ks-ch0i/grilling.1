@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { createPvpRun, stepPvpRun } from '@knight-run/game-rules/simulation';
 import { createRunInputRecorder, RANKED_TICK_MS } from '../domain/rankedRunClient.js';
+import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const FLOOR_Y = 560;
 const MATCH_TICKS = 60 * 60;
@@ -20,6 +21,7 @@ export class PvpScene extends Phaser.Scene {
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.pvpClient = data.pvpClient;
     this.rankedRunClient = data.rankedRunClient;
+    this.rankingClient = data.rankingClient;
     this.recorder = createRunInputRecorder();
     this.queuedInputs = [];
     this.direction = 0;
@@ -30,13 +32,14 @@ export class PvpScene extends Phaser.Scene {
   }
 
   create() {
+    this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
     this.add.rectangle(640, 360, 1280, 720, 0x121a23);
-    this.add.text(32, 24, '비동기 PvP · 서버 판정 대기', { fontFamily:'sans-serif', fontSize:'27px', color:'#f4e6bf' });
-    this.add.text(32, 66, '상대는 공개 스냅샷 위치에 고정됩니다. 몸통 접촉으로 피해를 주고받습니다.', { fontFamily:'sans-serif', fontSize:'15px', color:'#cad4df' });
+    this.add.text(32, 72, '비동기 PvP · 서버 판정 대기', { fontFamily:'sans-serif', fontSize:'27px', color:'#f4e6bf' });
+    this.add.text(32, 110, '상대는 공개 스냅샷 위치에 고정됩니다. 몸통 접촉으로 피해를 주고받습니다.', { fontFamily:'sans-serif', fontSize:'15px', color:'#cad4df' });
     this.add.rectangle(640, FLOOR_Y + 20, 1280, 320, 0x263342);
     this.add.rectangle(640, FLOOR_Y, 1280, 8, 0xd8ba77);
-    this.clockLabel = this.add.text(640, 110, '60초', { fontFamily:'sans-serif', fontSize:'26px', color:'#ffcf45' }).setOrigin(0.5);
-    this.statusLabel = this.add.text(640, 150, '결과와 레이팅은 서버 응답으로만 표시합니다.', { fontFamily:'sans-serif', fontSize:'14px', color:'#d3dce4' }).setOrigin(0.5);
+    this.clockLabel = this.add.text(640, 160, '60초', { fontFamily:'sans-serif', fontSize:'26px', color:'#ffcf45' }).setOrigin(0.5);
+    this.statusLabel = this.add.text(640, 198, '결과와 레이팅은 서버 응답으로만 표시합니다.', { fontFamily:'sans-serif', fontSize:'14px', color:'#d3dce4' }).setOrigin(0.5);
 
     try {
       if (!this.ticket || !this.ticket.playerSnapshot?.combat || !this.ticket.opponentSnapshot?.combat || !this.pvpClient) {
@@ -66,10 +69,10 @@ export class PvpScene extends Phaser.Scene {
     this.opponentView = this.add.rectangle(this.runState.opponent.x, FLOOR_Y - 68, 54, 118, 0xff826f).setStrokeStyle(3, 0xffd2c7);
     const playerName = `나 · Lv.${this.ticket.playerSnapshot.character?.level ?? '?'} · ${this.ticket.playerRating ?? '—'}점`;
     const opponentName = `${this.ticket.opponentDisplayName || '상대'} · Lv.${this.ticket.opponentSnapshot.character?.level ?? '?'} · ${this.ticket.opponentRating ?? '—'}점`;
-    this.add.text(32, 205, playerName, { fontFamily:'sans-serif', fontSize:'16px', color:'#b7dcff' });
-    this.add.text(915, 205, opponentName, { fontFamily:'sans-serif', fontSize:'16px', color:'#ffc4b8' }).setOrigin(1, 0);
-    this.playerHpFill = this.add.rectangle(32, 238, 320, 13, 0x67cf88).setOrigin(0, 0.5);
-    this.opponentHpFill = this.add.rectangle(928, 238, 320, 13, 0xe86d64).setOrigin(1, 0.5);
+    this.add.text(32, 240, playerName, { fontFamily:'sans-serif', fontSize:'16px', color:'#b7dcff' });
+    this.add.text(915, 240, opponentName, { fontFamily:'sans-serif', fontSize:'16px', color:'#ffc4b8' }).setOrigin(1, 0);
+    this.playerHpFill = this.add.rectangle(32, 273, 320, 13, 0x67cf88).setOrigin(0, 0.5);
+    this.opponentHpFill = this.add.rectangle(928, 273, 320, 13, 0xe86d64).setOrigin(1, 0.5);
     this.add.text(640, 620, '이동: A/D 또는 ←/→ · 화면 왼쪽/오른쪽을 누르세요', { fontFamily:'sans-serif', fontSize:'15px', color:'#d1dae3' }).setOrigin(0.5);
     this.cursors = this.input.keyboard.addKeys({ left:'A', right:'D', arrowLeft:'LEFT', arrowRight:'RIGHT' });
     this.input.on('pointerdown', (pointer) => { this.touchDirection = pointer.x < this.scale.width / 2 ? -1 : 1; });
@@ -205,6 +208,7 @@ export class PvpScene extends Phaser.Scene {
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
       pvpClient:this.pvpClient,
+      rankingClient:this.rankingClient,
     });
   }
 }

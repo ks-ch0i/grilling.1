@@ -100,3 +100,26 @@ test('PvP snapshot, search and result calls use their exact API routes and DTOs'
   assert.equal(calls[0].options.headers.authorization, 'Bearer pvp-token');
   await assert.rejects(() => client.submitPvpResult(account, '', { inputs:[] }), TypeError);
 });
+
+test('ranking snapshot and account rank reads use authenticated GET requests', async () => {
+  const calls = [];
+  const client = createCloudSaveClient({
+    apiBaseUrl:'/api/',
+    getAccessToken:async() => 'rank-token',
+    fetchImplementation:async(url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify({ board:'stage', revision:'stable-hash', topFive:[] }), { status:200 });
+    },
+  });
+  const stage = await client.getRankingTop(account, 'stage');
+  const pvp = await client.getRankingTop(account, 'pvp');
+  const me = await client.getMyRanks(account);
+
+  assert.deepEqual(calls.map(({ url }) => url), ['/api/rankings/stage/top', '/api/rankings/pvp/top', '/api/rankings/me']);
+  assert.ok(calls.every(({ options }) => options.method === undefined));
+  assert.ok(calls.every(({ options }) => options.headers.authorization === 'Bearer rank-token'));
+  assert.equal(stage.revision, 'stable-hash');
+  assert.equal(pvp.status, 200);
+  assert.equal(me.board, 'stage');
+  await assert.rejects(() => client.getRankingTop(account, 'private'), TypeError);
+});
