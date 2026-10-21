@@ -15,7 +15,7 @@ This directory defines a new, isolated resource graph for Knight Run. The Bicep 
 ## Parameters and read-only review
 
 1. Confirm the intended Azure subscription, a new or explicitly approved dedicated resource group, region availability, SQL capacity, and current SignalR Free limits.
-2. Copy `parameters.example.json` to the ignored `parameters.local.json`; replace the placeholder Entra IDs and administrator name. Keep actual environment parameters out of Git.
+2. Copy `parameters.example.json` to the ignored `parameters.local.json`. The placeholder IDs can be used for a read-only graph preview only; replace them with actual Entra IDs and the administrator name before any resource creation. Keep actual environment parameters out of Git.
 3. Build the template and review the resource graph:
 
    ```powershell

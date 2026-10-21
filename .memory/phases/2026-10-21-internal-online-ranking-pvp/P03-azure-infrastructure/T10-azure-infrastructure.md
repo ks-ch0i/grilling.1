@@ -52,7 +52,7 @@
 
 ## Acceptance Criteria
 - [x] Bicep compiles and resource graph uses dedicated new names only.
-- [ ] What-if output lists only intended resources and no deletion/update of existing game resources. Requires user-specified subscription/resource group and local Entra parameters.
+- [ ] What-if output lists only intended resources and no deletion/update of existing game resources. Requires user-specified subscription/resource group and the local parameter file; placeholder IDs are for preview only.
 - [x] SQL access uses Entra/managed identity and never broad firewall ranges.
 - [x] Workflow does not provision Azure resources and uses separate frontend/API outputs.
 - [x] cost, region, resource group, vCore and SignalR limits are explicit predeployment inputs.
@@ -82,4 +82,4 @@
 - The source uses managed identity for Azure SignalR; the original secret-setting line in this blueprint was stale and has been corrected.
 - The deployment storage and host storage use the Function system-assigned identity. SQL contained-user grants exclude `SchemaVersions`, which the API does not access.
 - Local validation passed with Node 22.12.0: frontend build, 63 API tests, Bicep compile, example JSON parse, firewall PowerShell parse, workflow YAML parse and trigger checks, and `git diff --check`. The build retains the existing 1.48 MB JavaScript chunk warning.
-- The required read-only what-if remains pending until the target subscription/resource group and real Entra inputs are supplied.
+- The required read-only what-if remains pending until the target subscription/resource group are supplied. If Azure rejects preview placeholder IDs, replace them with the real Entra values before retrying.
