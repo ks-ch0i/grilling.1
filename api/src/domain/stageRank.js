@@ -78,7 +78,7 @@ export function isStageAccessible(state, chapter, stage) {
   return requestedOrdinal <= unlockedOrdinal || clearedIds.has(`${chapter}-${stage}`);
 }
 
-export function derivePlayerCombatSnapshot(state) {
+export function derivePlayerCombatSnapshot(state, chapter, stage) {
   if (!state?.player?.baseStats || !state?.equipment) {
     throw new StageRunValidationError('invalid-save-snapshot', 'Cloud save cannot produce combat stats.');
   }
@@ -106,6 +106,13 @@ export function derivePlayerCombatSnapshot(state) {
     critMultiplier: stats.critMultiplier,
     moveSpeed: stats.moveSpeed,
     effects,
+    level: state.player.level,
+    xp: state.player.xp,
+    xpToNext: state.player.xpToNext,
+    pendingLevelUps: state.player.pendingLevelUps,
+    replayXpMultiplier: state.progression.clearedStageIds.includes(`${chapter}-${stage}`)
+      ? BALANCE.replayXpMultiplier
+      : 1,
   };
   if (Object.values(snapshot).some((value) => typeof value === 'number' && !Number.isFinite(value)) ||
       snapshot.maxHp <= 0 || snapshot.currentHp < 0 || snapshot.currentHp > snapshot.maxHp ||

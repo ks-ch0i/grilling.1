@@ -29,6 +29,13 @@ test('startStageRun issues an immutable seeded ticket from the matching cloud re
   assert.equal(result.ticket.issuedAtUtc, '2026-10-21T02:00:00.000Z');
   assert.equal(result.ticket.expiresAtUtc, '2026-10-21T02:30:00.000Z');
   assert.ok(result.ticket.playerSnapshot.maxHp > 0);
+  assert.deepEqual({
+    level: result.ticket.playerSnapshot.level,
+    xp: result.ticket.playerSnapshot.xp,
+    xpToNext: result.ticket.playerSnapshot.xpToNext,
+    pendingLevelUps: result.ticket.playerSnapshot.pendingLevelUps,
+    replayXpMultiplier: result.ticket.playerSnapshot.replayXpMultiplier,
+  }, { level: 1, xp: 0, xpToNext: 100, pendingLevelUps: 0, replayXpMultiplier: 1 });
   assert.equal(repository.calls.createTicket[0].playerId, PLAYER_ID);
   assert.equal(repository.calls.createTicket[0].expectedSaveRevision, 7);
 });
@@ -59,6 +66,7 @@ test('startStageRun allows a previously cleared stage and rejects an existing ac
   const dependencies = createStageDependencies(repository);
   const cleared = await startStageRun({}, identityA, { chapter: 1, stage: 2, expectedSaveRevision: 7 }, dependencies);
   assert.equal(cleared.status, 201);
+  assert.equal(cleared.ticket.playerSnapshot.replayXpMultiplier, 0.3);
 
   const active = await startStageRun({}, identityA, { chapter: 1, stage: 1, expectedSaveRevision: 7 }, dependencies);
   assert.equal(active.status, 409);

@@ -49,3 +49,26 @@ test('token acquisition failures stay distinct from network failures', async () 
   });
   await assert.rejects(() => client.getCurrent(account), CloudSaveAuthenticationError);
 });
+
+test('stage ticket and result calls use the signed-in account and exact API payloads', async () => {
+  const calls = [];
+  const client = createCloudSaveClient({
+    apiBaseUrl: '/api/',
+    getAccessToken: async (user) => { assert.equal(user, account); return 'rank-token'; },
+    fetchImplementation: async (url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify({ verified: true }), { status: 200 });
+    },
+  });
+  const runId = 'aaaaaaaa-1111-4111-8111-111111111111';
+  await client.startStageRun(account, { chapter: 1, stage: 2, expectedSaveRevision: 7 });
+  await client.submitStageResult(account, runId, { inputs: [{ tick: 0, kind: 'move', value: 1 }] });
+
+  assert.equal(calls[0].url, '/api/stage-runs');
+  assert.equal(calls[1].url, `/api/stage-runs/${runId}/result`);
+  assert.equal(calls[0].options.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { chapter: 1, stage: 2, expectedSaveRevision: 7 });
+  assert.deepEqual(JSON.parse(calls[1].options.body), { inputs: [{ tick: 0, kind: 'move', value: 1 }] });
+  assert.equal(calls[1].options.headers.authorization, 'Bearer rank-token');
+  assert.equal(calls[1].options.headers['content-type'], 'application/json');
+});

@@ -15,6 +15,7 @@ export class BootScene extends Phaser.Scene {
     this.scene.start('TownScene', {
       gameState,
       saveState: bootstrap?.saveState,
+      rankedRunClient: bootstrap?.rankedRunClient,
       unlockedStageId: selectedStage,
     });
   }

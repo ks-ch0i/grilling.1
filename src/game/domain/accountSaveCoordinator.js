@@ -119,6 +119,11 @@ export function createAccountSaveCoordinator({
     return activeState;
   }
 
+  function getSaveRevision() {
+    if (!activeAccount) return null;
+    return readSyncState(storage, accountSyncKey(activeAccount)).revision;
+  }
+
   function getMode() {
     return mode;
   }
@@ -297,6 +302,11 @@ export function createAccountSaveCoordinator({
     return putInitialState(state, source === 'legacy' && legacyOwner === null);
   }
 
+  async function refreshAccountSave() {
+    if (!activeAccount) return { status: 'error', code: 'account-not-ready' };
+    return loadAccountSave(activeAccount);
+  }
+
   async function performSync() {
     if (!activeAccount || !activeIdentity || !activeState) return { ok: false, error: 'account-not-ready' };
     const key = accountSaveKey(activeAccount);
@@ -380,11 +390,13 @@ export function createAccountSaveCoordinator({
 
   return {
     loadAccountSave,
+    refreshAccountSave,
     saveLocal,
     syncPendingSave,
     attachOnlineSync,
     dispose,
     getCurrentState,
+    getSaveRevision,
     getMode,
   };
 }

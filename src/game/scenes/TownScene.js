@@ -35,6 +35,7 @@ export class TownScene extends Phaser.Scene {
     this.upgradeFeedback = null;
     this.gameState = data.gameState ?? createInitialState();
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
+    this.rankedRunClient = data.rankedRunClient;
     this.selectedStageId = data.unlockedStageId ?? stageId(
       this.gameState.progression.chapter,
       this.gameState.progression.currentStage,
@@ -203,7 +204,7 @@ export class TownScene extends Phaser.Scene {
     createButton(this,{x:1000,y:630,width:248,height:58,label:'전투 출발',onClick:()=>this.startBattle(this.selectedStageId)});
   }
 
-  startBattle(selectedStageId) {
+  async startBattle(selectedStageId) {
     if (this.transitioning) return;
     this.transitioning = true;
     const [chapter, stage] = selectedStageId.split('-').map(Number);
@@ -213,11 +214,28 @@ export class TownScene extends Phaser.Scene {
       progression: { ...this.gameState.progression, chapter, currentStage:stage },
     };
     this.saveState(gameState);
+    let ranked = { ranked: false, reason: 'ranking-unavailable' };
+    if (this.rankedRunClient) {
+      try {
+        ranked = await this.rankedRunClient.prepareStage({ chapter, stage, gameState });
+      } catch {
+        ranked = { ranked: false, reason: 'ticket-request-failed' };
+      }
+    }
+    const startState = ranked.gameState ?? gameState;
     const stageSnapshot = typeof structuredClone === 'function'
-      ? structuredClone(gameState)
-      : JSON.parse(JSON.stringify(gameState));
+      ? structuredClone(startState)
+      : JSON.parse(JSON.stringify(startState));
     this.scene.start('BattleScene', {
-      gameState, saveState:this.saveState, chapter, stage, isReplay, stageSnapshot,
+      gameState:startState,
+      saveState:this.saveState,
+      rankedRunClient:this.rankedRunClient,
+      rankedTicket:ranked.ranked ? ranked.ticket : null,
+      rankedReason:ranked.reason,
+      chapter,
+      stage,
+      isReplay,
+      stageSnapshot,
     });
   }
 }

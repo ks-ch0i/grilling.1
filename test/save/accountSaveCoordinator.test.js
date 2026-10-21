@@ -106,6 +106,21 @@ test('offline saves remain local and reconnect with the last cloud revision', as
   assert.equal(JSON.parse(storage.getItem(accountSyncKey(accountA))).pending, false);
 });
 
+test('the active cloud save revision is exposed for stage ticket requests', async () => {
+  const { createAccountSaveCoordinator } = await loadCoordinator();
+  const state = newState();
+  const api = makeApi({
+    getCurrent: async () => ({ status: 200, envelope: envelope(state, 12) }),
+    putCurrent: async () => assert.fail('the cloud save already exists'),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage: createStorage(), api, initialStateFactory: newState });
+
+  assert.equal(coordinator.getSaveRevision(), null);
+  await coordinator.loadAccountSave(accountA);
+  assert.equal(coordinator.getSaveRevision(), 12);
+  assert.equal(coordinator.getMode(), 'online');
+});
+
 test('409 conflict backs up pending local state, applies cloud state and never auto-overwrites it', async () => {
   const { createAccountSaveCoordinator, accountSaveKey, accountSyncKey, recoveryKeyPrefix } = await loadCoordinator();
   const cloud = newState();

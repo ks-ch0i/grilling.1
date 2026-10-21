@@ -3,6 +3,8 @@ import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
 import { chooseLevelUpStat, completeStage, getStageEnemyStats, grantXp, retryStage } from '../domain/progression.js';
+import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulation';
+import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
 
 const WORLD_WIDTH = 11200;
@@ -32,6 +34,15 @@ export class BattleScene extends Phaser.Scene {
     this.transitioning = false;
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.stageSnapshot = data.stageSnapshot ?? this.gameState;
+    this.rankedRunClient = data.rankedRunClient;
+    this.rankedTicket = data.rankedTicket ?? null;
+    this.rankedReason = data.rankedReason ?? 'ranking-unavailable';
+    this.rankedEligible = Boolean(this.rankedTicket && this.rankedRunClient);
+    this.rankedRunState = null;
+    this.rankedRecorder = createRunInputRecorder();
+    this.rankedAccumulator = createFixedStepAccumulator();
+    this.rankedQueuedInputs = [];
+    this.rankedDiagnostics = { discardedCatchUpSteps: 0 };
     this.normalDefeated = 0;
     this.contactPairs = new Set();
     this.groundDrops = [];
@@ -45,6 +56,7 @@ export class BattleScene extends Phaser.Scene {
     this.drawWorld();
     this.createPlayer();
     this.spawnStage();
+    this.initializeRankedRun();
     this.cameras.main.startFollow(this.player.view, false, 1, 0);
     this.cameras.main.setDeadzone(1280 * 0.45, 720);
     this.cursors = this.input.keyboard.addKeys({ left:'A', right:'D' });
@@ -59,6 +71,45 @@ export class BattleScene extends Phaser.Scene {
     this.resizeHandler = () => this.updatePortraitState();
     this.scale.on('resize', this.resizeHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', this.resizeHandler));
+    this.offlineHandler = () => this.markRankedUnavailable('network-unavailable');
+    if (typeof window !== 'undefined') {
+      window.addEventListener('offline', this.offlineHandler);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('offline', this.offlineHandler));
+    }
+    if (this.rankedTicket && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.markRankedUnavailable('network-unavailable');
+    }
+  }
+
+  initializeRankedRun() {
+    if (!this.rankedTicket) return;
+    try {
+      if (!Number.isFinite(Date.parse(this.rankedTicket.expiresAtUtc)) || Date.parse(this.rankedTicket.expiresAtUtc) <= Date.now()) {
+        this.rankedEligible = false;
+        this.rankedReason = 'run-expired';
+      }
+      this.rankedRunState = createRankedRun(this.rankedTicket, this.rankedTicket.playerSnapshot);
+      this.player.x = this.rankedRunState.player.x;
+      this.player.currentHp = this.rankedRunState.player.currentHp;
+      this.player.maxHp = this.rankedRunState.player.maxHp;
+      this.player.stats = {
+        maxHp: this.rankedRunState.player.maxHp,
+        attack: this.rankedRunState.player.attack,
+        defense: this.rankedRunState.player.defense,
+        critChance: this.rankedRunState.player.critChance,
+        critMultiplier: this.rankedRunState.player.critMultiplier,
+        moveSpeed: this.rankedRunState.player.moveSpeed,
+      };
+      this.player.view.x = this.player.x;
+      this.gameState = {
+        ...this.gameState,
+        player: { ...this.gameState.player, currentHp: this.player.currentHp },
+      };
+    } catch {
+      this.rankedRunState = null;
+      this.rankedEligible = false;
+      this.rankedReason = 'invalid-stage-ticket';
+    }
   }
 
   isPortrait() {
@@ -180,7 +231,36 @@ export class BattleScene extends Phaser.Scene {
     this.hpFill = this.add.rectangle(14, 69, 330, 13, 0x54c17a).setOrigin(0, 0);
     this.enemyText = this.add.text(360, 40, '', { fontFamily:'sans-serif', fontSize:'14px', color:'#f2c4a5' });
     this.hud.add([bg,this.chapterText,this.playerText,this.hpBack,this.hpFill,this.enemyText]);
+    this.rankedStatusText = this.add.text(930, 24, '', {
+      fontFamily:'sans-serif', fontSize:'14px', color:'#e4ebf1',
+      backgroundColor:'#101820', padding:{x:10,y:6},
+    }).setScrollFactor(0).setDepth(100);
+    this.updateRankedStatus();
     this.updateHud();
+  }
+
+  updateRankedStatus(message) {
+    if (!this.rankedStatusText?.active) return;
+    const status = message ?? (this.rankedEligible
+      ? '온라인 검증 진행 중'
+      : this.rankedReason === 'offline' || this.rankedReason === 'network-unavailable'
+        ? '오프라인 진행 · 랭킹 미적용'
+        : this.rankedReason === 'input-payload-too-large' || this.rankedReason === 'too-many-input-events'
+          ? '입력 기록 한도 초과 · 랭킹 미적용'
+          : '로컬 진행 · 랭킹 미적용');
+    this.rankedStatusText.setText(status);
+  }
+
+  markRankedUnavailable(reason) {
+    this.rankedEligible = false;
+    this.rankedReason = reason;
+    this.updateRankedStatus();
+  }
+
+  unrankedResultMessage() {
+    return this.rankedReason === 'offline' || this.rankedReason === 'network-unavailable'
+      ? '오프라인 진행은 저장되며 랭킹에는 반영되지 않습니다.'
+      : '온라인 검증 티켓이 없어 랭킹에는 반영되지 않습니다.';
   }
 
   updateHud() {
@@ -194,6 +274,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.rankedRunState) {
+      this.updateRankedRun(time, delta);
+      return;
+    }
     if (this.finished || this.combatPaused) return;
     if (this.isPortrait()) {
       this.updatePortraitState();
@@ -213,6 +297,113 @@ export class BattleScene extends Phaser.Scene {
     this.collectDrops();
     this.updateHud();
     if (this.player.currentHp <= 0) this.showGameOver();
+  }
+
+  readDirection() {
+    const left = this.cursors.left.isDown;
+    const right = this.cursors.right.isDown;
+    return this.touchDirection || (left === right ? 0 : left ? -1 : 1);
+  }
+
+  updateRankedRun(_time, delta) {
+    if (this.finished) return;
+    if (this.combatPaused) {
+      this.rankedAccumulator.reset();
+      return;
+    }
+    if (this.isPortrait()) {
+      this.updatePortraitState();
+      this.rankedAccumulator.reset();
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.markRankedUnavailable('network-unavailable');
+    }
+    if (this.rankedRunState.player.pendingLevelUps > 0 && this.rankedQueuedInputs.length === 0) {
+      this.showLevelUp();
+      this.rankedAccumulator.reset();
+      return;
+    }
+
+    const { steps, discardedSteps } = this.rankedAccumulator.push(delta);
+    this.rankedDiagnostics.discardedCatchUpSteps += discardedSteps;
+    for (let index = 0; index < steps; index += 1) {
+      if (this.finished || this.combatPaused || this.rankedRunState.outcome) break;
+      if (this.rankedRunState.player.pendingLevelUps > 0 && this.rankedQueuedInputs.length === 0) {
+        this.showLevelUp();
+        this.rankedAccumulator.reset();
+        break;
+      }
+      const tick = this.rankedRunState.tick;
+      const tickInputs = this.rankedQueuedInputs.splice(0);
+      const direction = this.readDirection();
+      if (direction !== this.rankedRunState.movementDirection) {
+        const recorded = this.rankedRecorder.recordMove(tick, direction);
+        if (!recorded.ok) this.markRankedUnavailable(recorded.reason);
+        tickInputs.push({ tick, kind:'move', value:direction });
+      }
+      const result = stepRankedRun(this.rankedRunState, tickInputs);
+      this.applyRankedStep(result);
+      if (this.finished) break;
+      this.collectDrops();
+      this.updateHud();
+      if (this.rankedRunState.player.pendingLevelUps > 0) {
+        this.showLevelUp();
+        this.rankedAccumulator.reset();
+        break;
+      }
+    }
+  }
+
+  applyRankedStep({ state, events }) {
+    this.rankedRunState = state;
+    this.player.x = state.player.x;
+    this.player.currentHp = state.player.currentHp;
+    this.player.maxHp = state.player.maxHp;
+    this.player.stats = {
+      maxHp:state.player.maxHp,
+      attack:state.player.attack,
+      defense:state.player.defense,
+      critChance:state.player.critChance,
+      critMultiplier:state.player.critMultiplier,
+      moveSpeed:state.player.moveSpeed,
+    };
+    this.player.view.x = this.player.x;
+    this.gameState = {
+      ...this.gameState,
+      player:{ ...this.gameState.player, currentHp:this.player.currentHp },
+    };
+
+    for (const simulatedEnemy of state.enemies) {
+      const enemy = this.enemies.find((candidate) => candidate.id === simulatedEnemy.id);
+      if (!enemy) continue;
+      enemy.currentHp = simulatedEnemy.currentHp;
+      enemy.healthFill.setScale(Math.max(0, simulatedEnemy.currentHp / simulatedEnemy.maxHp), 1);
+    }
+    for (const event of events) {
+      if (event.type === 'contact') {
+        const target = this.enemies.find((enemy) => enemy.id === event.targetId);
+        if (event.critical) {
+          this.player.view.setAlpha(0.6);
+          this.time.delayedCall(110, () => this.player?.view?.setAlpha(1));
+        }
+        if (target) this.showDamageText(target.x, FLOOR_Y - 115, event.enemyDamage, event.critical, 0xffd36e);
+      } else if (event.type === 'enemyDefeated') {
+        const enemy = this.enemies.find((candidate) => candidate.id === event.targetId);
+        if (enemy?.active) this.defeatEnemy(enemy, { ranked:true });
+      } else if (event.type === 'bossSpawned') {
+        this.hasBoss = true;
+        if (!this.enemies.some((enemy) => enemy.id === 'boss')) this.createEnemy(event.x, true);
+      } else if (event.type === 'stageClear') {
+        this.finishStage();
+      } else if (event.type === 'playerDeath') {
+        this.showGameOver();
+      }
+    }
+    if (events.some((event) => event.type === 'contact' || event.type === 'playerDeath')) {
+      this.saveState(this.gameState);
+    }
+    this.updateHud();
   }
 
   getPlayerEffects() {
@@ -274,7 +465,7 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets:label, y:y-44, alpha:0, duration:620, onComplete:()=>label.destroy() });
   }
 
-  defeatEnemy(enemy) {
+  defeatEnemy(enemy, { ranked = false } = {}) {
     enemy.active = false;
     enemy.view.setVisible(false);
     this.normalDefeated += enemy.isBoss ? 0 : 1;
@@ -284,11 +475,11 @@ export class BattleScene extends Phaser.Scene {
     }
     if (enemy.isBoss) {
       this.dropGear(enemy.x, true);
-      this.finishStage();
+      if (!ranked) this.finishStage();
       return;
     }
     if (Math.random() < BALANCE.normalDropChance) this.dropGear(enemy.x, false);
-    if (this.normalDefeated >= BALANCE.normalEnemyCount) {
+    if (!ranked && this.normalDefeated >= BALANCE.normalEnemyCount) {
       if (this.hasBoss) this.createEnemy(10500, true);
       else this.finishStage();
     }
@@ -329,6 +520,12 @@ export class BattleScene extends Phaser.Scene {
     this.levelModalButtons=[];
     choices.forEach(([key,label],index)=>{
       const button=createButton(this,{x:445,y:292+index*66,width:390,height:52,label,onClick:()=>{
+        if (this.rankedRunState && !this.rankedRunState.outcome) {
+          const tick = this.rankedRunState.tick;
+          const recorded = this.rankedRecorder.recordLevelUp(tick, key);
+          if (!recorded.ok) this.markRankedUnavailable(recorded.reason);
+          this.rankedQueuedInputs.push({ tick, kind:'levelUp', value:key });
+        }
         const result=chooseLevelUpStat(this.gameState,key);
         if(!result.ok)return;
         this.gameState=result.state;
@@ -370,11 +567,50 @@ export class BattleScene extends Phaser.Scene {
     this.gameState={...completed.state,progression:{...completed.state.progression,chapter:completed.nextChapter,currentStage:completed.nextStage}};
     this.player.currentHp=this.gameState.player.currentHp;
     this.saveState(this.gameState);
+    this.submitRankedClear();
     this.updateHud();
     if(this.gameState.player.pendingLevelUps>0){
       this.pendingStageClear={nextChapter:completed.nextChapter,nextStage:completed.nextStage};
       this.showLevelUp();
     }else this.showStageClear(completed.nextChapter,completed.nextStage);
+  }
+
+  submitRankedClear() {
+    if (!this.rankedTicket || !this.rankedRunClient || this.rankedRunState?.outcome !== 'clear') return;
+    if (this.rankedRecorder.getError()) this.markRankedUnavailable(this.rankedRecorder.getError());
+    if (!this.rankedEligible) {
+      this.rankResultMessage = this.rankedReason === 'network-unavailable'
+        ? '연결이 끊겨 진행만 저장했습니다. 랭킹에는 반영되지 않습니다.'
+        : '이 플레이는 온라인 검증 조건을 충족하지 않아 랭킹에 반영되지 않습니다.';
+      this.updateRankedStatus('랭킹 미적용');
+      return;
+    }
+
+    this.rankResultMessage = '서버에서 입력 기록을 확인하고 있습니다...';
+    this.updateRankedStatus('랭킹 검증 중');
+    void this.rankedRunClient.submitResult(this.rankedTicket, this.rankedRecorder.getInputs()).then((result) => {
+      if (result.verified) {
+        this.rankResultMessage = '서버 검증 완료 · 기록 ' + (result.clearTimeMs / 1000).toFixed(2) + '초';
+        this.updateRankedStatus('서버 검증 완료');
+      } else {
+        this.markRankedUnavailable(result.code);
+        const message = result.code === 'run-expired'
+          ? '랭킹 티켓 유효 시간이 지나 진행만 저장했습니다.'
+          : result.code === 'authentication-required'
+            ? '인증이 만료되어 진행만 저장했습니다. 다시 로그인해 주세요.'
+          : result.code === 'run-not-cleared' || result.code === 'run-too-fast'
+            ? '서버 재생 검증을 통과하지 못해 랭킹에 반영되지 않았습니다.'
+            : result.code?.startsWith('run-') || result.code?.startsWith('unsupported-')
+              ? '랭킹 티켓 상태를 확인할 수 없어 진행만 저장했습니다.'
+              : '연결 상태를 확인할 수 없어 진행만 저장했습니다.';
+        this.rankResultMessage = message;
+      }
+      if (this.rankResultText?.active) this.rankResultText.setText(this.rankResultMessage);
+    }).catch(() => {
+      this.markRankedUnavailable('network-unavailable');
+      this.rankResultMessage = '연결 상태를 확인할 수 없어 진행만 저장했습니다.';
+      if (this.rankResultText?.active) this.rankResultText.setText(this.rankResultMessage);
+    });
   }
 
   showStageClear(nextChapter,nextStage) {
@@ -383,17 +619,52 @@ export class BattleScene extends Phaser.Scene {
     overlay.add(this.add.rectangle(640,345,560,300,0x202d3b).setStrokeStyle(2,0xd8ba77));
     overlay.add(this.add.text(640,245,'스테이지 완료',{fontFamily:'sans-serif',fontSize:'30px',color:'#ffdf94'}).setOrigin(0.5));
     overlay.add(this.add.text(640,290,this.chapter+'-'+this.stage+' 클리어 · XP +'+BALANCE.xpRewards.stageClear,{fontFamily:'sans-serif',fontSize:'17px',color:'#e4ebf1'}).setOrigin(0.5));
+    this.rankResultText = this.add.text(640, 324, this.rankResultMessage ?? this.unrankedResultMessage(), {
+      fontFamily:'sans-serif',fontSize:'14px',color:'#b9d8c5',
+    }).setOrigin(0.5);
+    overlay.add(this.rankResultText);
     createButton(this,{x:355,y:350,width:230,height:58,label:'마을로',onClick:()=>{
       if(this.transitioning)return;
       this.transitioning=true;
-      this.scene.start('TownScene',{gameState:this.gameState,saveState:this.saveState,unlockedStageId:nextChapter+'-'+nextStage});
+      this.scene.start('TownScene',{
+        gameState:this.gameState,
+        saveState:this.saveState,
+        rankedRunClient:this.rankedRunClient,
+        unlockedStageId:nextChapter+'-'+nextStage,
+      });
     }}).setDepth(251);
     createButton(this,{x:600,y:350,width:325,height:58,label:'다음 스테이지 '+nextChapter+'-'+nextStage,onClick:()=>{
-      if(this.transitioning)return;
-      this.transitioning=true;
-      const snapshot=typeof structuredClone==='function'?structuredClone(this.gameState):JSON.parse(JSON.stringify(this.gameState));
-      this.scene.start('BattleScene',{gameState:this.gameState,saveState:this.saveState,chapter:nextChapter,stage:nextStage,isReplay:false,stageSnapshot:snapshot});
+      void this.startNextStage(nextChapter, nextStage);
     }}).setDepth(251);
+  }
+
+  async startNextStage(chapter, stage) {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.saveState(this.gameState);
+    let ranked = { ranked:false, reason:'ranking-unavailable' };
+    if (this.rankedRunClient) {
+      try {
+        ranked = await this.rankedRunClient.prepareStage({ chapter, stage, gameState:this.gameState });
+      } catch {
+        ranked = { ranked:false, reason:'ticket-request-failed' };
+      }
+    }
+    const gameState = ranked.gameState ?? this.gameState;
+    const stageSnapshot = typeof structuredClone === 'function'
+      ? structuredClone(gameState)
+      : JSON.parse(JSON.stringify(gameState));
+    this.scene.start('BattleScene', {
+      gameState,
+      saveState:this.saveState,
+      rankedRunClient:this.rankedRunClient,
+      rankedTicket:ranked.ranked ? ranked.ticket : null,
+      rankedReason:ranked.reason,
+      chapter,
+      stage,
+      isReplay:false,
+      stageSnapshot,
+    });
   }
 
   showGameOver() {
@@ -406,11 +677,42 @@ export class BattleScene extends Phaser.Scene {
     overlay.add(this.add.text(640,255,'쓰러졌습니다',{fontFamily:'sans-serif',fontSize:'29px',color:'#ffb6ad'}).setOrigin(0.5));
     overlay.add(this.add.text(640,300,'이번 도전의 장비와 재료는 입장 시점으로 돌아갑니다.',{fontFamily:'sans-serif',fontSize:'15px',color:'#e2d0cd'}).setOrigin(0.5));
     createButton(this,{x:480,y:365,width:320,height:58,label:'다시 시작',onClick:()=>{
-      if(this.transitioning)return;
-      this.transitioning=true;
-      const result=retryStage(this.stageSnapshot,this.gameState);
-      this.saveState(result.state);
-      this.scene.restart({gameState:result.state,saveState:this.saveState,chapter:this.chapter,stage:this.stage,isReplay:this.isReplay,stageSnapshot:result.state});
+      void this.restartStageAfterDeath();
     }}).setDepth(251);
+  }
+
+  async restartStageAfterDeath() {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    const result = retryStage(this.stageSnapshot, this.gameState);
+    this.saveState(result.state);
+    let ranked = { ranked:false, reason:this.rankedReason };
+    if (this.rankedRunClient) {
+      try {
+        if (this.rankedTicket) await this.rankedRunClient.abandonRun(this.rankedTicket);
+        ranked = await this.rankedRunClient.prepareStage({
+          chapter:this.chapter,
+          stage:this.stage,
+          gameState:result.state,
+        });
+      } catch {
+        ranked = { ranked:false, reason:'ticket-request-failed' };
+      }
+    }
+    const gameState = ranked.gameState ?? result.state;
+    const stageSnapshot = typeof structuredClone === 'function'
+      ? structuredClone(gameState)
+      : JSON.parse(JSON.stringify(gameState));
+    this.scene.restart({
+      gameState,
+      saveState:this.saveState,
+      rankedRunClient:this.rankedRunClient,
+      rankedTicket:ranked.ranked ? ranked.ticket : null,
+      rankedReason:ranked.reason,
+      chapter:this.chapter,
+      stage:this.stage,
+      isReplay:this.isReplay,
+      stageSnapshot,
+    });
   }
 }

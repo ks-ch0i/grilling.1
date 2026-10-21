@@ -54,6 +54,15 @@ function assertCombatSnapshot(snapshot, name = 'player') {
     !effect || typeof effect.id !== 'string' || !Number.isFinite(effect.value))) {
     throw new TypeError(`${name}.effects must contain effect id/value pairs.`);
   }
+  const progression = [snapshot.level, snapshot.xp, snapshot.xpToNext, snapshot.pendingLevelUps, snapshot.replayXpMultiplier];
+  if (progression.some((value) => value !== undefined) &&
+      (!Number.isInteger(snapshot.level) || snapshot.level < 1 ||
+       !Number.isFinite(snapshot.xp) || snapshot.xp < 0 ||
+       !Number.isFinite(snapshot.xpToNext) || snapshot.xpToNext <= 0 ||
+       !Number.isInteger(snapshot.pendingLevelUps) || snapshot.pendingLevelUps < 0 ||
+       !Number.isFinite(snapshot.replayXpMultiplier) || snapshot.replayXpMultiplier < 0 || snapshot.replayXpMultiplier > 1)) {
+    throw new RangeError(`${name} progression snapshot is invalid.`);
+  }
 }
 
 function createEnemy(id, x, isBoss, chapter, stage) {
@@ -86,10 +95,11 @@ export function createRankedRun(ticket, playerSnapshot) {
       ...playerSnapshot,
       effects: playerSnapshot.effects.map((effect) => ({ ...effect })),
       x: PLAYER_START_X,
-      level: 1,
-      xp: 0,
-      xpToNext: 100,
-      pendingLevelUps: 0,
+      level: playerSnapshot.level ?? 1,
+      xp: playerSnapshot.xp ?? 0,
+      xpToNext: playerSnapshot.xpToNext ?? 100,
+      pendingLevelUps: playerSnapshot.pendingLevelUps ?? 0,
+      replayXpMultiplier: playerSnapshot.replayXpMultiplier ?? 1,
     },
     enemies,
     contactPairs: [],
@@ -121,7 +131,7 @@ function xpRequiredForLevel(targetLevel) {
 }
 
 function grantRunXp(player, amount) {
-  let xp = player.xp + amount;
+  let xp = player.xp + Math.floor(amount * (player.replayXpMultiplier ?? 1));
   let pendingLevelUps = player.pendingLevelUps;
   let virtualTargetLevel = player.level + pendingLevelUps + 1;
   let threshold = pendingLevelUps === 0 ? player.xpToNext : xpRequiredForLevel(virtualTargetLevel);
@@ -139,6 +149,7 @@ function applyLevelUp(player, statKey) {
   if (player.pendingLevelUps < 1) throw new RangeError('level-up-without-pending-selection.');
   const gain = BALANCE.levelUp[statKey];
   const next = { ...player, pendingLevelUps: player.pendingLevelUps - 1, level: player.level + 1 };
+  next.xpToNext = xpRequiredForLevel(next.level + 1);
   if (statKey === 'maxHp') {
     next.maxHp += gain;
     next.currentHp = Math.min(next.maxHp, next.currentHp + gain);

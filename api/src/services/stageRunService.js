@@ -105,7 +105,7 @@ export async function startStageRun(pool, identity, body, dependencies) {
 
   let playerSnapshot;
   try {
-    playerSnapshot = derivePlayerCombatSnapshot(save.state);
+    playerSnapshot = derivePlayerCombatSnapshot(save.state, request.chapter, request.stage);
   } catch (error) {
     if (error instanceof StageRunValidationError) return { status: 422, code: error.code };
     throw error;

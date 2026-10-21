@@ -205,6 +205,38 @@ test('a valid pending level-up is applied before the fixed boss encounter', asyn
   assert.equal(result.outcome, 'clear');
 });
 
+test('ranked stage replay starts from saved XP and applies replay XP before level-up inputs', async () => {
+  const { createRankedRun, replayRankedRun, stepRankedRun } = await loadRules();
+  const ticket = stageTicket();
+  const snapshot = player({
+    level: 2,
+    xp: 95,
+    xpToNext: 120,
+    pendingLevelUps: 0,
+    replayXpMultiplier: 0.3,
+  });
+  let state = createRankedRun(ticket, snapshot);
+  const inputs = [];
+  let selectedAtTick = null;
+  while (!state.outcome && state.tick < 10000) {
+    const tickInputs = [];
+    if (state.tick === 0) tickInputs.push({ tick: state.tick, kind: 'move', value: 1 });
+    if (state.player.pendingLevelUps > 0) {
+      selectedAtTick = state.tick;
+      tickInputs.push({ tick: state.tick, kind: 'levelUp', value: 'attack' });
+    }
+    inputs.push(...tickInputs);
+    state = stepRankedRun(state, tickInputs).state;
+  }
+  const replay = replayRankedRun(ticket, snapshot, inputs);
+
+  assert.ok(Number.isInteger(selectedAtTick));
+  assert.equal(replay.valid, true);
+  assert.equal(replay.outcome, 'clear');
+  assert.equal(state.player.level, 3);
+  assert.equal(state.player.xp, 5);
+});
+
 test('stage inputs cannot claim a clear before all enemies are defeated', async () => {
   const { replayRankedRun } = await loadRules();
   const result = replayRankedRun(stageTicket(), player(), [{ tick: 0, kind: 'move', value: 0 }]);

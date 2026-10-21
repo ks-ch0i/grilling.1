@@ -24,7 +24,7 @@
 - Entra 계정 키: tenant ID + object ID. 클라이언트 저장 키는 계정별로 분리한다.
 - Cloud save DTO: schemaVersion 1 게임 상태, server revision, server updatedAtUtc.
 - Battle input event: monotonically increasing tick, event kind, value. 이동 방향은 -1/0/1, 레벨업 선택은 attack/defense/maxHp.
-- Stage run ticket: runId, playerId, chapter, stage, server seed, simulatorVersion, balanceVersion, server startedAtUtc, expiresAtUtc, immutable player stat/effect snapshot.
+- Stage run ticket: runId, playerId, chapter, stage, server seed, simulatorVersion, balanceVersion, server startedAtUtc, expiresAtUtc, immutable combat/effect and saved level/XP progression snapshot (including server-derived replay XP multiplier).
 - Stage result: 입력 이벤트를 서버에서 재생한 성공 여부와 서버 측 elapsedMs. 클라이언트가 보낸 승패·시간·레이팅 값은 신뢰하지 않는다.
 - PvP ticket: matchId, seed, simulatorVersion, 양쪽 player ID와 snapshot revision, 서버 시작 시각. 상대는 고정 위치의 스냅샷 타깃이며 별도 이동 AI는 없다.
 - Elo: 기본 1000, K=32, 한 SQL 트랜잭션에서 양쪽 점수 변경. 동일 unordered player pair는 UTC 날짜당 최대 한 번만 rated 처리.

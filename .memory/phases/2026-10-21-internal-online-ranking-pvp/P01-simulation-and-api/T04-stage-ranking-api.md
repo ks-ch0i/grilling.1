@@ -24,7 +24,7 @@
   - POST body: { chapter: integer >= 1, stage: integer 1..10, expectedSaveRevision: integer }.
   - 서버는 CloudSaves revision과 expectedSaveRevision이 같은지 확인하고, 시작 전 cloud save에서 derivePlayerStats를 계산해 PlayerCombatSnapshot을 만든다. 데이터 자체는 클라이언트 제출이므로 치트 불가능하다고 간주하지 않는다.
   - 새 ticket의 chapter/stage는 cloud progression의 unlocked stage 또는 cleared stage 이하여야 한다. 서버는 stage 진행 데이터를 권위형으로 승격하지 않는다.
-  - RunTicket: runId(UUID), playerId, seed(crypto random 32-bit nonzero), chapter, stage, simulatorVersion=1, balanceVersion, playerSnapshotJson, issuedAtUtc, expiresAtUtc=issuedAtUtc+30 minutes, status='issued'.
+  - RunTicket: runId(UUID), playerId, seed(crypto random 32-bit nonzero), chapter, stage, simulatorVersion=1, balanceVersion, playerSnapshotJson, issuedAtUtc, expiresAtUtc=issuedAtUtc+30 minutes, status='issued'. The immutable snapshot includes combat stats/effects plus saved `level`, `xp`, `xpToNext`, `pendingLevelUps`, and a server-derived `replayXpMultiplier` (1 for a new stage, `BALANCE.replayXpMultiplier` for a cleared-stage replay). This aligns replayed level-up events with account-save XP without making server replay award progression.
   - 계정당 동시에 유효한 stage ticket은 하나만 허용한다. 이전 만료 ticket은 결과 저장 없이 expired 처리한다.
   - 실행 티켓은 인증 필수, 저장 revision mismatch는 409, 허용하지 않은 stage는 403, 동시 ticket은 409를 반환한다.
 

@@ -37,13 +37,14 @@
   - Signature: replayRankedRun(ticket: RunTicket, player: PlayerCombatSnapshot, inputs: RunInputEvent[]): ReplayResult.
   - Signature: replayPvpRun(ticket: PvpRunTicket, player: PlayerCombatSnapshot, opponent: PlayerCombatSnapshot, inputs: RunInputEvent[]): PvpReplayResult. The opponent is a fixed-position contact target; player controls only their own direction.
   - RunTicket: { runId: string; seed: number; chapter: number; stage: number; simulatorVersion: 1; balanceVersion: number; issuedAtUtc: string }.
-  - PlayerCombatSnapshot: { maxHp: number; currentHp: number; attack: number; defense: number; critChance: number; critMultiplier: number; moveSpeed: number; effects: Array<{ id: string; value: number }> }.
+  - PlayerCombatSnapshot: { maxHp: number; currentHp: number; attack: number; defense: number; critChance: number; critMultiplier: number; moveSpeed: number; effects: Array<{ id: string; value: number }>; level: number; xp: number; xpToNext: number; pendingLevelUps: number; replayXpMultiplier: number }.
   - RunInputEvent: { tick: number; kind: 'move' | 'levelUp'; value: -1 | 0 | 1 | 'attack' | 'defense' | 'maxHp' }.
   - events는 0 이상 정수 tick 오름차순이다. 같은 tick의 move는 최대 하나, levelUp은 유효한 pending level-up이 있을 때만 받는다. 방향은 다음 move 이벤트까지 유지한다.
   - ReplayResult: { valid: boolean; outcome: 'clear' | 'death' | 'incomplete' | 'invalid'; elapsedTicks: number; playerHp: number; rejectReason: string | null }.
   - PvpRunTicket: { matchId: string; seed: number; simulatorVersion: 1; issuedAtUtc: string; timeLimitMs: 60000 }.
   - PvpReplayResult: { valid: boolean; outcome: 'win' | 'loss' | 'draw' | 'invalid'; elapsedTicks: number; playerHp: number; opponentHp: number; playerHpPercent: number; rejectReason: string | null }.
   - 매 tick의 이동은 moveSpeed/60, 기존 world clamp, 기존 적 배치와 충돌 폭, knockbackPixels를 사용한다. tick 중단 없이 접촉·치명타를 정해진 순서로 처리한다.
+  - Stage ticket의 저장 스냅샷에는 전투 스탯과 함께 시작 레벨·XP·다음 XP 임계값·pending level-up·반복 도전 XP 배율을 고정한다. 적 처치와 레벨업 입력 재생이 기존 계정 저장의 XP 계산과 일치하도록 한다. 이전 snapshot 호출은 기본 level 1, XP 0, XP 임계값 100, 반복 배율 1을 사용한다.
   - RNG는 전투 치명타에만 적용한다. 랜덤 장비 드롭과 인벤토리 저장은 보상 데이터이며 랭킹 시뮬레이션 결과에 영향을 주지 않는다.
   - PvP는 60,000ms 제한 안에서 플레이어와 고정 상대의 접촉 damage exchange를 계산한다. timeout 종료는 양쪽 HP/maxHP 비율을 반환하고, 동률은 draw다.
   - 서버는 결과에 포함된 승리 여부나 시간을 신뢰하지 않고 RunInputEvent만 재생한다.

@@ -19,14 +19,14 @@ BattleScene을 결정적 60Hz 입력 로그와 stage ticket에 연결하고 온�
   - src/game/domain/rankedRunClient.js :: requestStageTicket, recordInput, submitStageResult — API adapter; new.
   - test/ranked-stage-client.test.js :: ticket/offline/submit state machine; new.
 - Details:
-  - Signature: requestStageTicket(apiClient, { chapter:number, stage:number, saveRevision:number }): Promise<RunTicket>.
-  - Ticket response contract은 T04와 일치한다. browser는 ticket snapshot 기반으로 derivePlayerStats를 확인하며 현재 로컬 능력치가 다르면 cloud save sync를 수행하고 다시 ticket을 요청한다.
+  - Signature: requestStageTicket(apiClient, { chapter:number, stage:number, saveRevision:number, account }): Promise<{ ok:true, ticket:RunTicket } | { ok:false, reason:string }>.
+  - Ticket response contract은 T04와 일치한다. Browser는 ticket snapshot과 combat stats/effects 및 saved level/xp/xpToNext/pendingLevelUps/replayXpMultiplier를 비교한다. 현재 로컬 상태와 다르면 ticket을 종료하고 cloud save sync 후 한 번 다시 요청한다.
   - BattleScene update의 delta 누적기는 1/60초 고정 simulation step을 실행하고 render/camera는 Phaser frame에 남긴다. 한 frame에서 최대 5 tick catch-up; 초과 accumulated time은 simulation clock에 더하지 않고 browser diagnostic에 기록한다.
   - Record direction event only when resolved direction changes. tick은 시뮬레이터 tick index다. 레벨업 버튼 선택은 같은 tick의 levelUp event로 기록한다.
   - RunInputEvent schema는 T01과 동일하며 이벤트가 늘어날 때 같은 방향을 반복 저장하지 않는다. 종료 시 event count 100,000과 encoded payload 1 MiB 이하인지 검사한다.
   - online + ticket success는 ranked. network false, ticket failure, expired ticket, save revision mismatch, mid-run request failure 중 하나면 run state를 unranked로 유지한다.
   - finishStage에서 먼저 로컬 progress save를 처리하고 ranked ticket이 유효한 경우에만 result endpoint를 호출한다. 서버 승인 전에는 랭킹에 올랐다고 표시하지 않는다.
-  - server 422/409/expired는 안전한 메시지를 띄우고 기존 game clear 화면을 보여준다. unranked 결과는 reconnect queue에 score로 저장하지 않는다.
+  - server 422/409/expired는 안전한 메시지를 띄우고 기존 game clear 화면을 보여준다. 사망 후 재시작은 이전 ticket을 종료하고 새 save revision/snapshot으로 ticket을 발급한다. unranked 결과는 reconnect queue에 score로 저장하지 않는다.
 
 ### I02. 클라이언트 결과·접촉 순서 검증
 - Related Files:
@@ -38,14 +38,14 @@ BattleScene을 결정적 60Hz 입력 로그와 stage ticket에 연결하고 온�
   - stage elapsed time은 client clock이 아니라 API가 ticket issuedAtUtc와 result receiveAtUtc 차이로 반환한 값을 화면에 표시한다.
 
 ## Acceptance Criteria
-- [ ] online verified clear만 top-stage API에 반영된다.
-- [ ] offline 또는 연결 중단 run은 progress save가 남고 ranking은 변경되지 않는다.
-- [ ] 입력 기록 replay와 화면의 전투 결과가 동일하다.
-- [ ] 기존 retry, replay XP, stage unlock, portrait pause를 회귀시키지 않는다.
+- [x] online verified clear만 top-stage API에 반영된다.
+- [x] offline 또는 연결 중단 run은 progress save가 남고 ranking은 변경되지 않는다.
+- [x] 입력 기록 replay와 화면의 전투 결과가 동일하다.
+- [x] 기존 retry, replay XP, stage unlock, portrait pause를 회귀시키지 않는다.
 
 ## Validation
-    node --test test/ranked-stage-client.test.js test/portrait-orientation.test.js
-    node --test test/game-rules-simulation.test.js
+    npx --yes node@22 --test test/ranked-stage-client.test.js test/portrait-orientation.test.js test/game-rules-simulation.test.js test/api/cloudSaveClient.test.js test/save/accountSaveCoordinator.test.js
+    npm --prefix api test -- test/stageRuns/startStageRun.test.js test/stageRuns/submitStageResult.test.js test/stageRuns/stageRunFunctions.test.js
     npm run build
 
 ## Commit Message
@@ -59,6 +59,6 @@ BattleScene을 결정적 60Hz 입력 로그와 stage ticket에 연결하고 온�
     - Submit online input traces while preserving unranked offline play
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: client/save/simulator/orientation 47 tests, stage-run API 12 tests, Vite build. Entra live sign-in/API and browser visual E2E remain unverified because deployment config is not set.
 - commit: pending
