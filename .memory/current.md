@@ -16,8 +16,8 @@
 - P01은 API까지, P02는 브라우저 연결, P03은 Azure template/workflow 준비, P04는 실제 사내 Azure 배포 및 E2E다.
 - P04는 SQL 지속 비용, 리소스 그룹/위치, SignalR Free 수용 한도를 확인하고 사용자의 명시적 진행 지시가 있기 전까지 Azure 리소스를 만들지 않는다.
 - SignalR Free 제약(동시 연결 20, 일일 메시지 20,000, Dev/Test only)을 P04 이전에 다시 확인한다.
-- T10 템플릿·배포 설정과 로컬 검증은 완료했으며, 지정된 구독/리소스 그룹에서 local parameters를 사용한 read-only what-if가 남아 있다.
+- T10 템플릿·배포 설정과 로컬 검증은 완료했다. 사용자가 아직 직접적인 배포 계획이 없다고 확인했으므로, read-only what-if은 실제 배포 계획과 대상 구독/리소스 그룹이 정해질 때까지 보류한다.
 - 기존 작업공간의 .agents/, .codeburn/, AGENTS.md, CODEBURN-SETUP.md, README.md, examples/ 미추적 항목은 그대로 보존했다.
 
 ## Next Step (IMPORTANT)
-T10의 read-only what-if를 지정된 구독/리소스 그룹에서 수행한다. 실제 리소스 생성과 Azure 배포는 P04의 비용 확인 및 사용자의 명시적 진행 지시 전까지 수행하지 않는다.
+T10의 what-if은 직접적인 배포 계획과 대상 구독/리소스 그룹이 정해질 때 수행한다. 실제 리소스 생성과 Azure 배포는 P04의 비용 확인 및 사용자의 명시적 진행 지시 전까지 수행하지 않는다.

@@ -83,3 +83,4 @@
 - The deployment storage and host storage use the Function system-assigned identity. SQL contained-user grants exclude `SchemaVersions`, which the API does not access.
 - Local validation passed with Node 22.12.0: frontend build, 63 API tests, Bicep compile, example JSON parse, firewall PowerShell parse, workflow YAML parse and trigger checks, and `git diff --check`. The build retains the existing 1.48 MB JavaScript chunk warning.
 - The required read-only what-if remains pending until the target subscription/resource group are supplied. If Azure rejects preview placeholder IDs, replace them with the real Entra values before retrying.
+- The user confirmed there is no direct Azure deployment plan yet. Defer target-specific what-if until a concrete deployment plan and target subscription/resource group exist; P04 remains pending.
