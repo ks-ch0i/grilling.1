@@ -1,6 +1,6 @@
 # Task: T06 Entra 로그인과 오프라인 저장
 
-## Status: pending
+## Status: in_progress
 
 ## Goal
 MSAL 로그인 뒤 Entra 계정별로 게임 저장을 분리하고 최초 로컬 저장 이전, 오프라인 진행 저장, 재접속 동기화, 클라우드 충돌 복구를 구현한다.

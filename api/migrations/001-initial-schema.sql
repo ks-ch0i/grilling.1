@@ -86,6 +86,8 @@ CREATE TABLE dbo.PvpMatches (
   Player2Id uniqueidentifier NOT NULL,
   Player1SnapshotRevision bigint NOT NULL,
   Player2SnapshotRevision bigint NOT NULL,
+  Player1SnapshotJson nvarchar(max) NOT NULL,
+  Player2SnapshotJson nvarchar(max) NOT NULL,
   Seed bigint NOT NULL,
   SimulatorVersion int NOT NULL,
   InputJson nvarchar(max) NULL,
@@ -95,6 +97,7 @@ CREATE TABLE dbo.PvpMatches (
   RatingAfter1 int NULL,
   RatingAfter2 int NULL,
   IssuedAtUtc datetime2(7) NOT NULL,
+  ExpiresAtUtc datetime2(7) NOT NULL,
   CompletedAtUtc datetime2(7) NULL,
   Status nvarchar(16) NOT NULL,
   CONSTRAINT FK_PvpMatches_Player1 FOREIGN KEY (Player1Id) REFERENCES dbo.Players(PlayerId),
@@ -121,6 +124,9 @@ CREATE TABLE dbo.PvpRatedPairDays (
   CONSTRAINT FK_PvpRatedPairDays_Match FOREIGN KEY (MatchId) REFERENCES dbo.PvpMatches(MatchId),
   CONSTRAINT CK_PvpRatedPairDays_PlayerOrder CHECK (LowPlayerId < HighPlayerId)
 );
+
+CREATE UNIQUE INDEX UX_PvpRatedPairDays_MatchId
+  ON dbo.PvpRatedPairDays (MatchId);
 
 INSERT INTO dbo.SchemaVersions (Version, Name)
 VALUES (1, N'initial-schema');

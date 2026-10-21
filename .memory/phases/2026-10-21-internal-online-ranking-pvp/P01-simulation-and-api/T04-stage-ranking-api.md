@@ -67,4 +67,4 @@
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: stage-run 12 tests; API 40 tests and simulator 14 tests on Node 22; npm run build; API syntax checks.
-- commit: pending
+- commit: 49a9a6c

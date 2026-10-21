@@ -1,6 +1,6 @@
 # Task: T05 비동기 PvP API
 
-## Status: pending
+## Status: done
 
 ## Goal
 변경 시 공개한 캐릭터·장비 스냅샷으로 PvP 티켓을 만들고, 서버 재생 결과로 매치와 양쪽 Elo를 원자적으로 확정한다.
@@ -45,14 +45,17 @@
   - 경기 및 rating 변경 후 SignalR에 event를 보내고, 무승부는 결과 알림만 보낸다.
 
 ## Acceptance Criteria
-- [ ] 클라이언트 제출 winner/HP/Elo 없이 서버 재생 결과만 DB에 반영된다.
-- [ ] 스냅샷은 공개 시점 revision으로 고정되고 경기 도중 수정되지 않는다.
-- [ ] HP 비율 승패와 Elo 양쪽 변경이 같은 SQL transaction에서 끝난다.
-- [ ] UTC pair key가 하루 한 rated 결과만 허용한다.
+- [x] 클라이언트 제출 winner/HP/Elo 없이 서버 재생 결과만 DB에 반영된다.
+- [x] 스냅샷은 공개 시점 revision으로 고정되고 경기 도중 수정되지 않는다.
+- [x] HP 비율 승패와 Elo 양쪽 변경이 같은 SQL transaction에서 끝난다.
+- [x] UTC pair key가 하루 한 rated 결과만 허용한다.
 
 ## Validation
-    npm --prefix api test -- pvp
-    node --test test/game-rules-simulation.test.js
+    npx --yes node@22 --test (working directory: api)
+    npx --yes node@22 --test test/game-rules-simulation.test.js (repository root)
+    npm run build (repository root)
+
+SQL migration contract was checked by the API suite. No Azure SQL instance was changed or used; live database validation remains in the separately gated P04 rollout.
 
 ## Commit Message
     feat(api): add snapshot based asynchronous PvP ratings
@@ -65,6 +68,6 @@
     - Apply daily pair guard and transactional Elo updates
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: API 56 tests and shared simulator 14 tests on Node 22; production build succeeded.
 - commit: pending

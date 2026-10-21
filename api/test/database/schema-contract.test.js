@@ -25,8 +25,12 @@ test('initial schema defines account, save, stage, snapshot and PvP contracts', 
     /CREATE TABLE dbo\.PvpRatings/i,
     /Rating\s+int\s+NOT NULL\s+CONSTRAINT\s+DF_PvpRatings_Rating\s+DEFAULT\s+1000/i,
     /CREATE TABLE dbo\.PvpMatches/i,
+    /Player1SnapshotJson\s+nvarchar\s*\(max\)/i,
+    /Player2SnapshotJson\s+nvarchar\s*\(max\)/i,
+    /ExpiresAtUtc\s+datetime2\(7\)\s+NOT NULL/i,
     /CREATE TABLE dbo\.PvpRatedPairDays/i,
     /PRIMARY KEY\s*\(MatchDateUtc\s*,\s*LowPlayerId\s*,\s*HighPlayerId\)/i,
+    /UNIQUE\s+INDEX\s+UX_PvpRatedPairDays_MatchId/i,
     /IX_StageBests_Stage_Time/i,
   ];
   for (const pattern of required) assert.match(sql, pattern);

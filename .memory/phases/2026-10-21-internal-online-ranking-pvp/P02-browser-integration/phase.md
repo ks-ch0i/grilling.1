@@ -9,4 +9,4 @@
 | T09 | `pending` | 전 장면 상단 전광판, SignalR push와 polling fallback | [T09](./T09-ranking-marquee.md) |
 
 ## Progress
-- done: 0/4 (active: T06 after P01 completion)
+- done: 0/4 (active: T06)
