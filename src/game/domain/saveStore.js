@@ -84,29 +84,35 @@ function toSaveData(state) {
 function getStorage(storage) {
   return storage ?? globalThis.localStorage;
 }
+export function isValidGameState(state) {
+  return isValidState(state);
+}
 
-export function loadGameState(fallbackState, storage) {
+export function readSavedGame(storage, key = SAVE_KEY) {
   try {
-    const serialized = getStorage(storage).getItem(SAVE_KEY);
-    if (serialized === null) return cloneState(fallbackState);
+    const serialized = getStorage(storage).getItem(key);
+    if (serialized === null) return null;
     const state = JSON.parse(serialized);
-    return isValidState(state) ? state : cloneState(fallbackState);
+    return isValidState(state) ? state : null;
   } catch {
-    return cloneState(fallbackState);
+    return null;
   }
 }
-export function saveGameState(state, storage) {
+export function loadGameState(fallbackState, storage, key = SAVE_KEY) {
+  return readSavedGame(storage, key) ?? cloneState(fallbackState);
+}
+export function saveGameState(state, storage, key = SAVE_KEY) {
   try {
     if (!isValidState(state)) return { ok:false, error:'invalid-state' };
-    getStorage(storage).setItem(SAVE_KEY, JSON.stringify(toSaveData(state)));
+    getStorage(storage).setItem(key, JSON.stringify(toSaveData(state)));
     return { ok:true };
   } catch {
     return { ok:false, error:'storage-unavailable' };
   }
 }
-export function removeSavedGame(storage) {
+export function removeSavedGame(storage, key = SAVE_KEY) {
   try {
-    getStorage(storage).removeItem(SAVE_KEY);
+    getStorage(storage).removeItem(key);
     return { ok:true };
   } catch {
     return { ok:false, error:'storage-unavailable' };

@@ -15,6 +15,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.25.1",
     "phaser": "4.2.1"
   },
   "devDependencies": {

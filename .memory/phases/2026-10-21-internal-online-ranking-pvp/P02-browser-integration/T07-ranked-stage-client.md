@@ -1,6 +1,6 @@
 # Task: T07 스테이지 랭킹 클라이언트
 
-## Status: pending
+## Status: in_progress
 
 ## Goal
 BattleScene을 결정적 60Hz 입력 로그와 stage ticket에 연결하고 온라인 검증 결과만 랭킹 API에 제출한다.

@@ -61,6 +61,7 @@ body {
     display: none;
   }
 }
+body:not(.is-authenticated) #game { display: none; }
 #save-warning {
   display: none;
   position: fixed;
@@ -77,3 +78,47 @@ body {
   box-shadow: 0 8px 32px #0008;
 }
 #save-warning.is-visible { display: block; }
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: radial-gradient(ellipse at center, #273443, #10161e 72%);
+}
+#auth-gate[hidden] { display: none; }
+.auth-card {
+  width: min(100%, 30rem);
+  padding: 2rem;
+  border: 1px solid #796846;
+  border-radius: 1rem;
+  background: #18232f;
+  box-shadow: 0 1.5rem 4rem #0008;
+}
+.auth-card h1 { margin-top: 0; color: #f4e6bf; }
+.auth-card p { line-height: 1.55; }
+.auth-card button {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid #d8ba77;
+  border-radius: 0.5rem;
+  background: #2a3949;
+  color: #f4e6bf;
+  font: inherit;
+  cursor: pointer;
+}
+.account-choices { display: grid; gap: 0.5rem; }
+#account-status {
+  position: fixed;
+  z-index: 8;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.4rem;
+  background: #202d3b;
+  color: #f4e6bf;
+}

@@ -8,7 +8,17 @@
     <title>마창기사</title>
   </head>
   <body>
+    <section id="auth-gate" class="auth-gate" aria-labelledby="auth-title" aria-live="polite">
+      <div class="auth-card">
+        <h1 id="auth-title">마창기사</h1>
+        <p id="auth-message" role="status">회사 계정 확인 중...</p>
+        <div id="account-choices" class="account-choices"></div>
+        <button id="sign-in-button" type="button" hidden>회사 계정으로 로그인</button>
+        <button id="retry-auth-button" type="button" hidden>다시 시도</button>
+      </div>
+    </section>
     <main id="game" aria-label="마창기사 게임"></main>
+    <p id="account-status" role="status" hidden></p>
     <p id="rotate-message" role="status">가로 화면으로 돌려 주세요.</p>
     <script type="module" src="/src/main.js"></script>
   </body>

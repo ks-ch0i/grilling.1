@@ -70,4 +70,4 @@ SQL migration contract was checked by the API suite. No Azure SQL instance was c
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: API 56 tests and shared simulator 14 tests on Node 22; production build succeeded.
-- commit: pending
+- commit: 42a485c

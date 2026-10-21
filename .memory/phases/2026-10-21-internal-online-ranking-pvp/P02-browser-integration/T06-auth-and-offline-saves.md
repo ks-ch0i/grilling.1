@@ -8,20 +8,24 @@ MSAL 로그인 뒤 Entra 계정별로 게임 저장을 분리하고 최초 로�
 ## Decision Summary
 - 첫 인증에는 온라인이 필요하지만 로그인된 계정은 일시 오프라인에서 기존 캐시 저장을 쓸 수 있다.
 - 계정 클라우드 저장이 있으면 항상 클라우드 우선이다. 충돌한 로컬 JSON은 복구 키에 백업하고 자동 병합하지 않는다.
-- 로그인 popup은 interaction-required일 때만 연다.
+- 로그인은 사용자가 로그인 버튼을 눌렀을 때 popup으로 진행하고, 토큰은 silent-first이며 interaction-required일 때만 token popup fallback을 한다.
 
 ## Implementation
 
 ### I01. MSAL bootstrap 및 API token client
 - Related Files:
-  - package.json :: dependencies — @azure/msal-browser 추가; modify.
-  - .env.example :: VITE_ENTRA_TENANT_ID, VITE_ENTRA_SPA_CLIENT_ID, VITE_ENTRA_API_SCOPE — 설명 값; new.
+  - package.json, package-lock.json :: @azure/msal-browser — MSAL Browser 5; modify.
+  - .env.example :: VITE_ENTRA_TENANT_ID, VITE_ENTRA_SPA_CLIENT_ID, VITE_ENTRA_API_SCOPE, VITE_FUNCTIONS_API_BASE_URL — 설명 값; new.
+  - auth-popup.html, vite.config.js :: MSAL v5 redirect bridge page and build entry; new/modify.
   - src/auth/msalClient.js :: initializeAuth, getSignedInAccount, getApiAccessToken, signInInteractively — MSAL 설정; new.
-  - src/main.js :: createGame — 인증 bootstrap과 로그인 gate; modify.
-  - index.html :: login/loading/error host — 접근 가능한 login shell; modify.
-  - test/auth/msalClient.test.js :: token fallback rules; new.
+  - src/api/cloudSaveClient.js :: getCurrent, putCurrent — Bearer token and conditional save requests; new.
+  - src/main.js :: createGame, startApplication — 인증 bootstrap과 로그인 gate; modify.
+  - index.html, src/styles.css :: accessible login, account chooser and connection status; modify.
+  - src/game/domain/saveStore.js :: account-key reads/writes; modify.
+  - src/game/domain/accountSaveCoordinator.js :: loadAccountSave, saveLocal, syncPendingSave, resolveConflict — local/cloud orchestration; new.
+  - test/auth/msalClient.test.js, test/api/cloudSaveClient.test.js, test/save/accountSaveCoordinator.test.js — token, API and offline/conflict cases; new.
 - Details:
-  - MSAL config authority는 https://login.microsoftonline.com/<tenantId>, redirectUri는 window.location.origin, cacheLocation은 localStorage다.
+  - MSAL config authority는 https://login.microsoftonline.com/<tenantId>, cacheLocation은 localStorage다. Popup callback은 전용 /auth-popup.html redirect bridge를 사용하며 Entra SPA redirect URI에 등록해야 한다.
   - initializeAuth()는 PublicClientApplication을 초기화한 뒤 getAllAccounts()에서 tenant가 설정값과 같은 계정을 선택한다. 여러 계정이면 account chooser를 표시한다.
   - getApiAccessToken(account)은 acquireTokenSilent({ account, scopes:[VITE_ENTRA_API_SCOPE] })를 먼저 호출한다. InteractionRequiredAuthError인 경우에만 loginPopup 또는 acquireTokenPopup을 시작한다. 그 외 오류는 자동 popup 반복 없이 명시적 재시도 화면을 보인다.
   - 최초 로그인 전 오프라인은 게임을 시작하지 않고 로그인 필요 상태를 보인다. 이미 계정 식별과 local save가 있으면 네트워크 오류 때만 해당 계정 오프라인 모드로 시작한다.
@@ -46,15 +50,17 @@ MSAL 로그인 뒤 Entra 계정별로 게임 저장을 분리하고 최초 로�
   - 여러 계정 전환은 새 계정 key를 별도 로딩하고 다른 계정의 pending save를 업로드하지 않는다.
 
 ## Acceptance Criteria
-- [ ] 기존 schemaVersion 1 legacy 저장이 첫 계정에 1회만 연결된다.
-- [ ] 두 Entra 계정의 저장 키와 server row가 분리된다.
-- [ ] 오프라인 local write는 게임을 막지 않고 reconnect 시 조건부 저장된다.
-- [ ] cloud conflict 시 cloud wins, local backup 유지, 자동 덮어쓰기 없음.
-- [ ] login silent-first와 interaction-required popup fallback이 구분된다.
+- [x] 기존 schemaVersion 1 legacy 저장이 첫 계정에 1회만 연결된다.
+- [x] 두 Entra 계정의 저장 키와 server row가 분리된다.
+- [x] 오프라인 local write는 게임을 막지 않고 reconnect 시 조건부 저장된다.
+- [x] cloud conflict 시 cloud wins, local backup 유지, 자동 덮어쓰기 없음.
+- [x] login silent-first와 interaction-required popup fallback이 구분된다.
 
 ## Validation
-    node --test test/auth/*.test.js test/save/accountSaveCoordinator.test.js
-    npm run build
+    npx --yes node@22 --test test/auth/msalClient.test.js test/api/cloudSaveClient.test.js test/save/accountSaveCoordinator.test.js
+    npx --yes node@22 ./node_modules/vite/bin/vite.js build
+
+Live Entra sign-in was not exercised. Configure the placeholder values in `.env` and register the exact `/auth-popup.html` redirect URI plus the API scope in the Entra SPA registration before an authenticated browser run.
 
 ## Commit Message
     feat(auth): add Entra sign in and account scoped saves
@@ -67,6 +73,6 @@ MSAL 로그인 뒤 Entra 계정별로 게임 저장을 분리하고 최초 로�
     - Sync versioned saves and preserve cloud conflicts locally
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: 14 auth/API/save tests on Node 22; Vite multi-page production build succeeded.
 - commit: pending
