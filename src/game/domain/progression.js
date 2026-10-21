@@ -1,5 +1,8 @@
 import { BALANCE, getStageDropWeights } from '../data/balance.js';
+import { getStageEnemyStats } from '@knight-run/game-rules/balance';
 import { derivePlayerStats } from './gear.js';
+
+export { getStageEnemyStats };
 
 export function xpRequiredForLevel(targetLevel) {
   if (!Number.isInteger(targetLevel) || targetLevel < 2) {
@@ -66,27 +69,6 @@ export function stageId(chapter, stage) {
     throw new RangeError('chapter must be positive and stage must be an integer from 1 to 10.');
   }
   return chapter + '-' + stage;
-}
-
-export function getStageEnemyStats(chapter, stage, isBoss = false) {
-  stageId(chapter, stage);
-  const growth = (1 + BALANCE.enemyStageGrowth * (stage - 1)) *
-    (1 + BALANCE.chapterGrowth * (chapter - 1));
-  const normal = {
-    maxHp: Math.ceil(BALANCE.enemyBaseStats.maxHp * growth),
-    attack: Math.ceil(BALANCE.enemyBaseStats.attack * growth),
-    defense: Math.ceil(BALANCE.enemyBaseStats.defense * growth),
-  };
-  if (!isBoss) return { ...normal, hp: normal.maxHp, currentHp: normal.maxHp, isBoss: false };
-  const maxHp = normal.maxHp * BALANCE.bossMultipliers.maxHp;
-  return {
-    maxHp,
-    hp: maxHp,
-    currentHp: maxHp,
-    attack: Math.ceil(normal.attack * BALANCE.bossMultipliers.attack),
-    defense: Math.ceil(normal.defense * BALANCE.bossMultipliers.defense),
-    isBoss: true,
-  };
 }
 
 export function getDropWeights(stageIndex) {
