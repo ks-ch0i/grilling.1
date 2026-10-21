@@ -121,6 +121,31 @@ test('the active cloud save revision is exposed for stage ticket requests', asyn
   assert.equal(coordinator.getMode(), 'online');
 });
 
+test('cloud save callback only publishes a state after the matching revision is synced', async () => {
+  const { createAccountSaveCoordinator } = await loadCoordinator();
+  const initial = newState();
+  const callbacks = [];
+  const api = makeApi({
+    getCurrent:async() => ({ status:200, envelope:envelope(initial, 2) }),
+    putCurrent:async(_account, body) => ({ status:200, envelope:envelope(body.state, 3) }),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage:createStorage(), api, initialStateFactory:newState });
+  coordinator.setCloudSaveCallback((entry) => callbacks.push(entry));
+  const loaded = await coordinator.loadAccountSave(accountA);
+  assert.equal(loaded.status, 'ready');
+  assert.equal(callbacks.length, 0);
+  const changed = structuredClone(loaded.state);
+  changed.player.xp += 5;
+  coordinator.saveLocal(changed);
+  assert.equal(callbacks.length, 0);
+
+  const synced = await coordinator.syncPendingSave();
+  assert.equal(synced.ok, true);
+  assert.equal(callbacks.length, 1);
+  assert.equal(callbacks[0].revision, 3);
+  assert.equal(callbacks[0].state.player.xp, changed.player.xp);
+});
+
 test('409 conflict backs up pending local state, applies cloud state and never auto-overwrites it', async () => {
   const { createAccountSaveCoordinator, accountSaveKey, accountSyncKey, recoveryKeyPrefix } = await loadCoordinator();
   const cloud = newState();

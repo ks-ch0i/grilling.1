@@ -114,6 +114,14 @@ export function createAccountSaveCoordinator({
   let mode = 'offline';
   let syncPromise = null;
   let onlineListener;
+  let onCloudSaveSynced = () => {};
+
+  function notifyCloudSaveSynced(state, revision) {
+    try {
+      const result = onCloudSaveSynced({ state, revision });
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch { /* Snapshot publication cannot change save success. */ }
+  }
 
   function getCurrentState() {
     return activeState;
@@ -242,6 +250,7 @@ export function createAccountSaveCoordinator({
     if (response.status === 200 || response.status === 201) {
       const envelope = envelopeFrom(response);
       const installed = installCloudState(envelope);
+      if (installed.ok) notifyCloudSaveSynced(installed.state, installed.revision);
       const ownerSaved = !legacyMigration || !installed.ok || claimLegacyOwner();
       return installed.ok
         ? { status: 'ready', state: activeState, revision: installed.revision, mode: 'online', savedLocally: localResult.ok && metadataSaved && installed.savedLocally, legacyOwnerSaved: ownerSaved, recoveredLocal: installed.recoveredLocal }
@@ -250,6 +259,7 @@ export function createAccountSaveCoordinator({
     if (response.status === 409) {
       const current = envelopeFrom(response);
       const installed = installCloudState(current, { backup: [state] });
+      if (installed.ok) notifyCloudSaveSynced(installed.state, installed.revision);
       const ownerSaved = !legacyMigration || !installed.ok || claimLegacyOwner();
       return installed.ok
         ? { status: 'ready', state: activeState, revision: installed.revision, mode: 'online', savedLocally: localResult.ok && metadataSaved && installed.savedLocally, legacyOwnerSaved: ownerSaved, recoveredLocal: installed.recoveredLocal }
@@ -354,6 +364,7 @@ export function createAccountSaveCoordinator({
       return { ok: false, error: 'storage-unavailable' };
     }
     mode = 'online';
+    if (!changedDuringRequest && latestLocal) notifyCloudSaveSynced(latestLocal, revision);
     return { ok: true, synced: true, pending: changedDuringRequest, revision, mode };
   }
 
@@ -383,6 +394,10 @@ export function createAccountSaveCoordinator({
     windowObject.addEventListener('online', onlineListener);
   }
 
+  function setCloudSaveCallback(callback = () => {}) {
+    onCloudSaveSynced = typeof callback === 'function' ? callback : () => {};
+  }
+
   function dispose() {
     if (onlineListener) windowObject?.removeEventListener?.('online', onlineListener);
     onlineListener = undefined;
@@ -394,6 +409,7 @@ export function createAccountSaveCoordinator({
     saveLocal,
     syncPendingSave,
     attachOnlineSync,
+    setCloudSaveCallback,
     dispose,
     getCurrentState,
     getSaveRevision,

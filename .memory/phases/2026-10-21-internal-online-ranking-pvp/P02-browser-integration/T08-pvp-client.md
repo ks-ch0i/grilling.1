@@ -1,6 +1,6 @@
 # Task: T08 PvP 클라이언트
 
-## Status: pending
+## Status: done
 
 ## Goal
 마을에서 비동기 PvP를 시작하고 고정 상대 스냅샷과 전투해 서버 검증 결과·레이팅 변화·매칭 종료를 표시한다.
@@ -38,11 +38,11 @@
   - On duplicate match result request, use matchId idempotency and display server stored result.
 
 ## Acceptance Criteria
-- [ ] PvP can only start with an online ticket and a published server snapshot.
-- [ ] Opponent movement AI is absent; existing contact combat is used.
-- [ ] Server result alone controls winner, draw and rating display.
-- [ ] one-pair-per-UTC-day rule is clearly shown when a later match is unrated.
-- [ ] TownScene's existing gear and stage actions remain accessible.
+- [x] PvP can only start with an online ticket and a published server snapshot.
+- [x] Opponent movement AI is absent; existing contact combat is used.
+- [x] Server result alone controls winner, draw and rating display.
+- [x] one-pair-per-UTC-day rule is clearly shown when a later match is unrated.
+- [x] TownScene's existing gear and stage actions remain accessible.
 
 ## Validation
     node --test test/pvp/pvpClient.test.js
@@ -60,6 +60,6 @@
     - Show only server verified results and Elo changes
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: 전체 브라우저 단위 테스트 115개, Functions API 테스트 56개, PvP 클라이언트 6개 추가 검증, Vite build 성공. Entra 실로그인과 브라우저 PvP E2E는 배포 설정 미구성으로 미실행.
 - commit: pending

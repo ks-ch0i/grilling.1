@@ -459,106 +459,150 @@ function pvpOutcome(playerHp, playerMaxHp, opponentHp, opponentMaxHp) {
   };
 }
 
+function pvpResult(state) {
+  const remaining = pvpOutcome(
+    state.player.currentHp,
+    state.player.maxHp,
+    state.opponent.currentHp,
+    state.opponent.maxHp,
+  );
+  return {
+    valid: true,
+    ...remaining,
+    elapsedTicks: state.elapsedTicks,
+    playerHp: state.player.currentHp,
+    opponentHp: state.opponent.currentHp,
+    rejectReason: null,
+  };
+}
+
+export function createPvpRun(ticket, playerSnapshot, opponentSnapshot) {
+  assertPvpTicket(ticket);
+  assertCombatSnapshot(playerSnapshot);
+  assertCombatSnapshot(opponentSnapshot, 'opponent');
+  return {
+    mode: 'pvp',
+    ticket: { ...ticket },
+    tick: 0,
+    elapsedTicks: 0,
+    randomState: ticket.seed >>> 0,
+    player: {
+      ...playerSnapshot,
+      effects: playerSnapshot.effects.map((effect) => ({ ...effect })),
+      x: PLAYER_START_X,
+    },
+    opponent: {
+      ...opponentSnapshot,
+      effects: opponentSnapshot.effects.map((effect) => ({ ...effect })),
+      x: PVP_OPPONENT_X,
+      width: PVP_PLAYER_WIDTH,
+    },
+    playerContacted: false,
+    movementDirection: 0,
+    outcome: null,
+  };
+}
+
+export function stepPvpRun(state, inputForTick = []) {
+  if (!state || state.mode !== 'pvp') throw new TypeError('state must be a PvP run.');
+  if (state.outcome) throw new RangeError('cannot advance a completed PvP run.');
+  if (!Array.isArray(inputForTick)) throw new TypeError('inputForTick must be an array.');
+  let moveCount = 0;
+  for (const event of inputForTick) {
+    if (!event || event.tick !== state.tick) throw new RangeError('PvP input tick must match the current tick.');
+    if (event.kind !== 'move') throw new RangeError('pvp-only-accepts-movement-inputs.');
+    if (![-1, 0, 1].includes(event.value)) throw new RangeError('move value must be -1, 0 or 1.');
+    moveCount += 1;
+    if (moveCount > 1) throw new RangeError('duplicate-move-event.');
+  }
+
+  const next = {
+    ...state,
+    player: { ...state.player, effects: state.player.effects.map((effect) => ({ ...effect })) },
+    opponent: { ...state.opponent, effects: state.opponent.effects.map((effect) => ({ ...effect })) },
+  };
+  if (inputForTick.length) next.movementDirection = inputForTick[0].value;
+  next.player.x = clamp(
+    next.player.x + next.movementDirection * next.player.moveSpeed / TICKS_PER_SECOND,
+    PLAYER_MIN_X,
+    PLAYER_MAX_X,
+  );
+  const events = [];
+  const overlapping = Math.abs(next.player.x - next.opponent.x) <= (PLAYER_WIDTH + next.opponent.width) / 2;
+  if (!overlapping) {
+    next.playerContacted = false;
+  } else if (!next.playerContacted) {
+    next.playerContacted = true;
+    const random = nextRandom(next.randomState);
+    next.randomState = random.state;
+    const result = resolveContact({
+      playerStats: next.player,
+      enemyStats: {
+        attack: next.opponent.attack,
+        defense: next.opponent.defense,
+        currentHp: next.opponent.currentHp,
+        maxHp: next.opponent.maxHp,
+      },
+      playerEffects: next.player.effects,
+      rng: () => random.value,
+    });
+    next.player.currentHp = result.playerHp;
+    next.opponent.currentHp = result.enemyHp;
+    events.push({
+      type: 'contact',
+      tick: state.tick,
+      critical: result.critical,
+      playerDamage: result.playerDamage,
+      opponentDamage: result.enemyDamage,
+      playerHp: result.playerHp,
+      opponentHp: result.enemyHp,
+    });
+    const directionAway = next.player.x <= next.opponent.x ? -1 : 1;
+    next.player.x = clamp(next.player.x + directionAway * BALANCE.knockbackPixels, PLAYER_MIN_X, PLAYER_MAX_X);
+    if (next.player.currentHp <= 0 || next.opponent.currentHp <= 0) {
+      next.outcome = pvpOutcome(next.player.currentHp, next.player.maxHp, next.opponent.currentHp, next.opponent.maxHp).outcome;
+    }
+  }
+
+  next.tick += 1;
+  next.elapsedTicks = next.tick;
+  const timeLimitTicks = next.ticket.timeLimitMs * TICKS_PER_SECOND / 1000;
+  if (!next.outcome && next.tick >= timeLimitTicks) {
+    next.outcome = pvpOutcome(next.player.currentHp, next.player.maxHp, next.opponent.currentHp, next.opponent.maxHp).outcome;
+    events.push({ type: 'timeout', tick: state.tick });
+  }
+  if (next.outcome) events.push({ type: 'matchEnd', tick: state.tick, outcome: next.outcome });
+  return { state: next, events };
+}
+
 export function replayPvpRun(ticket, playerSnapshot, opponentSnapshot, inputs) {
   const inputError = validateInputLog(inputs);
   if (inputError) return invalidPvpResult(inputError, playerSnapshot, opponentSnapshot);
   if (inputs.some((event) => event.kind !== 'move')) {
     return invalidPvpResult('pvp-only-accepts-movement-inputs', playerSnapshot, opponentSnapshot);
   }
+  let state;
   try {
-    assertPvpTicket(ticket);
-    assertCombatSnapshot(playerSnapshot);
-    assertCombatSnapshot(opponentSnapshot, 'opponent');
+    state = createPvpRun(ticket, playerSnapshot, opponentSnapshot);
   } catch (error) {
     return invalidPvpResult(error.message, playerSnapshot, opponentSnapshot);
   }
-  const player = {
-    ...playerSnapshot,
-    effects: playerSnapshot.effects.map((effect) => ({ ...effect })),
-    x: PLAYER_START_X,
-  };
-  const opponent = {
-    ...opponentSnapshot,
-    effects: opponentSnapshot.effects.map((effect) => ({ ...effect })),
-    x: PVP_OPPONENT_X,
-    width: PVP_PLAYER_WIDTH,
-  };
-  let randomState = ticket.seed >>> 0;
-  let direction = 0;
-  let playerContacted = false;
-  let tick = 0;
   let inputIndex = 0;
-  while (tick < ticket.timeLimitMs * TICKS_PER_SECOND / 1000) {
+  while (!state.outcome) {
     const tickInputs = [];
-    while (inputIndex < inputs.length && inputs[inputIndex].tick === tick) {
+    while (inputIndex < inputs.length && inputs[inputIndex].tick === state.tick) {
       tickInputs.push(inputs[inputIndex]);
       inputIndex += 1;
     }
-    if (tickInputs.some((event) => event.kind !== 'move')) {
-      return invalidPvpResult('pvp-only-accepts-movement-inputs', playerSnapshot, opponentSnapshot, tick);
+    if (inputIndex < inputs.length && inputs[inputIndex].tick < state.tick) {
+      return invalidPvpResult('input-tick-already-passed', playerSnapshot, opponentSnapshot, state.elapsedTicks);
     }
-    if (tickInputs.length > 1) return invalidPvpResult('duplicate-move-event', playerSnapshot, opponentSnapshot, tick);
-    if (tickInputs.length === 1) direction = tickInputs[0].value;
-    player.x = clamp(player.x + direction * player.moveSpeed / TICKS_PER_SECOND, PLAYER_MIN_X, PLAYER_MAX_X);
-    const overlapping = Math.abs(player.x - opponent.x) <= (PLAYER_WIDTH + opponent.width) / 2;
-    if (!overlapping) {
-      playerContacted = false;
-    } else if (!playerContacted) {
-      playerContacted = true;
-      const random = nextRandom(randomState);
-      randomState = random.state;
-      const result = resolveContact({
-        playerStats: player,
-        enemyStats: {
-          attack: opponent.attack,
-          defense: opponent.defense,
-          currentHp: opponent.currentHp,
-          maxHp: opponent.maxHp,
-        },
-        playerEffects: player.effects,
-        rng: () => random.value,
-      });
-      player.currentHp = result.playerHp;
-      opponent.currentHp = result.enemyHp;
-      const directionAway = player.x <= opponent.x ? -1 : 1;
-      player.x = clamp(player.x + directionAway * BALANCE.knockbackPixels, PLAYER_MIN_X, PLAYER_MAX_X);
-      if (player.currentHp <= 0) {
-        const remaining = pvpOutcome(player.currentHp, player.maxHp, opponent.currentHp, opponent.maxHp);
-        return {
-          valid: true,
-          ...remaining,
-          elapsedTicks: tick + 1,
-          playerHp: player.currentHp,
-          opponentHp: opponent.currentHp,
-          rejectReason: null,
-        };
-      }
-      if (opponent.currentHp <= 0) {
-        return {
-          valid: true,
-          outcome: 'win',
-          elapsedTicks: tick + 1,
-          playerHp: player.currentHp,
-          opponentHp: 0,
-          playerHpPercent: player.currentHp / player.maxHp,
-          opponentHpPercent: 0,
-          rejectReason: null,
-        };
-      }
-    }
-    tick += 1;
-    if (tickInputs.length === 0 && inputIndex >= inputs.length && direction === 0 && !playerContacted) {
-      // A stationary replay still consumes the ticket's full time limit; this is a valid timeout result.
+    try {
+      state = stepPvpRun(state, tickInputs).state;
+    } catch (error) {
+      return invalidPvpResult(error.message, playerSnapshot, opponentSnapshot, state.elapsedTicks);
     }
   }
-  if (inputIndex < inputs.length) return invalidPvpResult('input-after-time-limit', playerSnapshot, opponentSnapshot, tick);
-  const remaining = pvpOutcome(player.currentHp, player.maxHp, opponent.currentHp, opponent.maxHp);
-  return {
-    valid: true,
-    ...remaining,
-    elapsedTicks: tick,
-    playerHp: player.currentHp,
-    opponentHp: opponent.currentHp,
-    rejectReason: null,
-  };
+  if (inputIndex < inputs.length) return invalidPvpResult('input-after-terminal-outcome', playerSnapshot, opponentSnapshot, state.elapsedTicks);
+  return pvpResult(state);
 }

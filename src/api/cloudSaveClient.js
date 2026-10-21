@@ -73,5 +73,27 @@ export function createCloudSaveClient({
       });
       return { status: result.status, ...result.body };
     },
+    async publishPvpSnapshot(account, body) {
+      const result = await request(account, '/pvp/snapshot', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      return { status: result.status, ...result.body };
+    },
+    async searchPvpMatch(account, body = {}) {
+      const result = await request(account, '/pvp/matches/search', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return { status: result.status, ...result.body };
+    },
+    async submitPvpResult(account, matchId, body) {
+      if (typeof matchId !== 'string' || !matchId) throw new TypeError('A PvP match id is required.');
+      const result = await request(account, `/pvp/matches/${encodeURIComponent(matchId)}/result`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return { status: result.status, ...result.body };
+    },
   };
 }

@@ -1,6 +1,6 @@
 # Task: T07 스테이지 랭킹 클라이언트
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 BattleScene을 결정적 60Hz 입력 로그와 stage ticket에 연결하고 온라인 검증 결과만 랭킹 API에 제출한다.
@@ -61,4 +61,4 @@ BattleScene을 결정적 60Hz 입력 로그와 stage ticket에 연결하고 온�
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: client/save/simulator/orientation 47 tests, stage-run API 12 tests, Vite build. Entra live sign-in/API and browser visual E2E remain unverified because deployment config is not set.
-- commit: pending
+- commit: 78fb91f

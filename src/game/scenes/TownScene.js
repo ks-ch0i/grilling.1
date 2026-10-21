@@ -36,6 +36,8 @@ export class TownScene extends Phaser.Scene {
     this.gameState = data.gameState ?? createInitialState();
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.rankedRunClient = data.rankedRunClient;
+    this.pvpClient = data.pvpClient;
+    this.pvpSearching = false;
     this.selectedStageId = data.unlockedStageId ?? stageId(
       this.gameState.progression.chapter,
       this.gameState.progression.currentStage,
@@ -52,9 +54,20 @@ export class TownScene extends Phaser.Scene {
       }
     });
     this.refresh();
+    this.onlineHandler = () => this.refresh();
+    if (typeof window !== 'undefined') window.addEventListener('online', this.onlineHandler);
+    if (typeof window !== 'undefined') window.addEventListener('offline', this.onlineHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', this.onlineHandler);
+        window.removeEventListener('offline', this.onlineHandler);
+      }
+      this.pvpSearchTimer?.remove(false);
+    });
   }
 
   commitState(nextState) {
+    if (this.transitioning || this.pvpSearching) return;
     this.gameState = nextState;
     this.saveState(this.gameState);
     this.refresh();
@@ -194,18 +207,106 @@ export class TownScene extends Phaser.Scene {
     if (!options.includes(this.selectedStageId)) this.selectedStageId = options.at(-1);
     const selectedIndex = options.indexOf(this.selectedStageId);
     const isReplay = this.gameState.progression.clearedStageIds.includes(this.selectedStageId);
-    createButton(this,{x:32,y:630,width:250,height:58,label:'◀ 파밍 스테이지',enabled:options.length>1,onClick:()=>{
+    createButton(this,{x:32,y:630,width:188,height:58,label:'◀ 이전',enabled:options.length>1,onClick:()=>{
       this.selectedStageId=options[(selectedIndex-1+options.length)%options.length];this.refresh();
     }});
-    this.add.text(305, 635, (isReplay?'반복 도전 · XP '+Math.round(this.replayXpMultiplier*100)+'%':'신규 도전')+'\n'+stageName(this.selectedStageId), { fontFamily:'sans-serif',fontSize:'15px',color:'#f4e6bf',lineSpacing:3 });
-    createButton(this,{x:688,y:630,width:250,height:58,label:'다음/선택 스테이지 ▶',enabled:options.length>1,onClick:()=>{
+    this.add.text(230, 635, (isReplay?'반복 · XP '+Math.round(this.replayXpMultiplier*100)+'%':'신규 도전')+'\n'+stageName(this.selectedStageId), { fontFamily:'sans-serif',fontSize:'14px',color:'#f4e6bf',lineSpacing:3 });
+    createButton(this,{x:560,y:630,width:190,height:58,label:'다음 ▶',enabled:options.length>1,onClick:()=>{
       this.selectedStageId=options[(selectedIndex+1)%options.length];this.refresh();
     }});
-    createButton(this,{x:1000,y:630,width:248,height:58,label:'전투 출발',onClick:()=>this.startBattle(this.selectedStageId)});
+    createButton(this,{x:770,y:630,width:220,height:58,label:'전투 출발',onClick:()=>this.startBattle(this.selectedStageId)});
+    const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    createButton(this,{x:1010,y:630,width:238,height:58,label:this.pvpSearching?'상대 찾는 중...':'비동기 PvP',enabled:!this.pvpSearching && online && Boolean(this.pvpClient),onClick:()=>this.startPvp()});
+  }
+
+  showPvpNotice({ title, message, actions = [] }) {
+    this.refresh();
+    const overlay = this.add.container(0, 0).setDepth(300);
+    this.pvpOverlay = overlay;
+    overlay.add(this.add.rectangle(640, 360, 540, 260, 0x090e14, 0.94).setStrokeStyle(2, 0xd8ba77));
+    overlay.add(this.add.text(640, 278, title, { fontFamily:'sans-serif', fontSize:'25px', color:'#f4e6bf' }).setOrigin(0.5));
+    overlay.add(this.add.text(640, 330, message, { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df', align:'center', wordWrap:{ width:470 }, lineSpacing:7 }).setOrigin(0.5));
+    const buttonWidth = Math.min(190, 420 / Math.max(1, actions.length));
+    const totalWidth = buttonWidth * actions.length + Math.max(0, actions.length - 1) * 12;
+    actions.forEach((action, index) => {
+      const x = 640 - totalWidth / 2 + buttonWidth / 2 + index * (buttonWidth + 12);
+      const button = this.add.rectangle(x, 430, buttonWidth, 48, 0x344659).setStrokeStyle(1, 0xd8ba77);
+      const label = this.add.text(x, 430, action.label, { fontFamily:'sans-serif', fontSize:'15px', color:'#fff3d5' }).setOrigin(0.5);
+      button.setInteractive({ useHandCursor:true }).on('pointerdown', () => action.onClick());
+      label.setInteractive({ useHandCursor:true }).on('pointerdown', () => action.onClick());
+      overlay.add([button, label]);
+    });
+  }
+
+  async startPvp() {
+    if (this.transitioning || this.pvpSearching || !this.pvpClient) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.showPvpNotice({ title:'인터넷 연결 필요', message:'비동기 PvP는 온라인에서만 입장할 수 있습니다.', actions:[{ label:'확인', onClick:()=>this.refresh() }] });
+      return;
+    }
+    this.transitioning = true;
+    this.pvpSearching = true;
+    this.refresh();
+    const startedAt = Date.now();
+    const updateSearchText = () => {
+      if (!this.pvpSearching || !this.pvpSearchLabel?.active) return;
+      const elapsed = Math.min(60, Math.floor((Date.now() - startedAt) / 1000));
+      this.pvpSearchLabel.setText(`상대를 찾는 중... ${elapsed}/60초\n점수 범위 ±100부터 5초마다 넓혀 최대 ±500까지 검색합니다.`);
+    };
+    const overlay = this.add.container(0, 0).setDepth(300);
+    this.pvpOverlay = overlay;
+    overlay.add(this.add.rectangle(640, 360, 540, 220, 0x090e14, 0.94).setStrokeStyle(2, 0xd8ba77));
+    overlay.add(this.add.text(640, 286, 'PvP 상대 검색', { fontFamily:'sans-serif', fontSize:'25px', color:'#f4e6bf' }).setOrigin(0.5));
+    this.pvpSearchLabel = this.add.text(640, 360, '', { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df', align:'center', wordWrap:{ width:470 }, lineSpacing:7 }).setOrigin(0.5);
+    overlay.add(this.pvpSearchLabel);
+    updateSearchText();
+    this.pvpSearchTimer = this.time.addEvent({ delay:500, loop:true, callback:updateSearchText });
+    let response;
+    try { response = await this.pvpClient.findMatch(); }
+    catch (error) { response = { ok:false, reason:error?.message === 'authentication-required' ? 'authentication-required' : 'network-unavailable' }; }
+    this.pvpSearchTimer?.remove(false);
+    this.pvpSearchTimer = null;
+    this.pvpSearching = false;
+    this.pvpOverlay?.destroy(true);
+    this.pvpOverlay = null;
+    if (response?.ok && response.ticket) {
+      this.scene.start('PvpScene', {
+        ticket:response.ticket,
+        gameState:this.gameState,
+        saveState:this.saveState,
+        pvpClient:this.pvpClient,
+        rankedRunClient:this.rankedRunClient,
+      });
+      return;
+    }
+    this.transitioning = false;
+    const reason = response?.reason ?? 'network-unavailable';
+    if (reason === 'no-opponent') {
+      this.showPvpNotice({
+        title:'상대를 찾지 못했습니다',
+        message:'60초 동안 범위를 넓혀 검색했지만 상대가 없었습니다. 검색 범위는 ±100점부터 시작해 ±500점까지 확장됩니다.',
+        actions:[
+          { label:'다시 검색', onClick:()=>{ this.pvpOverlay?.destroy(true); this.pvpOverlay=null; void this.startPvp(); } },
+          { label:'마을로', onClick:()=>this.refresh() },
+        ],
+      });
+    } else if (reason === 'authentication-required') {
+      this.showPvpNotice({ title:'회사 계정 인증 필요', message:'계정 인증을 다시 완료해야 PvP를 시작할 수 있습니다.', actions:[
+        { label:'다시 인증', onClick:async()=>{
+          const auth = await this.pvpClient.retryAuthentication();
+          this.pvpOverlay?.destroy(true); this.pvpOverlay=null;
+          if (auth?.ok !== false) void this.startPvp(); else this.showPvpNotice({ title:'인증 실패', message:'인증을 완료하지 못했습니다.', actions:[{label:'마을로',onClick:()=>this.refresh()}] });
+        } },
+        { label:'마을로', onClick:()=>this.refresh() },
+      ] });
+    } else {
+      const message = reason === 'offline' ? '인터넷에 연결한 뒤 다시 시도해 주세요.' : '저장 또는 네트워크 상태를 확인한 뒤 다시 시도해 주세요.';
+      this.showPvpNotice({ title:'PvP를 시작하지 못했습니다', message, actions:[{ label:'확인', onClick:()=>this.refresh() }] });
+    }
   }
 
   async startBattle(selectedStageId) {
-    if (this.transitioning) return;
+    if (this.transitioning || this.pvpSearching) return;
     this.transitioning = true;
     const [chapter, stage] = selectedStageId.split('-').map(Number);
     const isReplay = this.gameState.progression.clearedStageIds.includes(selectedStageId);
@@ -230,6 +331,7 @@ export class TownScene extends Phaser.Scene {
       gameState:startState,
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
+      pvpClient:this.pvpClient,
       rankedTicket:ranked.ranked ? ranked.ticket : null,
       rankedReason:ranked.reason,
       chapter,

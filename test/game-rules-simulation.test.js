@@ -256,7 +256,7 @@ test('a replay records death at the first lethal body contact', async () => {
 });
 
 test('a PvP replay uses a fixed opponent and resolves a body-contact win', async () => {
-  const { replayPvpRun } = await loadRules();
+  const { createPvpRun, replayPvpRun, stepPvpRun } = await loadRules();
   const ticket = {
     matchId: 'golden-pvp-1',
     seed: 987654321,
@@ -274,11 +274,17 @@ test('a PvP replay uses a fixed opponent and resolves a body-contact win', async
   const result = replayPvpRun(ticket, player(), opponent, [
     { tick: 0, kind: 'move', value: 1 },
   ]);
+  let state = createPvpRun(ticket, player(), opponent);
+  const inputs = [{ tick: 0, kind: 'move', value: 1 }];
+  while (!state.outcome) state = stepPvpRun(state, state.tick === 0 ? [inputs[0]] : []).state;
+  const steppedReplay = replayPvpRun(ticket, player(), opponent, inputs);
 
   assert.equal(result.valid, true);
   assert.equal(result.outcome, 'win');
   assert.equal(result.opponentHp, 0);
   assert.ok(result.elapsedTicks > 0 && result.elapsedTicks < 3600);
+  assert.deepEqual(steppedReplay, result);
+  assert.equal(state.tick, result.elapsedTicks);
 });
 
 test('a PvP timeout compares exact remaining HP percentages and permits a draw', async () => {

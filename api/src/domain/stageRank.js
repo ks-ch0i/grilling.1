@@ -106,14 +106,16 @@ export function derivePlayerCombatSnapshot(state, chapter, stage) {
     critMultiplier: stats.critMultiplier,
     moveSpeed: stats.moveSpeed,
     effects,
-    level: state.player.level,
-    xp: state.player.xp,
-    xpToNext: state.player.xpToNext,
-    pendingLevelUps: state.player.pendingLevelUps,
-    replayXpMultiplier: state.progression.clearedStageIds.includes(`${chapter}-${stage}`)
-      ? BALANCE.replayXpMultiplier
-      : 1,
   };
+  if (Number.isInteger(chapter) && chapter >= 1 && Number.isInteger(stage) && stage >= 1 && stage <= 10) {
+    snapshot.level = state.player.level;
+    snapshot.xp = state.player.xp;
+    snapshot.xpToNext = state.player.xpToNext;
+    snapshot.pendingLevelUps = state.player.pendingLevelUps;
+    snapshot.replayXpMultiplier = state.progression.clearedStageIds.includes(`${chapter}-${stage}`)
+      ? BALANCE.replayXpMultiplier
+      : 1;
+  }
   if (Object.values(snapshot).some((value) => typeof value === 'number' && !Number.isFinite(value)) ||
       snapshot.maxHp <= 0 || snapshot.currentHp < 0 || snapshot.currentHp > snapshot.maxHp ||
       snapshot.attack < 0 || snapshot.defense < 0 || snapshot.moveSpeed < 0 ||

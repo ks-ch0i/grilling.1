@@ -35,6 +35,7 @@ export class BattleScene extends Phaser.Scene {
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.stageSnapshot = data.stageSnapshot ?? this.gameState;
     this.rankedRunClient = data.rankedRunClient;
+    this.pvpClient = data.pvpClient;
     this.rankedTicket = data.rankedTicket ?? null;
     this.rankedReason = data.rankedReason ?? 'ranking-unavailable';
     this.rankedEligible = Boolean(this.rankedTicket && this.rankedRunClient);
@@ -630,6 +631,7 @@ export class BattleScene extends Phaser.Scene {
         gameState:this.gameState,
         saveState:this.saveState,
         rankedRunClient:this.rankedRunClient,
+        pvpClient:this.pvpClient,
         unlockedStageId:nextChapter+'-'+nextStage,
       });
     }}).setDepth(251);
@@ -658,6 +660,7 @@ export class BattleScene extends Phaser.Scene {
       gameState,
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
+      pvpClient:this.pvpClient,
       rankedTicket:ranked.ranked ? ranked.ticket : null,
       rankedReason:ranked.reason,
       chapter,
@@ -707,6 +710,7 @@ export class BattleScene extends Phaser.Scene {
       gameState,
       saveState:this.saveState,
       rankedRunClient:this.rankedRunClient,
+      pvpClient:this.pvpClient,
       rankedTicket:ranked.ranked ? ranked.ticket : null,
       rankedReason:ranked.reason,
       chapter:this.chapter,

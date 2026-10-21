@@ -72,3 +72,31 @@ test('stage ticket and result calls use the signed-in account and exact API payl
   assert.equal(calls[1].options.headers.authorization, 'Bearer rank-token');
   assert.equal(calls[1].options.headers['content-type'], 'application/json');
 });
+
+test('PvP snapshot, search and result calls use their exact API routes and DTOs', async () => {
+  const calls = [];
+  const client = createCloudSaveClient({
+    apiBaseUrl:'/api/',
+    getAccessToken:async() => 'pvp-token',
+    fetchImplementation:async(url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify({ status:'ok' }), { status:200 });
+    },
+  });
+  const matchId = '11111111-1111-4111-8111-111111111111';
+  await client.publishPvpSnapshot(account, { expectedSaveRevision:9 });
+  await client.searchPvpMatch(account, {});
+  await client.submitPvpResult(account, matchId, { inputs:[] });
+
+  assert.deepEqual(calls.map(({ url }) => url), [
+    '/api/pvp/snapshot',
+    '/api/pvp/matches/search',
+    `/api/pvp/matches/${matchId}/result`,
+  ]);
+  assert.deepEqual(calls.map(({ options }) => options.method), ['PUT', 'POST', 'POST']);
+  assert.deepEqual(calls.map(({ options }) => JSON.parse(options.body)), [
+    { expectedSaveRevision:9 }, {}, { inputs:[] },
+  ]);
+  assert.equal(calls[0].options.headers.authorization, 'Bearer pvp-token');
+  await assert.rejects(() => client.submitPvpResult(account, '', { inputs:[] }), TypeError);
+});

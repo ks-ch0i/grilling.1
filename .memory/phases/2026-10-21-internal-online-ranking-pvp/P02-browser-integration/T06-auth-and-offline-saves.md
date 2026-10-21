@@ -1,6 +1,6 @@
 # Task: T06 Entra 로그인과 오프라인 저장
 
-## Status: in_progress
+## Status: done
 
 ## Goal
 MSAL 로그인 뒤 Entra 계정별로 게임 저장을 분리하고 최초 로컬 저장 이전, 오프라인 진행 저장, 재접속 동기화, 클라우드 충돌 복구를 구현한다.
@@ -75,4 +75,4 @@ Live Entra sign-in was not exercised. Configure the placeholder values in `.env`
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: 14 auth/API/save tests on Node 22; Vite multi-page production build succeeded.
-- commit: pending
+- commit: 789d35a
