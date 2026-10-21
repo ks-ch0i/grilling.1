@@ -1,6 +1,6 @@
 # Task: T04 스테이지 랭킹 API
 
-## Status: pending
+## Status: done
 
 ## Goal
 온라인 스테이지 실행 티켓을 발급하고 제출된 입력을 서버에서 재생해 검증된 최고 스테이지·최고 시간을 저장한다.
@@ -16,7 +16,9 @@
 - Related Files:
   - api/src/services/stageRunService.js :: startStageRun — 권한·스테이지 검증과 ticket 저장; new.
   - api/src/functions/stageRuns.js :: POST /api/stage-runs — 티켓 발급; new.
-  - api/src/domain/stageRank.js :: compareStageRank — 정렬 순서; new.
+  - api/src/domain/stageRank.js :: derivePlayerCombatSnapshot, validateStageInputs, compareStageRank — snapshot, input and order rules; new.
+  - api/src/repositories/stageRankingRepository.js :: createTicket, completeRun, getTopFive — SQL transactions; new.
+  - api/src/functions/rankings.js :: GET /api/rankings/stage/top — top-five endpoint; new.
   - api/test/stageRuns/startStageRun.test.js :: ticket validation; new.
 - Details:
   - POST body: { chapter: integer >= 1, stage: integer 1..10, expectedSaveRevision: integer }.
@@ -31,7 +33,7 @@
   - api/src/services/stageRunService.js :: submitStageResult — idempotent replay; modify.
   - api/src/repositories/stageRankingRepository.js :: completeRun, getTopFive — SQL transactions; new.
   - api/src/functions/stageRuns.js :: POST /api/stage-runs/{runId}/result — 결과 제출; modify.
-  - api/src/functions/rankings.js :: GET /api/rankings/stage/top — top-five endpoint; new.
+  - api/test/stageRuns/submitStageResult.test.js, stageRunFunctions.test.js, api/test-support/stageRuns.js :: replay and HTTP fixtures; new.
   - api/test/stageRuns/submitStageResult.test.js :: replay/rank ordering; new.
 - Details:
   - Result body는 { inputs: RunInputEvent[] }만 받는다. clientWon, elapsedMs, playerHp, rating, snapshot 필드는 unknown-field 검증 후 거부한다.
@@ -43,14 +45,14 @@
   - 최고 기록 변경 시 SignalR publish용 RankingChanged event를 내보내고 동일 값이면 publish하지 않는다.
 
 ## Acceptance Criteria
-- [ ] 티켓은 서버 시드와 현재 cloud save 기반 스탯을 고정한다.
-- [ ] 서버가 clear를 재현하지 못하는 조작 payload는 StageBests를 바꾸지 않는다.
-- [ ] cloud progression은 고치지 않고 랭킹 전용 row만 원자적으로 갱신한다.
-- [ ] 동일 계정 재시도는 중복 기록/푸시를 생성하지 않는다.
+- [x] 티켓은 서버 시드와 현재 cloud save 기반 스탯을 고정한다.
+- [x] 서버가 clear를 재현하지 못하는 조작 payload는 StageBests를 바꾸지 않는다.
+- [x] cloud progression은 고치지 않고 랭킹 전용 row만 원자적으로 갱신한다.
+- [x] 동일 계정 재시도는 중복 기록/푸시를 생성하지 않는다.
 
 ## Validation
-    npm --prefix api test -- stageRuns rankings
-    node --test test/game-rules-simulation.test.js
+    npm --prefix api test -- test/stageRuns/startStageRun.test.js test/stageRuns/submitStageResult.test.js test/stageRuns/stageRunFunctions.test.js
+    npx --yes node@22 --test test/game-rules-simulation.test.js
 
 ## Commit Message
     feat(api): validate stage runs and maintain leaderboard
@@ -63,6 +65,6 @@
     - Persist verified best stage times and expose top five
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: stage-run 12 tests; API 40 tests and simulator 14 tests on Node 22; npm run build; API syntax checks.
 - commit: pending

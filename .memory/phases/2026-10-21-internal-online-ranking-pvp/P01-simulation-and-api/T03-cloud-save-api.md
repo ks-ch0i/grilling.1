@@ -59,4 +59,4 @@
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: cloud-save 13 tests; API 28 tests on Node 22; npm run build; API syntax checks.
-- commit: pending
+- commit: 36e6d1e
