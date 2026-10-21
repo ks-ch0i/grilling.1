@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "ENTRA_TENANT_ID": "<single Entra tenant GUID>",
+    "ENTRA_API_AUDIENCE": "<API application ID URI or client ID>",
+    "SQL_SERVER_FQDN": "<server>.database.windows.net",
+    "SQL_DATABASE": "<database name>"
+  }
+}
