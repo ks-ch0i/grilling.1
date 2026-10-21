@@ -76,7 +76,7 @@
 ## Progress
 - [x] 구현 완료
 - [ ] 검증 통과
-- commit: pending
+- commit: 15670f1 (what-if pending)
 
 ## Execution Notes
 - The source uses managed identity for Azure SignalR; the original secret-setting line in this blueprint was stale and has been corrected.
