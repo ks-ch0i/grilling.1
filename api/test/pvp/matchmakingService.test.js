@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  createPvpDependencies, createPvpRepository, identityA, MATCH_A, PLAYER_A, PLAYER_B, PLAYER_C,
-  makeSnapshot, strongCombat,
+  createPvpDependencies, createPvpRepository, identityA, MATCH_A, MATCH_B, PLAYER_A, PLAYER_B, PLAYER_C,
+  makeSnapshot, seedIssuedMatch, strongCombat,
 } from '../../test-support/pvp.js';
 
 async function loadMatchmakingService() {
@@ -23,12 +23,74 @@ test('findOpponent creates an immutable snapshot ticket from an eligible rating 
   assert.equal(result.status, 201);
   assert.equal(result.ticket.matchId, MATCH_A);
   assert.equal(result.ticket.seed, 123456);
-  assert.equal(result.ticket.simulatorVersion, 1);
+  assert.equal(result.ticket.simulatorVersion, 2);
+  assert.equal(result.ticket.balanceVersion, 2);
   assert.equal(result.ticket.expiresAtUtc, '2026-10-21T02:10:00.000Z');
   assert.equal(result.ticket.playerSnapshot.combat.attack, strongCombat.attack);
   assert.equal(result.ticket.opponentSnapshot.revision, 1);
   assert.equal(repository.calls.creates[0].player1Id, PLAYER_A);
   assert.equal(repository.calls.creates[0].player2Id, PLAYER_B);
+  assert.equal(repository.calls.creates[0].balanceVersion, 2);
+  assert.equal(repository.matches.get(MATCH_A).BalanceVersion, 2);
+});
+
+test('v1 snapshots are excluded from current-version matchmaking', async () => {
+  const repository = createPvpRepository();
+  repository.snapshotRows.get(PLAYER_B).BalanceVersion = 1;
+  const dependencies = createPvpDependencies(repository);
+  const { findOpponent } = await loadMatchmakingService();
+
+  const result = await findOpponent({}, identityA, dependencies);
+
+  assert.equal(result.status, 404);
+  assert.equal(result.code, 'no-opponent');
+  assert.equal(repository.calls.creates.length, 0);
+});
+
+test('a stale own snapshot must be republished before matchmaking', async () => {
+  const repository = createPvpRepository();
+  repository.snapshotRows.get(PLAYER_A).BalanceVersion = 1;
+  const dependencies = createPvpDependencies(repository);
+  const { findOpponent } = await loadMatchmakingService();
+
+  const result = await findOpponent({}, identityA, dependencies);
+
+  assert.equal(result.status, 409);
+  assert.equal(result.code, 'snapshot-required');
+  assert.equal(repository.calls.windows.length, 0);
+});
+
+test('an active v1 match does not block a new v2 match for current-version snapshots', async () => {
+  const repository = createPvpRepository();
+  seedIssuedMatch(repository, { matchId: MATCH_B, simulatorVersion: 1, balanceVersion: 1 });
+  const dependencies = createPvpDependencies(repository);
+  const { findOpponent } = await loadMatchmakingService();
+
+  const result = await findOpponent({}, identityA, dependencies);
+
+  assert.equal(result.status, 201);
+  assert.equal(repository.matches.get(MATCH_B).Status, 'expired');
+  assert.equal(result.ticket.simulatorVersion, 2);
+  assert.equal(result.ticket.balanceVersion, 2);
+  assert.equal(repository.matches.get(MATCH_A).BalanceVersion, 2);
+});
+
+test('createMatch rechecks both snapshot balance versions inside the transaction', async () => {
+  const repository = createPvpRepository();
+  const createMatch = repository.createMatch.bind(repository);
+  repository.createMatch = async (transaction, input) => {
+    repository.snapshotRows.get(PLAYER_B).BalanceVersion = 1;
+    return createMatch(transaction, input);
+  };
+  const dependencies = createPvpDependencies(repository);
+  const { findOpponent } = await loadMatchmakingService();
+
+  const result = await findOpponent({}, identityA, dependencies);
+
+  assert.equal(result.status, 404);
+  assert.equal(result.code, 'no-opponent');
+  assert.equal(repository.matches.has(MATCH_A), false);
+  assert.deepEqual(repository.ratingRows.get(PLAYER_A), { PlayerId: PLAYER_A, Rating: 1000, UpdatedAtUtc: new Date('2026-10-21T02:00:00.000Z') });
 });
 
 test('rating search expands by 100 every five seconds to the 500 point maximum', async () => {

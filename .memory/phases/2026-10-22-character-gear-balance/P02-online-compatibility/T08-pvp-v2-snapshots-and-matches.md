@@ -1,6 +1,6 @@
 # Task: T08 PvP 스냅샷과 매치 v2
 
-## Status: pending
+## Status: done
 
 ## Goal
 새 밸런스의 PvP 스냅샷끼리만 매칭하고, 새 매치를 simulatorVersion2/balanceVersion2로 저장·재생 검증한다. v1 완료 매치와 Elo 레이팅 기록은 보존한다.
@@ -51,10 +51,10 @@
 - Existing completed PvpMatches and PvpRatings remain unchanged and top-five/me-rank contracts remain the same.
 
 ## Acceptance Criteria
-- [ ] Existing snapshots/matches are retained and labeled v1 by the additive SQL migration.
-- [ ] New v2 clients only match with v2 snapshots and receive v2 tickets.
-- [ ] Stale v1 in-flight tickets do not update either player's rating.
-- [ ] Completed v1 match rows and existing Elo values remain intact; valid v2 matches retain the existing Elo transaction behavior.
+- [x] Existing snapshots/matches are retained and labeled v1 by the additive SQL migration.
+- [x] New v2 clients only match with v2 snapshots and receive v2 tickets.
+- [x] Stale v1 in-flight tickets do not update either player's rating.
+- [x] Completed v1 match rows and existing Elo values remain intact; valid v2 matches retain the existing Elo transaction behavior.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
@@ -74,6 +74,7 @@ Task: T08-pvp-v2-snapshots-and-matches
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과: Node.js 22.12.0, T08 지정 테스트 60/60, 루트 전체 테스트, API 전체 테스트, Vite production build, `git diff --check` 통과.
+- [x] 비판적 리뷰 완료: Critical/Important/Minor 지적 없음.
+- commit: blueprint 메시지로 생성.

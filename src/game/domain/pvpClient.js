@@ -37,7 +37,7 @@ export function buildPvpSnapshotContent(state) {
 function validMatchTicket(ticket) {
   return Boolean(ticket && typeof ticket.matchId === 'string' && ticket.matchId &&
     Number.isInteger(ticket.seed) && ticket.seed >= 1 && ticket.seed <= 0xffffffff &&
-    ticket.simulatorVersion === 1 && ticket.timeLimitMs === 60_000 &&
+    ticket.simulatorVersion === 2 && ticket.balanceVersion === 2 && ticket.timeLimitMs === 60_000 &&
     typeof ticket.issuedAtUtc === 'string' && Number.isFinite(Date.parse(ticket.issuedAtUtc)) &&
     Number.isFinite(Date.parse(ticket.expiresAtUtc)) && Date.parse(ticket.expiresAtUtc) > Date.parse(ticket.issuedAtUtc) &&
     ticket.playerSnapshot?.combat && ticket.opponentSnapshot?.combat &&

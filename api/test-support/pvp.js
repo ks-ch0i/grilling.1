@@ -75,6 +75,7 @@ function publicSnapshotRow(snapshot, playerId) {
     PlayerId: playerId,
     Revision: snapshot.revision,
     SnapshotJson: JSON.stringify(snapshot),
+    BalanceVersion: snapshot.balanceVersion ?? 2,
     UpdatedAtUtc: new Date(snapshot.publishedAtUtc),
   };
 }
@@ -104,7 +105,7 @@ export function createPvpRepository({
   const ratingRows = new Map(Object.entries(ratings).map(([id, rating]) => [id, { PlayerId: id, Rating: rating, UpdatedAtUtc: new Date(NOW) }]));
   const matches = new Map();
   const ratedPairs = new Map();
-  const calls = { windows: [], creates: [], completes: [], published: [] };
+  const calls = { windows: [], creates: [], completes: [], snapshotWrites: [], expired: [], published: [] };
 
   return {
     saves, snapshotRows, ratingRows, matches, ratedPairs, calls,
@@ -132,9 +133,21 @@ export function createPvpRepository({
         revision: current ? Number(current.Revision) + 1 : 1,
         publishedAtUtc: input.publishedAtUtc.toISOString(),
       };
-      const row = publicSnapshotRow(snapshot, input.playerId);
+      const row = publicSnapshotRow({ ...snapshot, balanceVersion: input.balanceVersion }, input.playerId);
       snapshotRows.set(input.playerId, row);
       return { kind: 'published', row: structuredClone(row) };
+    },
+    async savePlayerSnapshot(_transaction, input) {
+      calls.snapshotWrites.push(input);
+      const row = {
+        PlayerId: input.playerId,
+        Revision: input.revision,
+        SnapshotJson: input.snapshotJson,
+        BalanceVersion: input.balanceVersion,
+        UpdatedAtUtc: input.updatedAtUtc,
+      };
+      snapshotRows.set(input.playerId, row);
+      return structuredClone(row);
     },
     async findOpponentCandidate(_pool, input) {
       calls.windows.push(input.window);
@@ -142,10 +155,13 @@ export function createPvpRepository({
       const nowDate = input.nowUtc.toISOString().slice(0, 10);
       const candidates = [...snapshotRows.entries()]
         .filter(([id]) => id !== input.playerId)
+        .filter(([, row]) => Number(row.BalanceVersion) === input.balanceVersion)
         .filter(([id]) => Math.abs((ratingRows.get(id)?.Rating ?? 1000) - ownRating) <= input.window)
         .filter(([id]) => !ratedPairs.has(`${nowDate}/${[id, input.playerId].sort().join('/')}`))
         .filter(([id]) => ![...matches.values()].some((match) =>
-          match.Status === 'issued' && match.ExpiresAtUtc > input.nowUtc && [match.Player1Id, match.Player2Id].includes(id),
+          match.Status === 'issued' && match.ExpiresAtUtc > input.nowUtc &&
+          match.SimulatorVersion === input.simulatorVersion && match.BalanceVersion === input.balanceVersion &&
+          [match.Player1Id, match.Player2Id].includes(id),
         ))
         .map(([id, row]) => ({
           playerId: id,
@@ -161,8 +177,16 @@ export function createPvpRepository({
       calls.creates.push(input);
       const own = snapshotRows.get(input.player1Id);
       const opponent = snapshotRows.get(input.player2Id);
-      if (!own || !opponent || Number(own.Revision) !== input.player1SnapshotRevision || Number(opponent.Revision) !== input.player2SnapshotRevision) {
+      if (!own || !opponent || Number(own.Revision) !== input.player1SnapshotRevision || Number(opponent.Revision) !== input.player2SnapshotRevision ||
+          Number(own.BalanceVersion) !== input.balanceVersion || Number(opponent.BalanceVersion) !== input.balanceVersion) {
         return { kind: 'snapshot-changed' };
+      }
+      for (const match of matches.values()) {
+        if (match.Status === 'issued' && (match.ExpiresAtUtc <= input.issuedAtUtc ||
+            match.SimulatorVersion !== input.simulatorVersion || match.BalanceVersion !== input.balanceVersion) &&
+            [input.player1Id, input.player2Id].some((id) => [match.Player1Id, match.Player2Id].includes(id))) {
+          match.Status = 'expired';
+        }
       }
       const ownRating = ratingRows.get(input.player1Id)?.Rating ?? 1000;
       const opponentRating = ratingRows.get(input.player2Id)?.Rating ?? 1000;
@@ -177,6 +201,7 @@ export function createPvpRepository({
         Player2SnapshotJson: opponent.SnapshotJson,
         Seed: input.seed,
         SimulatorVersion: input.simulatorVersion,
+        BalanceVersion: input.balanceVersion,
         InputJson: null,
         Outcome: null,
         RatingBefore1: ownRating,
@@ -197,6 +222,7 @@ export function createPvpRepository({
       return row?.Player1Id === playerId ? structuredClone(row) : null;
     },
     async expireMatch(_transaction, playerId, matchId) {
+      calls.expired.push({ playerId, matchId });
       const row = matches.get(matchId);
       if (row?.Player1Id === playerId && row.Status === 'issued') row.Status = 'expired';
     },
@@ -286,6 +312,8 @@ export function seedIssuedMatch(repository, {
   issuedAtUtc = NOW,
   expiresAtUtc = new Date(NOW.getTime() + 10 * 60 * 1000),
   seed = 123456,
+  simulatorVersion = 2,
+  balanceVersion = 2,
 } = {}) {
   const row = {
     MatchId: matchId,
@@ -296,7 +324,8 @@ export function seedIssuedMatch(repository, {
     Player1SnapshotJson: JSON.stringify(makeSnapshot(playerSnapshot)),
     Player2SnapshotJson: JSON.stringify(makeSnapshot(opponentSnapshot)),
     Seed: seed,
-    SimulatorVersion: 1,
+    SimulatorVersion: simulatorVersion,
+    BalanceVersion: balanceVersion,
     InputJson: null,
     Outcome: null,
     RatingBefore1: 1000,

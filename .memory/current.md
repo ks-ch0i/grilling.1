@@ -4,10 +4,10 @@
 [캐릭터·장비 밸런스와 강화 실패·파괴](./plans/2026-10-22-character-gear-balance.md)
 
 ## Active Phase
-[P02 온라인 버전 호환](./phases/2026-10-22-character-gear-balance/P02-online-compatibility/phase.md)
+완료
 
 ## Active Task
-[T08 PvP snapshot/ticket v2와 구버전 스냅샷 매칭 차단](./phases/2026-10-22-character-gear-balance/P02-online-compatibility/T08-pvp-v2-snapshots-and-matches.md)
+없음 — 캐릭터·장비 밸런스 계획의 P01/P02 작업 완료
 
 ## Status
 - 계획 생성: 2026-10-22. 기준 결정은 .memory/decisions/2026-10-22-character-gear-balance.md다.
@@ -21,7 +21,8 @@
 - P02-T06 Node.js 22.12.0 API 회귀 69/69, browser client 7/7 및 Vite production build 통과. build에는 기존 500 kB chunk 경고가 남아 있다.
 - P02-T07 스테이지 랭킹 v2를 완료했다. 새 발급·재생은 simulatorVersion/balanceVersion 2를 사용하고, 제출 중이거나 새 ticket을 막는 v1 티켓은 만료 처리하며 완료된 v1 최고 기록은 그대로 조회한다. 능력치 배분 0/1/2개와 API 정규화 후 재생 일치도 검증했다.
 - P02-T07 비판적 리뷰에서 오래된 진행 티켓이 새 v2 런을 30분간 막는 문제를 발견해 서버 발급/제출 경로와 클라이언트 대기 티켓 정리를 수정했다. 전체 루트 및 API 테스트, Vite production build가 통과했다. 빌드에는 500 kB 초과 chunk 경고가 남아 있다.
-- 다음 실행 항목은 P02-T08 PvP snapshot/ticket v2와 구버전 스냅샷 매칭 차단이다.
+- P02-T08 PvP snapshot/ticket v2와 구버전 스냅샷 매칭 차단을 완료했다. 기존 행은 migration에서 v1로 보존하고, 신규 스냅샷·매치·재생은 v2로 제한했다. 오래된 진행 중 매치는 Elo 갱신 없이 거절한다. T08 지정 테스트 60/60, 전체 루트/API 테스트, Vite production build가 통과했고 비판적 리뷰에서 추가 지적은 없었다. 빌드에는 기존 500 kB 초과 chunk 경고가 남아 있다.
+- 캐릭터·장비 밸런스 계획의 P01/P02 전체 8개 Task가 완료됐다. Azure 배포 계획 부재로 별도 사내 온라인 랭킹/PvP 계획의 P03 what-if와 P04 배포는 계속 보류한다.
 - 이전 작업공간의 .agents/, .codeburn/, AGENTS.md, CODEBURN-SETUP.md, README.md, examples/ 미추적 파일은 변경하지 않았다.
 
 ## Deferred Plan
@@ -30,5 +31,5 @@
 - T10 템플릿/workflow와 로컬 검증은 끝났고, target subscription/resource group을 정한 직접 배포 계획이 없으므로 what-if만 보류 상태다. P04 실제 배포도 보류하며 Azure 리소스는 만들지 않는다.
 - 재개 조건: 구체적인 배포 계획과 대상 구독/리소스 그룹이 정해졌을 때 T10 what-if을 수행한다. 실제 Azure 배포는 별도 명시적 진행 지시와 비용 확인이 필요하다.
 
-## Next Step (IMPORTANT)
-P02-T08 청사진을 읽고 PvP snapshot/ticket을 v2로 갱신하며 구버전 snapshot 매칭을 차단한다.
+## Next Step
+이 계획에는 남은 활성 Task가 없다. 새 지시 전까지 별도 보류 계획의 Azure what-if/배포는 시작하지 않는다.

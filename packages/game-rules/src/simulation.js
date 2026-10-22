@@ -463,7 +463,8 @@ function assertPvpTicket(ticket) {
   if (!Number.isInteger(ticket.seed) || ticket.seed < 1 || ticket.seed > 0xffffffff) {
     throw new RangeError('seed must be an integer from 1 to 4294967295.');
   }
-  if (ticket.simulatorVersion !== 1) throw new RangeError('unsupported simulatorVersion.');
+  if (ticket.simulatorVersion !== 2) throw new RangeError('unsupported simulatorVersion.');
+  if (ticket.balanceVersion !== 2) throw new RangeError('unsupported balanceVersion.');
   if (typeof ticket.issuedAtUtc !== 'string' || !ticket.issuedAtUtc) throw new TypeError('issuedAtUtc must be a non-empty string.');
   if (ticket.timeLimitMs !== 60000) throw new RangeError('timeLimitMs must be exactly 60000.');
 }

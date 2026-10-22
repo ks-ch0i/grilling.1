@@ -34,7 +34,7 @@ test('submitPvpResult replays contact combat and updates both ratings transactio
   const repository = createPvpRepository();
   const row = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat });
   const dependencies = createPvpDependencies(repository);
-  const { inputs, replay } = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 1, issuedAtUtc: row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
+  const { inputs, replay } = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   const { submitPvpResult } = await loadPvpResultService();
   const result = await submitPvpResult({}, identityA, MATCH_A, { inputs }, new Date('2026-10-21T02:01:00.000Z'), dependencies);
 
@@ -52,7 +52,7 @@ test('issued match replay uses the frozen opponent snapshot after a later public
   const repository = createPvpRepository();
   const row = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat });
   const dependencies = createPvpDependencies(repository);
-  const trace = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 1, issuedAtUtc: row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
+  const trace = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   repository.snapshotRows.set(PLAYER_B, {
     PlayerId: PLAYER_B,
     Revision: 2,
@@ -70,7 +70,7 @@ test('draws consume the daily pair result without changing either Elo rating', a
   const repository = createPvpRepository();
   const row = seedIssuedMatch(repository, { playerSnapshot: neutralCombat, opponentSnapshot: neutralCombat });
   const dependencies = createPvpDependencies(repository);
-  const { inputs, replay } = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 1, issuedAtUtc: row.IssuedAtUtc.toISOString() }, neutralCombat, neutralCombat);
+  const { inputs, replay } = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: row.IssuedAtUtc.toISOString() }, neutralCombat, neutralCombat);
   const { submitPvpResult } = await loadPvpResultService();
   const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), dependencies);
 
@@ -85,7 +85,7 @@ test('same-day pair guard makes later results unrated and completed payloads ide
   const repository = createPvpRepository();
   const firstRow = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat });
   const dependencies = createPvpDependencies(repository);
-  const trace = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 1, issuedAtUtc: firstRow.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
+  const trace = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: firstRow.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   const { submitPvpResult } = await loadPvpResultService();
   const first = await submitPvpResult({}, identityA, MATCH_A, { inputs: trace.inputs }, new Date('2026-10-21T02:01:00.000Z'), dependencies);
   const retry = await submitPvpResult({}, identityA, MATCH_A, { inputs: trace.inputs }, new Date('2026-10-21T02:11:00.000Z'), dependencies);
@@ -111,7 +111,7 @@ test('a top-board publish failure does not suppress the player rank event', asyn
     publishMatchCompleted:async () => { throw new Error('group publish unavailable'); },
     publishPlayerRankChanged:async (event) => playerEvents.push(event),
   });
-  const trace = makePvpInputs({ matchId:MATCH_A, seed:123456, simulatorVersion:1, issuedAtUtc:row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
+  const trace = makePvpInputs({ matchId:MATCH_A, seed:123456, simulatorVersion:2, balanceVersion:2, issuedAtUtc:row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   const { submitPvpResult } = await loadPvpResultService();
 
   const result = await submitPvpResult({}, identityA, MATCH_A, { inputs:trace.inputs }, new Date('2026-10-21T02:01:00.000Z'), dependencies);
@@ -135,4 +135,48 @@ test('match ownership, expiry and client-supplied result claims are rejected', a
   assert.equal(foreign.status, 404);
   assert.equal(expired.status, 410);
   assert.equal(spoofed.status, 400);
+});
+
+test('a v1 issued match is expired without changing either Elo rating', async () => {
+  const repository = createPvpRepository();
+  const row = seedIssuedMatch(repository, { simulatorVersion: 1, balanceVersion: 1 });
+  const beforeRatings = structuredClone([...repository.ratingRows.entries()]);
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), createPvpDependencies(repository));
+
+  assert.equal(result.status, 409);
+  assert.equal(result.code, 'unsupported-simulator-version');
+  assert.equal(repository.matches.get(MATCH_A).Status, 'expired');
+  assert.equal(repository.calls.expired.length, 1);
+  assert.equal(repository.calls.completes.length, 0);
+  assert.deepEqual([...repository.ratingRows.entries()], beforeRatings);
+  assert.equal(repository.ratedPairs.size, 0);
+});
+
+test('a completed v1 match is not replayed or rewritten by the v2 result service', async () => {
+  const repository = createPvpRepository();
+  const row = seedIssuedMatch(repository, { simulatorVersion: 1, balanceVersion: 1 });
+  Object.assign(row, {
+    Status: 'completed',
+    InputJson: '[]',
+    Outcome: 'win',
+    RatingBefore1: 1000,
+    RatingBefore2: 1000,
+    RatingAfter1: 1016,
+    RatingAfter2: 984,
+    CompletedAtUtc: new Date('2026-10-21T02:01:00.000Z'),
+    Rated: true,
+  });
+  const before = structuredClone(row);
+  const beforeRatings = structuredClone([...repository.ratingRows.entries()]);
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:02:00.000Z'), createPvpDependencies(repository));
+
+  assert.equal(result.status, 409);
+  assert.equal(result.code, 'unsupported-simulator-version');
+  assert.deepEqual(repository.matches.get(MATCH_A), before);
+  assert.deepEqual([...repository.ratingRows.entries()], beforeRatings);
+  assert.equal(repository.calls.completes.length, 0);
 });

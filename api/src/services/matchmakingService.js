@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as pvpRepository from '../repositories/pvpRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
-import { PVP_SIMULATOR_VERSION } from '../domain/gameVersions.js';
+import { BALANCE_VERSION, PVP_SIMULATOR_VERSION } from '../domain/gameVersions.js';
 import {
   MATCH_TIME_LIMIT_MS,
   MATCH_TTL_MS,
@@ -50,6 +50,7 @@ function ticketFromRow(row, opponentDisplayName) {
     matchId: row.MatchId,
     seed: Number(row.Seed),
     simulatorVersion: Number(row.SimulatorVersion),
+    balanceVersion: Number(row.BalanceVersion),
     issuedAtUtc: asDate(row.IssuedAtUtc).toISOString(),
     expiresAtUtc: asDate(row.ExpiresAtUtc).toISOString(),
     timeLimitMs: MATCH_TIME_LIMIT_MS,
@@ -76,7 +77,8 @@ export async function findOpponent(pool, identity, body, dependencies) {
 
   const playerId = await deps.repository.findPlayerIdByIdentity(pool, identity);
   if (!playerId) return { status: 404, code: 'save-not-found' };
-  if (!await deps.repository.getPlayerSnapshot(pool, playerId)) {
+  const initialSnapshot = await deps.repository.getPlayerSnapshot(pool, playerId);
+  if (!initialSnapshot || Number(initialSnapshot.BalanceVersion) !== BALANCE_VERSION) {
     return { status: 409, code: 'snapshot-required' };
   }
   const startedAt = asDate(deps.clock());
@@ -93,10 +95,12 @@ export async function findOpponent(pool, identity, body, dependencies) {
       playerRating,
       window,
       nowUtc: issuedAtUtc,
+      simulatorVersion: PVP_SIMULATOR_VERSION,
+      balanceVersion: BALANCE_VERSION,
     });
     if (candidate) {
       const ownSnapshot = await deps.repository.getPlayerSnapshot(pool, playerId);
-      if (!ownSnapshot) return { status: 409, code: 'snapshot-required' };
+      if (!ownSnapshot || Number(ownSnapshot.BalanceVersion) !== BALANCE_VERSION) return { status: 409, code: 'snapshot-required' };
       const matchId = deps.createMatchId();
       const seed = deps.createSeed();
       if (!Number.isInteger(seed) || seed < 1 || seed > 0xffffffff) throw new TypeError('PvP seed factory returned an invalid value.');
@@ -110,6 +114,7 @@ export async function findOpponent(pool, identity, body, dependencies) {
         window,
         seed,
         simulatorVersion: PVP_SIMULATOR_VERSION,
+        balanceVersion: BALANCE_VERSION,
         issuedAtUtc,
         expiresAtUtc,
       }));

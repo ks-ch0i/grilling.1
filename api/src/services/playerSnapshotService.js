@@ -3,6 +3,7 @@ import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as pvpRepository from '../repositories/pvpRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
 import { parseCloudSave } from '../domain/cloudSave.js';
+import { BALANCE_VERSION } from '../domain/gameVersions.js';
 import {
   buildSnapshotContent,
   PvpValidationError,
@@ -70,7 +71,7 @@ export async function publishSnapshot(pool, identity, body, dependencies) {
       equipment: current.equipment,
       combat: current.combat,
     };
-    if (currentContent && contentHash(currentContent) === contentHash(content)) {
+    if (currentContent && Number(currentRow.BalanceVersion) === BALANCE_VERSION && contentHash(currentContent) === contentHash(content)) {
       return { kind: 'unchanged', snapshot: current };
     }
 
@@ -86,6 +87,7 @@ export async function publishSnapshot(pool, identity, body, dependencies) {
         revision: snapshot.revision,
         snapshotJson: JSON.stringify(snapshot),
         updatedAtUtc: publishedAtUtc,
+        balanceVersion: BALANCE_VERSION,
       });
     } else {
       const result = await deps.repository.publishSnapshot(transaction, {
@@ -93,6 +95,7 @@ export async function publishSnapshot(pool, identity, body, dependencies) {
         expectedSaveRevision: request.expectedSaveRevision,
         contentJson: stableStringify(content),
         publishedAtUtc,
+        balanceVersion: BALANCE_VERSION,
       });
       if (result.kind === 'revision-mismatch') return result;
       if (result.kind === 'unchanged') return { kind: 'unchanged', snapshot: fromRow(result.row) };

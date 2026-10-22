@@ -25,8 +25,24 @@ test('publishSnapshot derives the public snapshot from the matching cloud save r
   assert.equal(result.snapshot.revision, 1);
   assert.equal(result.snapshot.character.level, 1);
   assert.ok(result.snapshot.combat.maxHp > 0);
+  assert.equal(repository.snapshotRows.get(PLAYER_A).BalanceVersion, 2);
+  assert.equal(repository.calls.snapshotWrites[0].balanceVersion, 2);
   assert.equal(Object.hasOwn(result.snapshot, 'playerId'), false);
   assert.equal(repository.calls.published.length, 1);
+});
+
+test('publishing unchanged combat content upgrades an existing v1 snapshot to balance version 2', async () => {
+  const repository = createPvpRepository();
+  repository.snapshotRows.get(PLAYER_A).BalanceVersion = 1;
+  const { publishSnapshot } = await loadSnapshotService();
+
+  const result = await publishSnapshot({}, identityA, { expectedSaveRevision: 7 }, createPvpDependencies(repository));
+
+  assert.equal(result.status, 200);
+  assert.equal(result.changed, true);
+  assert.equal(result.snapshot.revision, 2);
+  assert.equal(repository.snapshotRows.get(PLAYER_A).BalanceVersion, 2);
+  assert.equal(repository.calls.snapshotWrites[0].balanceVersion, 2);
 });
 
 test('publishSnapshot derives its snapshot from a legacy v1 cloud save', async () => {

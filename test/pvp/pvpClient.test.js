@@ -6,7 +6,7 @@ import { buildPvpSnapshotContent, createPvpClient, stableStringify } from '../..
 const account = { tenantId:'11111111-1111-4111-8111-111111111111', localAccountId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
 const now = () => new Date('2026-10-21T00:00:00.000Z');
 const ticket = {
-  matchId:'11111111-1111-4111-8111-111111111111', seed:23, simulatorVersion:1,
+  matchId:'11111111-1111-4111-8111-111111111111', seed:23, simulatorVersion:2, balanceVersion:2,
   issuedAtUtc:'2026-10-21T00:00:00.000Z', expiresAtUtc:'2026-10-21T00:05:00.000Z', timeLimitMs:60_000,
   playerSnapshot:{ character:{level:1}, equipment:{}, combat:{} },
   opponentSnapshot:{ character:{level:1}, equipment:{}, combat:{} },
@@ -69,6 +69,21 @@ test('match search syncs and refreshes cloud save, publishes its snapshot, then 
   assert.deepEqual(calls.map(([name]) => name), ['sync', 'refresh', 'publish', 'search']);
   assert.deepEqual(calls.at(-1)[1], {});
   assert.deepEqual(calls.find(([name]) => name === 'publish')[1], { expectedSaveRevision:4 });
+});
+
+test('match search accepts v2 tickets and rejects legacy simulator or balance versions', async (t) => {
+  for (const [name, overrides] of [
+    ['v2 ticket', { ...ticket }],
+    ['legacy simulator ticket', { ...ticket, simulatorVersion:1 }],
+    ['legacy balance ticket', { ...ticket, balanceVersion:1 }],
+  ]) {
+    await t.test(name, async () => {
+      const harness = makeClient({ search:async () => ({ status:201, ticket:overrides }) });
+      const result = await harness.client.findMatch();
+      assert.equal(result.ok, name === 'v2 ticket');
+      if (name === 'v2 ticket') assert.equal(result.ticket.balanceVersion, 2);
+    });
+  }
 });
 
 test('XP and material changes do not publish a new PvP snapshot, while combat content changes do', async () => {

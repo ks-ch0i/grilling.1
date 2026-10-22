@@ -426,7 +426,8 @@ test('a PvP replay uses a fixed opponent and resolves a body-contact win', async
   const ticket = {
     matchId: 'golden-pvp-1',
     seed: 987654321,
-    simulatorVersion: 1,
+    simulatorVersion: 2,
+    balanceVersion: 2,
     issuedAtUtc: '2026-10-21T00:00:00.000Z',
     timeLimitMs: 60000,
   };
@@ -458,7 +459,8 @@ test('a PvP timeout compares exact remaining HP percentages and permits a draw',
   const ticket = {
     matchId: 'golden-pvp-timeout',
     seed: 1,
-    simulatorVersion: 1,
+    simulatorVersion: 2,
+    balanceVersion: 2,
     issuedAtUtc: '2026-10-21T00:00:00.000Z',
     timeLimitMs: 60000,
   };
@@ -472,6 +474,18 @@ test('a PvP timeout compares exact remaining HP percentages and permits a draw',
   assert.equal(loss.opponentHpPercent, 0.8);
   assert.equal(loss.outcome, 'loss');
   assert.equal(draw.outcome, 'draw');
+});
+
+test('PvP simulation accepts only the current simulator and balance versions', async () => {
+  const { createPvpRun } = await loadRules();
+  const ticket = {
+    matchId: 'versioned-pvp', seed: 123, simulatorVersion: 2, balanceVersion: 2,
+    issuedAtUtc: '2026-10-21T00:00:00.000Z', timeLimitMs: 60000,
+  };
+
+  assert.doesNotThrow(() => createPvpRun(ticket, player(), player()));
+  assert.throws(() => createPvpRun({ ...ticket, simulatorVersion: 1 }, player(), player()), /unsupported simulatorVersion/i);
+  assert.throws(() => createPvpRun({ ...ticket, balanceVersion: 1 }, player(), player()), /unsupported balanceVersion/i);
 });
 
 test('the replay modules do not depend on Phaser, DOM, wall clock or ambient randomness', async () => {

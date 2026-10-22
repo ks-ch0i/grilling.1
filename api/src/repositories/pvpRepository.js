@@ -6,7 +6,7 @@ function requestFor(connection) {
 }
 
 const MATCH_COLUMNS = `MatchId, Player1Id, Player2Id, Player1SnapshotRevision, Player2SnapshotRevision,
-  Player1SnapshotJson, Player2SnapshotJson, Seed, SimulatorVersion, InputJson, Outcome,
+  Player1SnapshotJson, Player2SnapshotJson, Seed, SimulatorVersion, BalanceVersion, InputJson, Outcome,
   RatingBefore1, RatingBefore2, RatingAfter1, RatingAfter2, IssuedAtUtc, ExpiresAtUtc,
   CompletedAtUtc, Status`;
 const MATCH_OUTPUT_COLUMNS = MATCH_COLUMNS.split(',').map((column) => `inserted.${column.trim()}`).join(', ');
@@ -14,7 +14,7 @@ const MATCH_OUTPUT_COLUMNS = MATCH_COLUMNS.split(',').map((column) => `inserted.
 export async function getPlayerSnapshot(connection, playerId, { lock = false } = {}) {
   const request = requestFor(connection).input('PlayerId', sql.UniqueIdentifier, playerId);
   const result = await request.query(`
-    SELECT PlayerId, Revision, SnapshotJson, UpdatedAtUtc
+    SELECT PlayerId, Revision, SnapshotJson, BalanceVersion, UpdatedAtUtc
     FROM dbo.PlayerSnapshots${lock ? ' WITH (UPDLOCK, HOLDLOCK)' : ''}
     WHERE PlayerId = @PlayerId;
   `);
@@ -37,20 +37,21 @@ export async function savePlayerSnapshot(transaction, input) {
     .input('PlayerId', sql.UniqueIdentifier, input.playerId)
     .input('Revision', sql.BigInt, input.revision)
     .input('SnapshotJson', sql.NVarChar(sql.MAX), input.snapshotJson)
+    .input('BalanceVersion', sql.Int, input.balanceVersion)
     .input('UpdatedAtUtc', sql.DateTime2, input.updatedAtUtc)
     .query(`
       IF EXISTS (SELECT 1 FROM dbo.PlayerSnapshots WHERE PlayerId = @PlayerId)
       BEGIN
         UPDATE dbo.PlayerSnapshots
-        SET Revision = @Revision, SnapshotJson = @SnapshotJson, UpdatedAtUtc = @UpdatedAtUtc
-        OUTPUT inserted.PlayerId, inserted.Revision, inserted.SnapshotJson, inserted.UpdatedAtUtc
+        SET Revision = @Revision, SnapshotJson = @SnapshotJson, BalanceVersion = @BalanceVersion, UpdatedAtUtc = @UpdatedAtUtc
+        OUTPUT inserted.PlayerId, inserted.Revision, inserted.SnapshotJson, inserted.BalanceVersion, inserted.UpdatedAtUtc
         WHERE PlayerId = @PlayerId;
       END
       ELSE
       BEGIN
-        INSERT dbo.PlayerSnapshots (PlayerId, Revision, SnapshotJson, UpdatedAtUtc)
-        OUTPUT inserted.PlayerId, inserted.Revision, inserted.SnapshotJson, inserted.UpdatedAtUtc
-        VALUES (@PlayerId, @Revision, @SnapshotJson, @UpdatedAtUtc);
+        INSERT dbo.PlayerSnapshots (PlayerId, Revision, SnapshotJson, BalanceVersion, UpdatedAtUtc)
+        OUTPUT inserted.PlayerId, inserted.Revision, inserted.SnapshotJson, inserted.BalanceVersion, inserted.UpdatedAtUtc
+        VALUES (@PlayerId, @Revision, @SnapshotJson, @BalanceVersion, @UpdatedAtUtc);
       END;
     `);
   return result.recordset?.[0] ?? null;
@@ -90,6 +91,8 @@ export async function findOpponentCandidate(pool, input) {
     .input('MinRating', sql.Int, input.playerRating - input.window)
     .input('MaxRating', sql.Int, input.playerRating + input.window)
     .input('NowUtc', sql.DateTime2, input.nowUtc)
+    .input('SimulatorVersion', sql.Int, input.simulatorVersion)
+    .input('BalanceVersion', sql.Int, input.balanceVersion)
     .query(`
       SELECT TOP (1)
         p.PlayerId,
@@ -102,6 +105,7 @@ export async function findOpponentCandidate(pool, input) {
       LEFT JOIN dbo.PvpRatings AS r ON r.PlayerId = p.PlayerId
       WHERE p.PlayerId <> @PlayerId
         AND COALESCE(r.Rating, 1000) BETWEEN @MinRating AND @MaxRating
+        AND ps.BalanceVersion = @BalanceVersion
         AND NOT EXISTS (
           SELECT 1 FROM dbo.PvpRatedPairDays AS pd
           WHERE pd.MatchDateUtc = CONVERT(date, @NowUtc)
@@ -111,6 +115,7 @@ export async function findOpponentCandidate(pool, input) {
         AND NOT EXISTS (
           SELECT 1 FROM dbo.PvpMatches AS m
           WHERE m.Status = N'issued' AND m.ExpiresAtUtc > @NowUtc
+            AND m.SimulatorVersion = @SimulatorVersion AND m.BalanceVersion = @BalanceVersion
             AND (m.Player1Id = p.PlayerId OR m.Player2Id = p.PlayerId
               OR m.Player1Id = @PlayerId OR m.Player2Id = @PlayerId)
         )
@@ -150,7 +155,7 @@ export async function createMatch(transaction, input) {
     .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
     .input('Player2Id', sql.UniqueIdentifier, input.player2Id)
     .query(`
-      SELECT PlayerId, Revision, SnapshotJson
+      SELECT PlayerId, Revision, SnapshotJson, BalanceVersion
       FROM dbo.PlayerSnapshots WITH (UPDLOCK, HOLDLOCK)
       WHERE PlayerId IN (@Player1Id, @Player2Id);
     `);
@@ -159,9 +164,24 @@ export async function createMatch(transaction, input) {
   const player2Snapshot = snapshotById.get(input.player2Id);
   if (!player1Snapshot || !player2Snapshot ||
       Number(player1Snapshot.Revision) !== input.player1SnapshotRevision ||
-      Number(player2Snapshot.Revision) !== input.player2SnapshotRevision) {
+      Number(player2Snapshot.Revision) !== input.player2SnapshotRevision ||
+      Number(player1Snapshot.BalanceVersion) !== input.balanceVersion ||
+      Number(player2Snapshot.BalanceVersion) !== input.balanceVersion) {
     return { kind: 'snapshot-changed' };
   }
+
+  await new sql.Request(transaction)
+    .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
+    .input('Player2Id', sql.UniqueIdentifier, input.player2Id)
+    .input('NowUtc', sql.DateTime2, input.issuedAtUtc)
+    .input('SimulatorVersion', sql.Int, input.simulatorVersion)
+    .input('BalanceVersion', sql.Int, input.balanceVersion)
+    .query(`
+      UPDATE dbo.PvpMatches SET Status = N'expired'
+      WHERE Status = N'issued'
+        AND (ExpiresAtUtc <= @NowUtc OR SimulatorVersion <> @SimulatorVersion OR BalanceVersion <> @BalanceVersion)
+        AND (Player1Id IN (@Player1Id, @Player2Id) OR Player2Id IN (@Player1Id, @Player2Id));
+    `);
 
   const rating1 = await ensureRating(transaction, input.player1Id, input.issuedAtUtc);
   const rating2 = await ensureRating(transaction, input.player2Id, input.issuedAtUtc);
@@ -185,10 +205,13 @@ export async function createMatch(transaction, input) {
     .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
     .input('Player2Id', sql.UniqueIdentifier, input.player2Id)
     .input('NowUtc', sql.DateTime2, input.issuedAtUtc)
+    .input('SimulatorVersion', sql.Int, input.simulatorVersion)
+    .input('BalanceVersion', sql.Int, input.balanceVersion)
     .query(`
       SELECT TOP (1) MatchId
       FROM dbo.PvpMatches WITH (UPDLOCK, HOLDLOCK)
       WHERE Status = N'issued' AND ExpiresAtUtc > @NowUtc
+        AND SimulatorVersion = @SimulatorVersion AND BalanceVersion = @BalanceVersion
         AND (Player1Id IN (@Player1Id, @Player2Id) OR Player2Id IN (@Player1Id, @Player2Id));
     `);
   if (active.recordset?.[0]) return { kind: 'active-match' };
@@ -203,6 +226,7 @@ export async function createMatch(transaction, input) {
     .input('Player2SnapshotJson', sql.NVarChar(sql.MAX), player2Snapshot.SnapshotJson)
     .input('Seed', sql.BigInt, input.seed)
     .input('SimulatorVersion', sql.Int, input.simulatorVersion)
+    .input('BalanceVersion', sql.Int, input.balanceVersion)
     .input('RatingBefore1', sql.Int, rating1)
     .input('RatingBefore2', sql.Int, rating2)
     .input('IssuedAtUtc', sql.DateTime2, input.issuedAtUtc)
@@ -210,12 +234,12 @@ export async function createMatch(transaction, input) {
     .query(`
       INSERT dbo.PvpMatches
         (MatchId, Player1Id, Player2Id, Player1SnapshotRevision, Player2SnapshotRevision,
-         Player1SnapshotJson, Player2SnapshotJson, Seed, SimulatorVersion,
+         Player1SnapshotJson, Player2SnapshotJson, Seed, SimulatorVersion, BalanceVersion,
          RatingBefore1, RatingBefore2, IssuedAtUtc, ExpiresAtUtc, Status)
       OUTPUT ${MATCH_OUTPUT_COLUMNS}
       VALUES
         (@MatchId, @Player1Id, @Player2Id, @Player1SnapshotRevision, @Player2SnapshotRevision,
-         @Player1SnapshotJson, @Player2SnapshotJson, @Seed, @SimulatorVersion,
+         @Player1SnapshotJson, @Player2SnapshotJson, @Seed, @SimulatorVersion, @BalanceVersion,
          @RatingBefore1, @RatingBefore2, @IssuedAtUtc, @ExpiresAtUtc, N'issued');
     `);
   return { kind: 'created', row: result.recordset?.[0] ?? null };

@@ -2,7 +2,7 @@ import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as pvpRepository from '../repositories/pvpRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
 import { replayPvpRun } from '@knight-run/game-rules/simulation';
-import { PVP_SIMULATOR_VERSION } from '../domain/gameVersions.js';
+import { BALANCE_VERSION, PVP_SIMULATOR_VERSION } from '../domain/gameVersions.js';
 import {
   MATCH_TIME_LIMIT_MS,
   PvpValidationError,
@@ -70,7 +70,12 @@ export async function submitPvpResult(pool, identity, matchId, body, receivedAtU
     await deps.withTransaction(pool, (transaction) => deps.repository.expireMatch(transaction, playerId, matchId));
     return { status: 410, code: 'match-expired' };
   }
-  if (Number(row.SimulatorVersion) !== PVP_SIMULATOR_VERSION) return { status: 409, code: 'unsupported-simulator-version' };
+  if (Number(row.SimulatorVersion) !== PVP_SIMULATOR_VERSION || Number(row.BalanceVersion) !== BALANCE_VERSION) {
+    if (row.Status === 'issued') {
+      await deps.withTransaction(pool, (transaction) => deps.repository.expireMatch(transaction, playerId, matchId));
+    }
+    return { status: 409, code: 'unsupported-simulator-version' };
+  }
 
   const playerSnapshot = parseJson(row.Player1SnapshotJson);
   const opponentSnapshot = parseJson(row.Player2SnapshotJson);
@@ -78,6 +83,7 @@ export async function submitPvpResult(pool, identity, matchId, body, receivedAtU
     matchId: row.MatchId,
     seed: Number(row.Seed),
     simulatorVersion: Number(row.SimulatorVersion),
+    balanceVersion: Number(row.BalanceVersion),
     issuedAtUtc: asDate(row.IssuedAtUtc).toISOString(),
     timeLimitMs: MATCH_TIME_LIMIT_MS,
   };

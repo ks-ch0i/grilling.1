@@ -24,7 +24,7 @@
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
 | P01 | `done` | 공유 밸런스, v2 저장·이행, 캐릭터/장비/스테이지 게임플레이 | [P01](../phases/2026-10-22-character-gear-balance/P01-gameplay-and-save/phase.md) |
-| P02 | `in_progress` | 클라우드 저장 및 스테이지 랭킹·PvP 버전 호환 | [P02](../phases/2026-10-22-character-gear-balance/P02-online-compatibility/phase.md) |
+| P02 | `done` | 클라우드 저장 및 스테이지 랭킹·PvP 버전 호환 | [P02](../phases/2026-10-22-character-gear-balance/P02-online-compatibility/phase.md) |
 
 ## Out of Scope
 - Azure 배포, 리소스 생성, 배포용 what-if.
