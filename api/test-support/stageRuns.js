@@ -63,7 +63,7 @@ function makeTicketRow(input) {
 
 export function createStageRepository({ revision = 7, state = makeSaveState(), existingTicket = null } = {}) {
   const saves = new Map([[PLAYER_ID, {
-    SchemaVersion: 1,
+    SchemaVersion: 2,
     Revision: revision,
     SaveJson: JSON.stringify(state),
     UpdatedAtUtc: new Date('2026-10-21T01:00:00.000Z'),

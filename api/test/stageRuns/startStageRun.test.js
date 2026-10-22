@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   createStageDependencies, createStageRepository, identityA, PLAYER_ID,
 } from '../../test-support/stageRuns.js';
+import { toLegacyV1Save } from '../../test-support/saveStateFixtures.js';
 
 async function loadStageRunService() {
   try {
@@ -38,6 +39,28 @@ test('startStageRun issues an immutable seeded ticket from the matching cloud re
   }, { level: 1, xp: 0, xpToNext: 100, pendingLevelUps: 0, replayXpMultiplier: 1 });
   assert.equal(repository.calls.createTicket[0].playerId, PLAYER_ID);
   assert.equal(repository.calls.createTicket[0].expectedSaveRevision, 7);
+});
+
+test('startStageRun derives its snapshot from a legacy v1 cloud save', async () => {
+  const repository = createStageRepository();
+  const row = repository.saves.get(PLAYER_ID);
+  const legacyState = toLegacyV1Save(JSON.parse(row.SaveJson));
+  legacyState.player.baseStats.attack = 9999;
+  repository.saves.set(PLAYER_ID, {
+    ...row,
+    SchemaVersion: 1,
+    SaveJson: JSON.stringify(legacyState),
+  });
+  const { startStageRun } = await loadStageRunService();
+  const result = await startStageRun({}, identityA, {
+    chapter: 1, stage: 1, expectedSaveRevision: 7,
+  }, createStageDependencies(repository));
+
+  assert.equal(result.status, 201);
+  assert.equal(result.ticket.playerSnapshot.level, 1);
+  assert.ok(result.ticket.playerSnapshot.attack < 9999);
+  assert.ok(result.ticket.playerSnapshot.maxHp > 0);
+  assert.equal(repository.saves.get(PLAYER_ID).SchemaVersion, 1);
 });
 
 test('startStageRun rejects stale revisions, locked stages and invalid requests before inserting a ticket', async () => {

@@ -91,7 +91,7 @@ export function createPvpRepository({
   const saves = new Map();
   for (const [playerId, state] of [[PLAYER_A, makeSaveState()], [PLAYER_B, makeSaveState()], [PLAYER_C, makeSaveState()]]) {
     saves.set(playerId, {
-      SchemaVersion: 1,
+      SchemaVersion: 2,
       Revision: 7,
       SaveJson: JSON.stringify(state),
       UpdatedAtUtc: new Date('2026-10-21T01:00:00.000Z'),

@@ -1,6 +1,6 @@
 # Task: T06 클라우드 저장 v1 읽기 이행과 v2 쓰기
 
-## Status: pending
+## Status: done
 
 ## Goal
 API가 저장된 v1 클라우드를 새 규칙의 schemaVersion2 상태로 읽어 반환하고, 이후의 새/갱신 요청은 v2만 저장하도록 한다. GET 요청 자체는 DB를 바꾸지 않는다.
@@ -41,6 +41,7 @@ API가 저장된 v1 클라우드를 새 규칙의 schemaVersion2 상태로 읽�
   - api/test/cloudSave/cloudSaveService.test.js :: v1 GET conversion, v2 validation, v1 write rejection; modify.
   - api/test/cloudSave/cloudSaveFunction.test.js :: route status/body contract; modify.
   - api/test/stageRuns/startStageRun.test.js :: v1 cloud row fixture migration when building current combat snapshot; modify only if fixture contract changes.
+  - api/test/pvp/playerSnapshotService.test.js :: legacy cloud row snapshot migration; modify only if fixture contract changes.
   - test/api/cloudSaveClient.test.js :: outgoing schemaVersion2; modify.
 
 #### Details
@@ -49,15 +50,19 @@ API가 저장된 v1 클라우드를 새 규칙의 schemaVersion2 상태로 읽�
 - Verify revision conflicts and If-None-Match behavior do not change.
 
 ## Acceptance Criteria
-- [ ] v1 cloud data is readable through the shared deterministic migration and is not modified by GET.
-- [ ] API and browser client only write schemaVersion2.
-- [ ] Old v1 clients cannot overwrite a v2 cloud state.
-- [ ] Existing optimistic concurrency and player snapshot consumers still work.
+- [x] v1 cloud data is readable through the shared deterministic migration and is not modified by GET.
+- [x] API and browser client only write schemaVersion2.
+- [x] Old v1 clients cannot overwrite a v2 cloud state.
+- [x] Existing optimistic concurrency and player snapshot consumers still work.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
 - npm --prefix api test — 모든 API 저장/인증/회귀 테스트가 통과해야 한다.
 - node --test test/api/cloudSaveClient.test.js — 브라우저가 schemaVersion2를 전송하는지 확인한다.
+- Node.js 22.12.0 `npm --prefix api test`: 69/69 통과.
+- Node.js 22.12.0 `node --test test/api/cloudSaveClient.test.js`: 7/7 통과.
+- Node.js 22.12.0 Vite production build 통과. 기존 500 kB chunk 경고가 남아 있다.
+- `git diff --check`: 통과.
 
 ## Commit Message
 ~~~text
@@ -72,6 +77,7 @@ Task: T06-cloud-save-v2
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- 비판적 리뷰에서 package export 사용과 브라우저 중첩 state 버전 검사를 요구해 반영했다. 재검토에서 추가 Critical/Important 지적이 없었다.
+- commit: 지정 T06 커밋 메시지 사용.

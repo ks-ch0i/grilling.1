@@ -7,7 +7,7 @@
 [P02 온라인 버전 호환](./phases/2026-10-22-character-gear-balance/P02-online-compatibility/phase.md)
 
 ## Active Task
-[T06 클라우드 저장 v1 읽기 이행과 v2 쓰기](./phases/2026-10-22-character-gear-balance/P02-online-compatibility/T06-cloud-save-v2.md)
+[T07 스테이지 랭킹 simulator/balance v2](./phases/2026-10-22-character-gear-balance/P02-online-compatibility/T07-ranked-stage-v2.md)
 
 ## Status
 - 계획 생성: 2026-10-22. 기준 결정은 .memory/decisions/2026-10-22-character-gear-balance.md다.
@@ -17,8 +17,10 @@
 - P01-T03 비판적 리뷰에서 stage ticket simulatorVersion 검증이 아직 1인 통합 항목을 찾았다. P02-T07에서 rankedRunClient.js와 game-rules simulation의 stage ticket guard를 v2로 갱신하고, PvP의 별도 v1 guard는 유지한다.
 - P01-T04 강화 실패/파괴/대성공을 구현하고 비판적 리뷰에서 발견한 최대 HP gear 파괴 후 HP 상한 초과 문제를 수정했다. 지정 테스트 15/15, Node 22 빌드 통과.
 - P01-T05 리뷰에서 상호 처치 골드 누락, overflow 복구 경로, Scene 재시작 상태와 적 수 재추첨을 찾아 수정했다. 골드 복구는 사용자가 정확한 차감량 또는 0 초기화를 확인해야 한다.
-- 마지막 전체 스위트 실행은 T04 시점 169개 중 157개 통과/12개 실패였다. 실패 fixture는 P02-T06~T07에서 새 v2 계약에 맞춰 갱신한다. T05 검증은 지정 28개 테스트와 production build다.
-- 다음 실행 항목은 P02-T06 클라우드 저장의 v1 읽기 이행 및 v2 쓰기다.
+- P02-T06 클라우드 저장 호환을 완료했다. API는 v1 row를 공유 migration으로 v2 envelope로 읽고 원본 revision/timestamp를 보존하며, API/브라우저 쓰기는 v2만 허용한다. 비판적 리뷰에서 지적한 패키지 import와 클라이언트 state version 검사를 수정했다.
+- P02-T06 Node.js 22.12.0 API 회귀 69/69, browser client 7/7 및 Vite production build 통과. build에는 기존 500 kB chunk 경고가 남아 있다.
+- T04 당시 루트 전체 스위트는 169개 중 157개 통과/12개 실패였다. P02-T06 API 회귀는 Node.js 22.12.0에서 69/69로 통과했고 v1/v2 fixture를 갱신했다. 전체 루트 스위트는 아직 다시 실행하지 않았으며, T07의 스테이지 버전 변경 뒤 재검증한다.
+- 다음 실행 항목은 P02-T07 스테이지 랭킹 simulator/balance v2 및 과거 기록 보존이다.
 - 이전 작업공간의 .agents/, .codeburn/, AGENTS.md, CODEBURN-SETUP.md, README.md, examples/ 미추적 파일은 변경하지 않았다.
 
 ## Deferred Plan
@@ -28,4 +30,4 @@
 - 재개 조건: 구체적인 배포 계획과 대상 구독/리소스 그룹이 정해졌을 때 T10 what-if을 수행한다. 실제 Azure 배포는 별도 명시적 진행 지시와 비용 확인이 필요하다.
 
 ## Next Step (IMPORTANT)
-P02-T06 청사진을 읽고 v1 클라우드 저장의 결정적 읽기 이행, v2 쓰기 강제, 브라우저 저장 요청을 구현한다.
+P02-T07 청사진을 읽고 신규 stage ticket과 result validation을 simulatorVersion/balanceVersion 2로 갱신하고 과거 v1 기록을 보존한다.

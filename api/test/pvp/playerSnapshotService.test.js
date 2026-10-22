@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   createPvpDependencies, createPvpRepository, identityA, PLAYER_A,
 } from '../../test-support/pvp.js';
+import { toLegacyV1Save } from '../../test-support/saveStateFixtures.js';
 
 async function loadSnapshotService() {
   try {
@@ -26,6 +27,26 @@ test('publishSnapshot derives the public snapshot from the matching cloud save r
   assert.ok(result.snapshot.combat.maxHp > 0);
   assert.equal(Object.hasOwn(result.snapshot, 'playerId'), false);
   assert.equal(repository.calls.published.length, 1);
+});
+
+test('publishSnapshot derives its snapshot from a legacy v1 cloud save', async () => {
+  const repository = createPvpRepository({ snapshots: { [PLAYER_A]: null } });
+  const row = repository.saves.get(PLAYER_A);
+  const legacyState = toLegacyV1Save(JSON.parse(row.SaveJson));
+  legacyState.player.baseStats.attack = 9999;
+  repository.saves.set(PLAYER_A, {
+    ...row,
+    SchemaVersion: 1,
+    SaveJson: JSON.stringify(legacyState),
+  });
+  const { publishSnapshot } = await loadSnapshotService();
+  const result = await publishSnapshot({}, identityA, { expectedSaveRevision: 7 }, createPvpDependencies(repository));
+
+  assert.equal(result.status, 200);
+  assert.equal(result.snapshot.character.level, 1);
+  assert.notEqual(result.snapshot.character.baseStats.attack, 9999);
+  assert.ok(result.snapshot.combat.maxHp > 0);
+  assert.equal(repository.saves.get(PLAYER_A).SchemaVersion, 1);
 });
 
 test('snapshot revision changes only when canonical character, equipment or combat changes', async () => {

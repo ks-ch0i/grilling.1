@@ -1,4 +1,5 @@
 import { BALANCE, GEAR_SLOT, RARITY } from '@knight-run/game-rules/balance';
+import { migrateGameState } from '@knight-run/game-rules/save';
 
 export const MAX_CLOUD_SAVE_BYTES = 256 * 1024;
 
@@ -48,11 +49,11 @@ function copyGearItem(item, expectedSlot) {
   if (!isPlainObject(item) || typeof item.id !== 'string' || item.slot !== expectedSlot ||
       !RARITIES.has(item.rarity) || !Number.isInteger(item.level) || item.level < 1 ||
       item.level > BALANCE.gearMaxLevel || !isPlainObject(item.stats) || !Array.isArray(item.effects)) {
-    invalid('A gear item does not match the save schema.');
+    throw new TypeError('A gear item does not match the save schema.');
   }
   if (!Object.values(item.stats).every(Number.isFinite) ||
       !item.effects.every((effect) => isPlainObject(effect) && typeof effect.id === 'string' && Number.isFinite(effect.value))) {
-    invalid('A gear item contains an invalid number or effect.');
+    throw new TypeError('A gear item contains an invalid number or effect.');
   }
 
   return {
@@ -65,44 +66,15 @@ function copyGearItem(item, expectedSlot) {
   };
 }
 
-function canonicalizeState(state) {
-  if (!isPlainObject(state) || state.schemaVersion !== 1 || !isPlainObject(state.player) ||
-      !isPlainObject(state.player.baseStats) || !isPlainObject(state.equipment) ||
-      !Array.isArray(state.inventory) || !isPlainObject(state.progression)) {
-    invalid('The save state does not match schemaVersion 1.');
-  }
-
-  const { player, progression } = state;
-  if (!Number.isInteger(player.level) || player.level < 1 || !Number.isFinite(player.xp) || player.xp < 0 ||
-      !Number.isFinite(player.xpToNext) || player.xpToNext <= 0 ||
-      !Number.isInteger(player.pendingLevelUps) || player.pendingLevelUps < 0 ||
-      !Number.isFinite(player.currentHp) || player.currentHp < 0 ||
-      !REQUIRED_STATS.every((key) => Number.isFinite(player.baseStats[key]))) {
-    invalid('The player fields do not match the save schema.');
-  }
-  if (state.inventory.length > BALANCE.inventoryCapacity) invalid('The inventory exceeds its capacity.');
-  if (!Number.isFinite(state.materials) || state.materials < 0) invalid('Materials must be a non-negative finite number.');
-  if (!Number.isInteger(progression.chapter) || progression.chapter < 1 ||
-      !Number.isInteger(progression.currentStage) || progression.currentStage < 1 || progression.currentStage > 10 ||
-      !Number.isInteger(progression.unlockedChapter) || progression.unlockedChapter < 1 ||
-      !Number.isInteger(progression.unlockedStage) || progression.unlockedStage < 1 || progression.unlockedStage > 10 ||
-      !Array.isArray(progression.clearedStageIds) ||
-      !progression.clearedStageIds.every((id) => typeof id === 'string' && /^\d+-\d+$/.test(id))) {
-    invalid('The progression fields do not match the save schema.');
-  }
-
+function canonicalizeV2State(state) {
+  const migrated = migrateGameState(state);
+  const { player, progression } = migrated;
   const equipment = {};
-  for (const slot of EQUIPMENT_SLOTS) {
-    if (!Object.hasOwn(state.equipment, slot)) invalid('Equipment is missing a required slot.');
-    equipment[slot] = copyGearItem(state.equipment[slot], slot);
-  }
-  const inventory = state.inventory.map((item) => {
-    if (!isPlainObject(item) || !EQUIPMENT_SLOTS.includes(item.slot)) invalid('An inventory item has an invalid slot.');
-    return copyGearItem(item, item.slot);
-  });
+  for (const slot of EQUIPMENT_SLOTS) equipment[slot] = copyGearItem(migrated.equipment[slot], slot);
+  const inventory = migrated.inventory.map((item) => copyGearItem(item, item.slot));
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     player: {
       level: player.level,
       xp: player.xp,
@@ -110,10 +82,14 @@ function canonicalizeState(state) {
       pendingLevelUps: player.pendingLevelUps,
       currentHp: player.currentHp,
       baseStats: Object.fromEntries(REQUIRED_STATS.map((key) => [key, player.baseStats[key]])),
+      availableStatPoints: player.availableStatPoints,
+      spentStatPoints: player.spentStatPoints,
+      statResetCount: player.statResetCount,
     },
     equipment,
     inventory,
-    materials: state.materials,
+    materials: migrated.materials,
+    gold: migrated.gold,
     progression: {
       chapter: progression.chapter,
       currentStage: progression.currentStage,
@@ -124,24 +100,46 @@ function canonicalizeState(state) {
   };
 }
 
-export function validateCloudSave(body) {
-  if (!isPlainObject(body) || body.schemaVersion !== 1 || !hasOnlyFiniteNumbers(body)) {
-    invalid('The cloud save body is invalid.');
+function canonicalizeWritableState(state) {
+  if (!isPlainObject(state) || state.schemaVersion !== 2) {
+    invalid('The save state does not match schemaVersion 2.');
   }
-  return { schemaVersion: 1, state: canonicalizeState(body.state) };
+  try {
+    return canonicalizeV2State(state);
+  } catch (error) {
+    invalid(error.message || 'The save state does not match schemaVersion 2.');
+  }
+}
+
+export function validateCloudSave(body) {
+  if (!isPlainObject(body) || body.schemaVersion !== 2 || !hasOnlyFiniteNumbers(body)) {
+    invalid('The cloud save body must use schemaVersion 2 and contain finite JSON numbers.');
+  }
+  return { schemaVersion: 2, state: canonicalizeWritableState(body.state) };
 }
 
 export function parseCloudSave(row) {
-  if (!row || row.SchemaVersion !== 1) throw new TypeError('Cloud save row has an unsupported schema version.');
+  if (!row || ![1, 2].includes(row.SchemaVersion)) {
+    throw new TypeError('Cloud save row has an unsupported schema version.');
+  }
   const revision = typeof row.Revision === 'bigint' ? Number(row.Revision) : Number(row.Revision);
   if (!Number.isSafeInteger(revision) || revision < 1) throw new TypeError('Cloud save row has an invalid revision.');
   const updatedAt = row.UpdatedAtUtc instanceof Date ? row.UpdatedAtUtc : new Date(row.UpdatedAtUtc);
   if (!Number.isFinite(updatedAt.getTime())) throw new TypeError('Cloud save row has an invalid timestamp.');
   const rawState = typeof row.SaveJson === 'string' ? JSON.parse(row.SaveJson) : row.SaveJson;
   if (!hasOnlyFiniteNumbers(rawState)) throw new TypeError('Cloud save row contains a non-finite number.');
-  const state = canonicalizeState(rawState);
+  if (rawState?.schemaVersion !== row.SchemaVersion) {
+    throw new TypeError('Cloud save row and JSON state have mismatched schema versions.');
+  }
+
+  let state;
+  try {
+    state = canonicalizeV2State(rawState);
+  } catch (error) {
+    throw new TypeError('Cloud save row contains an invalid state.', { cause: error });
+  }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision,
     updatedAtUtc: updatedAt.toISOString(),
     state,

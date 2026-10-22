@@ -46,6 +46,9 @@ export function createCloudSaveClient({
       return { status: result.status, ...result.body };
     },
     async putCurrent(account, body, condition) {
+      if (!body?.state || body.state.schemaVersion !== 2) {
+        throw new TypeError('Cloud save state must use schemaVersion 2.');
+      }
       let precondition;
       if (condition?.kind === 'create') precondition = { 'if-none-match': '*' };
       else if (condition?.kind === 'update' && Number.isSafeInteger(condition.expectedRevision) && condition.expectedRevision > 0) {
@@ -54,7 +57,7 @@ export function createCloudSaveClient({
       const result = await request(account, '/saves/current', {
         method: 'PUT',
         headers: precondition,
-        body: JSON.stringify({ schemaVersion: 1, state: body.state }),
+        body: JSON.stringify({ schemaVersion: 2, state: body.state }),
       });
       if (result.status === 200 || result.status === 201) return { status: result.status, envelope: result.body };
       return { status: result.status, ...result.body };

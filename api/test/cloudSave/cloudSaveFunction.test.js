@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 let itemId = 0;
 const makeState = () => createInitialState(() => `cloud-${++itemId}`);
-const makeBody = () => ({ schemaVersion: 1, state: makeState() });
+const makeBody = () => ({ schemaVersion: 2, state: makeState() });
 const env = {
   ENTRA_TENANT_ID: '11111111-1111-4111-8111-111111111111',
   ENTRA_API_AUDIENCE: 'api://knight-run-test',
@@ -17,7 +17,7 @@ const userA = {
   displayName: 'Player A',
 };
 const envelope = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   revision: 2,
   updatedAtUtc: '2026-10-21T02:00:00.000Z',
   state: makeState(),
@@ -80,7 +80,7 @@ test('GET returns the authenticated account save and a revision ETag', async () 
   });
 });
 
-test('PUT uses If-None-Match for first save and If-Match for a revision update', async () => {
+test('PUT writes v2 using If-None-Match for first save and If-Match for a revision update', async () => {
   const { handlers, calls } = await handlerWith();
   const initial = await handlers.put(new Request('https://game.internal/api/saves/current', {
     method: 'PUT',
@@ -99,6 +99,7 @@ test('PUT uses If-None-Match for first save and If-Match for a revision update',
   assert.deepEqual(calls.service[0].precondition, { kind: 'create' });
   assert.deepEqual(calls.service[1].precondition, { kind: 'update', expectedRevision: 2 });
   assert.equal(calls.service[0].user, userA);
+  assert.equal(calls.service[0].body.schemaVersion, 2);
   assert.equal(Object.hasOwn(calls.service[0].body, 'playerId'), false);
 });
 
@@ -120,7 +121,7 @@ test('missing save, invalid JSON and oversized payload have distinct HTTP result
   const oversized = await handlers.put(new Request('https://game.internal/api/saves/current', {
     method: 'PUT',
     headers: { 'if-none-match': '*', 'content-type': 'application/json' },
-    body: JSON.stringify({ schemaVersion: 1, state: makeState(), extra: 'x'.repeat(256 * 1024) }),
+    body: JSON.stringify({ schemaVersion: 2, state: makeState(), extra: 'x'.repeat(256 * 1024) }),
   }));
 
   assert.equal(missing.status, 404);
@@ -150,6 +151,29 @@ test('invalid save values and missing preconditions are rejected before SQL', as
   assert.equal(parseBody(invalidResponse).code, 'invalid-save');
   assert.equal(missingCondition.status, 428);
   assert.equal(parseBody(missingCondition).code, 'precondition-required');
+});
+
+test('PUT rejects a legacy v1 body before opening SQL or invoking the service', async () => {
+  const { handlers, calls } = await handlerWith({
+    sqlPoolProvider: async () => assert.fail('legacy v1 body must not open SQL'),
+    service: { getCurrent: async () => ({}), putCurrent: async () => assert.fail('legacy v1 body must not reach service') },
+  });
+  const state = makeState();
+  state.schemaVersion = 1;
+  delete state.gold;
+  delete state.player.availableStatPoints;
+  delete state.player.spentStatPoints;
+  delete state.player.statResetCount;
+  const response = await handlers.put(new Request('https://game.internal/api/saves/current', {
+    method:'PUT',
+    headers:{ 'if-none-match':'*', 'content-type':'application/json' },
+    body:JSON.stringify({ schemaVersion:1, state }),
+  }));
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(parseBody(response), { code:'invalid-save' });
+  assert.equal(calls.poolConfigs.length, 0);
+  assert.equal(calls.service.length, 0);
 });
 
 test('invalid ETags are rejected without opening SQL', async () => {
