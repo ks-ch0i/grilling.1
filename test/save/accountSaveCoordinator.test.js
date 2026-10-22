@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { BALANCE } from '../../packages/game-rules/src/balance.js';
 import { createInitialState } from '../../src/game/domain/stateFactory.js';
-import { SAVE_KEY } from '../../src/game/domain/saveStore.js';
+import { LEGACY_SAVE_KEY, SAVE_KEY } from '../../src/game/domain/saveStore.js';
 
 async function loadCoordinator() {
   try {
@@ -29,6 +30,17 @@ function newState() {
   return createInitialState(() => `test-${Math.random()}`);
 }
 
+function legacyState() {
+  const state = newState();
+  state.schemaVersion = 1;
+  delete state.gold;
+  state.player.baseStats = { maxHp:100, attack:10, defense:5, critChance:0.05, critMultiplier:2, moveSpeed:200 };
+  delete state.player.availableStatPoints;
+  delete state.player.spentStatPoints;
+  delete state.player.statResetCount;
+  return state;
+}
+
 function envelope(state, revision) {
   return { schemaVersion: 1, revision, updatedAtUtc: '2026-10-21T00:00:00.000Z', state: structuredClone(state) };
 }
@@ -42,10 +54,11 @@ function makeApi({ getCurrent, putCurrent }) {
   };
 }
 
-test('migrates the legacy save to its first Entra account exactly once and preserves the legacy key', async () => {
+test('migrates the legacy shared save to its first Entra account and preserves v1 bytes', async () => {
   const { createAccountSaveCoordinator, LEGACY_OWNER_KEY, accountSaveKey } = await loadCoordinator();
-  const legacy = newState();
-  const storage = createStorage({ [SAVE_KEY]: JSON.stringify(legacy) });
+  const legacy = legacyState();
+  const legacyRaw = JSON.stringify(legacy);
+  const storage = createStorage({ [LEGACY_SAVE_KEY]: legacyRaw });
   const api = makeApi({
     getCurrent: async () => ({ status: 404 }),
     putCurrent: async (_account, body, condition) => ({ status: 201, envelope: envelope(body.state, 1), condition }),
@@ -54,11 +67,247 @@ test('migrates the legacy save to its first Entra account exactly once and prese
   const loaded = await coordinator.loadAccountSave(accountA);
 
   assert.equal(loaded.mode, 'online');
-  assert.deepEqual(loaded.state, legacy);
+  assert.equal(loaded.state.schemaVersion, 2);
+  assert.deepEqual(loaded.state.player.baseStats, BALANCE.basePlayer);
+  assert.equal(loaded.state.gold, 0);
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), legacyRaw);
   assert.equal(api.calls.put[0].condition.kind, 'create');
   assert.equal(storage.getItem(LEGACY_OWNER_KEY), JSON.stringify({ tenantId: accountA.tenantId, objectId: accountA.localAccountId }));
-  assert.notEqual(storage.getItem(SAVE_KEY), null);
   assert.notEqual(storage.getItem(accountSaveKey(accountA)), null);
+  assert.equal(storage.getItem(SAVE_KEY), null);
+});
+
+test('claims an ownerless shared v1 save before an offline cloud create can expose it to another account', async () => {
+  const { createAccountSaveCoordinator, LEGACY_OWNER_KEY } = await loadCoordinator();
+  const legacy = legacyState();
+  legacy.player.level = 7;
+  const storage = createStorage({ [LEGACY_SAVE_KEY]: JSON.stringify(legacy) });
+  const api = makeApi({
+    getCurrent: async () => ({ status: 404 }),
+    putCurrent: async (account, body) => account.localAccountId === accountA.localAccountId
+      ? ({ status: 500 })
+      : ({ status: 201, envelope: envelope(body.state, 1) }),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory: newState });
+
+  const first = await coordinator.loadAccountSave(accountA);
+  assert.equal(first.status, 'ready');
+  assert.equal(first.mode, 'offline');
+  assert.equal(first.state.player.level, 7);
+  assert.equal(JSON.parse(storage.getItem(LEGACY_OWNER_KEY)).objectId, accountA.localAccountId);
+
+  const second = await coordinator.loadAccountSave(accountB);
+  assert.equal(second.status, 'ready');
+  assert.equal(second.state.player.level, 1);
+  assert.equal(api.calls.put.length, 2);
+  assert.equal(api.calls.put[1].body.state.player.level, 1);
+});
+
+test('a malformed legacy owner record prevents importing the shared v1 save', async () => {
+  const { createAccountSaveCoordinator, LEGACY_OWNER_KEY } = await loadCoordinator();
+  const legacy = legacyState();
+  legacy.player.level = 7;
+  const storage = createStorage({
+    [LEGACY_SAVE_KEY]: JSON.stringify(legacy),
+    [LEGACY_OWNER_KEY]: '{not-json',
+  });
+  const api = makeApi({
+    getCurrent: async () => ({ status: 404 }),
+    putCurrent: async (_account, body) => ({ status: 201, envelope: envelope(body.state, 1) }),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory: newState });
+
+  const loaded = await coordinator.loadAccountSave(accountB);
+
+  assert.equal(loaded.status, 'ready');
+  assert.equal(loaded.state.player.level, 1);
+  assert.equal(api.calls.put[0].body.state.player.level, 1);
+  assert.equal(storage.getItem(LEGACY_OWNER_KEY), '{not-json');
+});
+
+test('fails closed when the shared legacy owner cannot be persisted', async () => {
+  const { createAccountSaveCoordinator, LEGACY_OWNER_KEY, accountSaveKey } = await loadCoordinator();
+  const legacyRaw = JSON.stringify(legacyState());
+  const storage = createStorage({ [LEGACY_SAVE_KEY]: legacyRaw });
+  const setItem = storage.setItem;
+  storage.setItem = (key, value) => {
+    if (key === LEGACY_OWNER_KEY) throw new Error('storage is read-only');
+    setItem(key, value);
+  };
+  const api = makeApi({
+    getCurrent: async () => ({ status: 404 }),
+    putCurrent: async () => assert.fail('an unowned shared save must not be imported'),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory: newState });
+
+  const loaded = await coordinator.loadAccountSave(accountA);
+
+  assert.equal(loaded.status, 'error');
+  assert.equal(loaded.code, 'legacy-owner-save-failed');
+  assert.equal(storage.getItem(accountSaveKey(accountA)), null);
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), legacyRaw);
+});
+
+test('ignores a late cloud response after switching to another account', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey } = await loadCoordinator();
+  let resolveA;
+  const pendingA = new Promise((resolve) => { resolveA = resolve; });
+  const stateA = newState();
+  stateA.player.level = 7;
+  const stateB = newState();
+  stateB.player.level = 9;
+  const storage = createStorage();
+  const api = makeApi({
+    getCurrent: async (account) => account.localAccountId === accountA.localAccountId
+      ? pendingA
+      : ({ status: 200, envelope: envelope(stateB, 4) }),
+    putCurrent: async () => assert.fail('existing cloud saves must not be replaced'),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory: newState });
+
+  const loadA = coordinator.loadAccountSave(accountA);
+  const loadB = await coordinator.loadAccountSave(accountB);
+  resolveA({ status: 200, envelope: envelope(stateA, 3) });
+  const staleA = await loadA;
+
+  assert.equal(loadB.state.player.level, 9);
+  assert.equal(staleA.status, 'stale-account-operation');
+  assert.equal(coordinator.getCurrentState().player.level, 9);
+  assert.equal(JSON.parse(storage.getItem(accountSaveKey(accountB))).player.level, 9);
+  assert.equal(storage.getItem(accountSaveKey(accountA)), null);
+});
+
+test('ignores a late sync conflict after switching to another account', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey } = await loadCoordinator();
+  let resolveSyncA;
+  const pendingSyncA = new Promise((resolve) => { resolveSyncA = resolve; });
+  const stateA = newState();
+  stateA.player.level = 7;
+  const stateB = newState();
+  stateB.player.level = 9;
+  const staleCloudA = newState();
+  staleCloudA.player.level = 11;
+  const storage = createStorage();
+  const api = makeApi({
+    getCurrent: async (account) => account.localAccountId === accountA.localAccountId
+      ? ({ status: 200, envelope: envelope(stateA, 3) })
+      : ({ status: 200, envelope: envelope(stateB, 4) }),
+    putCurrent: async (account) => account.localAccountId === accountA.localAccountId
+      ? pendingSyncA
+      : assert.fail('account B has no pending changes'),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory: newState });
+
+  const loadedA = await coordinator.loadAccountSave(accountA);
+  const localA = structuredClone(loadedA.state);
+  localA.player.xp += 1;
+  coordinator.saveLocal(localA);
+  const syncA = coordinator.syncPendingSave();
+  const loadedB = await coordinator.loadAccountSave(accountB);
+  resolveSyncA({ status: 409, current: envelope(staleCloudA, 5) });
+  const staleResult = await syncA;
+
+  assert.equal(staleResult.error, 'stale-account-operation');
+  assert.equal(loadedB.state.player.level, 9);
+  assert.equal(coordinator.getCurrentState().player.level, 9);
+  assert.equal(JSON.parse(storage.getItem(accountSaveKey(accountB))).player.level, 9);
+});
+
+test('imports a shared v1 save when the legacy owner matches the active Entra account', async () => {
+  const { createAccountSaveCoordinator, LEGACY_OWNER_KEY, accountSaveKey } = await loadCoordinator();
+  const legacyRaw = JSON.stringify(legacyState());
+  const storage = createStorage({
+    [LEGACY_SAVE_KEY]: legacyRaw,
+    [LEGACY_OWNER_KEY]: JSON.stringify({ tenantId: accountA.tenantId, objectId: accountA.localAccountId }),
+  });
+  const api = makeApi({
+    getCurrent:async() => ({ status:404 }),
+    putCurrent:async(_account, body) => ({ status:201, envelope:envelope(body.state, 1) }),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState });
+  const loaded = await coordinator.loadAccountSave(accountA);
+
+  assert.equal(loaded.status, 'ready');
+  assert.equal(loaded.state.schemaVersion, 2);
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), legacyRaw);
+  assert.equal(JSON.parse(storage.getItem(accountSaveKey(accountA))).gold, 0);
+});
+
+test('offline loading migrates only the active account v1 cache to its v2 key', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey, legacyAccountSaveKey } = await loadCoordinator();
+  const legacy = legacyState();
+  const legacyRaw = JSON.stringify(legacy);
+  const storage = createStorage({ [legacyAccountSaveKey(accountA)]: legacyRaw });
+  const api = makeApi({ getCurrent:async() => { throw new TypeError('network unavailable'); }, putCurrent:async() => assert.fail('offline') });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState });
+  const loaded = await coordinator.loadAccountSave(accountA);
+
+  assert.equal(loaded.status, 'ready');
+  assert.equal(loaded.mode, 'offline');
+  assert.equal(loaded.state.schemaVersion, 2);
+  assert.equal(storage.getItem(legacyAccountSaveKey(accountA)), legacyRaw);
+  assert.equal(JSON.parse(storage.getItem(accountSaveKey(accountA))).schemaVersion, 2);
+});
+
+test('offline v1 migration reports savedLocally false when writing its v2 cache fails', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey, legacyAccountSaveKey } = await loadCoordinator();
+  const legacy = legacyState();
+  legacy.player.level = 6;
+  const legacyRaw = JSON.stringify(legacy);
+  const storage = createStorage({ [legacyAccountSaveKey(accountA)]: legacyRaw });
+  const setItem = storage.setItem;
+  storage.setItem = (key, value) => {
+    if (key === accountSaveKey(accountA)) throw new Error('storage is full');
+    setItem(key, value);
+  };
+  const api = makeApi({
+    getCurrent: async () => { throw new TypeError('network unavailable'); },
+    putCurrent: async () => assert.fail('offline account migration must not write to cloud'),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory: newState });
+
+  const loaded = await coordinator.loadAccountSave(accountA);
+
+  assert.equal(loaded.status, 'ready');
+  assert.equal(loaded.mode, 'offline');
+  assert.equal(loaded.state.player.level, 6);
+  assert.equal(loaded.savedLocally, false);
+  assert.equal(storage.getItem(accountSaveKey(accountA)), null);
+  assert.equal(storage.getItem(legacyAccountSaveKey(accountA)), legacyRaw);
+});
+
+test('recovery-backs up invalid v2 bytes before importing the matching account v1 cache', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey, legacyAccountSaveKey, recoveryKeyPrefix } = await loadCoordinator();
+  const brokenCurrent = '{invalid v2 cache';
+  const legacyRaw = JSON.stringify(legacyState());
+  const storage = createStorage({
+    [accountSaveKey(accountA)]: brokenCurrent,
+    [legacyAccountSaveKey(accountA)]: legacyRaw,
+  });
+  const api = makeApi({ getCurrent:async() => { throw new TypeError('network unavailable'); }, putCurrent:async() => assert.fail('offline') });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState, now:() => new Date('2026-10-21T01:30:00.000Z') });
+  const loaded = await coordinator.loadAccountSave(accountA);
+
+  assert.equal(loaded.status, 'ready');
+  assert.equal(storage.getItem(accountSaveKey(accountA)), brokenCurrent);
+  assert.equal(storage.getItem(legacyAccountSaveKey(accountA)), legacyRaw);
+  const recovery = [...storage.entries.keys()].find((key) => key.startsWith(recoveryKeyPrefix(accountA)));
+  assert.ok(recovery);
+  assert.equal(storage.getItem(recovery), brokenCurrent);
+});
+
+test('another account v1 cache is never used as an offline fallback', async () => {
+  const { createAccountSaveCoordinator, legacyAccountSaveKey, accountSaveKey } = await loadCoordinator();
+  const legacyA = JSON.stringify(legacyState());
+  const storage = createStorage({ [legacyAccountSaveKey(accountA)]: legacyA });
+  const api = makeApi({ getCurrent:async() => { throw new TypeError('network unavailable'); }, putCurrent:async() => assert.fail('offline') });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState });
+  const loaded = await coordinator.loadAccountSave(accountB);
+
+  assert.equal(loaded.status, 'offline-unavailable');
+  assert.equal(loaded.state, undefined);
+  assert.equal(storage.getItem(legacyAccountSaveKey(accountA)), legacyA);
+  assert.equal(storage.getItem(accountSaveKey(accountB)), null);
 });
 
 test('cloud wins on load and differing same-account local data is preserved in a recovery key', async () => {
@@ -178,9 +427,8 @@ test('409 conflict backs up pending local state, applies cloud state and never a
 
 test('an offline account without its own cache cannot start from another account legacy save', async () => {
   const { createAccountSaveCoordinator, LEGACY_OWNER_KEY } = await loadCoordinator();
-  const legacy = newState();
   const storage = createStorage({
-    [SAVE_KEY]: JSON.stringify(legacy),
+    [LEGACY_SAVE_KEY]: JSON.stringify(legacyState()),
     [LEGACY_OWNER_KEY]: JSON.stringify({ tenantId: accountA.tenantId, objectId: accountA.localAccountId }),
   });
   const api = makeApi({ getCurrent: async () => { throw new TypeError('Failed to fetch'); }, putCurrent: async () => assert.fail('offline') });
@@ -194,7 +442,11 @@ test('an offline account without its own cache cannot start from another account
 test('invalid local JSON is preserved under a recovery key before a missing-cloud save is replaced', async () => {
   const { createAccountSaveCoordinator, accountSaveKey, recoveryKeyPrefix } = await loadCoordinator();
   const raw = '{broken legacy cache';
-  const storage = createStorage({ [accountSaveKey(accountA)]: raw });
+  const legacyRecoveryKey = `lancer-belt-scroll-game:recovery:v1:${accountA.tenantId}:${accountA.localAccountId}:2026-10-21T04:00:00.000Z`;
+  const storage = createStorage({
+    [accountSaveKey(accountA)]: raw,
+    [legacyRecoveryKey]: '{older backup}',
+  });
   const api = makeApi({
     getCurrent: async () => ({ status: 404 }),
     putCurrent: async (_account, body) => ({ status: 201, envelope: envelope(body.state, 1) }),
@@ -204,6 +456,7 @@ test('invalid local JSON is preserved under a recovery key before a missing-clou
   const recovery = [...storage.entries.keys()].find((key) => key.startsWith(recoveryKeyPrefix(accountA)));
   assert.ok(recovery);
   assert.equal(storage.getItem(recovery), raw);
+  assert.equal(storage.getItem(legacyRecoveryKey), '{older backup}');
 });
 
 test('token failures do not enter offline mode even when an account cache exists', async () => {

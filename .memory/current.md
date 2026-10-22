@@ -7,13 +7,14 @@
 [P01 공유 밸런스와 게임플레이](./phases/2026-10-22-character-gear-balance/P01-gameplay-and-save/phase.md)
 
 ## Active Task
-[T02 저장 v2 모델과 기존 로컬 저장 결정적 이행](./phases/2026-10-22-character-gear-balance/P01-gameplay-and-save/T02-save-v2-and-legacy-migration.md)
+[T03 자유 포인트 배정, 레벨업 입력, 마을 초기화](./phases/2026-10-22-character-gear-balance/P01-gameplay-and-save/T03-stat-points-and-town-reset.md)
 
 ## Status
 - 계획 생성: 2026-10-22. 기준 결정은 .memory/decisions/2026-10-22-character-gear-balance.md다.
 - 새 계획은 P01 게임플레이/저장 5개 Task, P02 온라인 호환 3개 Task로 구성했다.
-- P01-T01 공통 밸런스 규칙은 구현·검증을 마쳤다. 1,024개 고정 seed 표본에서 C1S1과 C1S10 모두 전투를 완주했다.
-- 다음 실행 항목은 P01-T02 저장 v2 모델과 기존 로컬 저장 결정적 이행이다.
+- P01-T01 공통 밸런스 규칙과 P01-T02 저장 v2/기존 로컬 저장 이행은 비판적 리뷰 및 검증을 마쳤다.
+- P01-T02 지정 테스트 28/28과 Node 22 빌드는 통과했다. 전체 테스트의 클라우드 저장/PvP/스테이지 v1 fixture 12건은 P02 T06-T08 범위에서 v2 호환성을 구현할 때 갱신한다.
+- 다음 실행 항목은 P01-T03 자유 포인트 배정, 레벨업 입력, 마을 초기화다.
 - 이전 작업공간의 .agents/, .codeburn/, AGENTS.md, CODEBURN-SETUP.md, README.md, examples/ 미추적 파일은 변경하지 않았다.
 
 ## Deferred Plan
@@ -23,4 +24,4 @@
 - 재개 조건: 구체적인 배포 계획과 대상 구독/리소스 그룹이 정해졌을 때 T10 what-if을 수행한다. 실제 Azure 배포는 별도 명시적 진행 지시와 비용 확인이 필요하다.
 
 ## Next Step (IMPORTANT)
-P01-T02 청사진을 읽고 저장 스키마와 기존 저장 이행 경로를 검토한 뒤 결정적 migration을 구현한다.
+P01-T03 청사진을 읽고 능력치 포인트 배정, 랭킹 replay 입력, 마을 초기화 domain/UI를 구현한다.

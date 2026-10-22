@@ -26,6 +26,9 @@
  * @property {number} pendingLevelUps
  * @property {number} currentHp
  * @property {PlayerBaseStats} baseStats
+ * @property {number} availableStatPoints
+ * @property {number} spentStatPoints
+ * @property {number} statResetCount
  * @typedef {object} ProgressionState
  * @property {number} chapter
  * @property {number} currentStage
@@ -33,11 +36,12 @@
  * @property {number} unlockedStage
  * @property {string[]} clearedStageIds Stage IDs use the chapter-stage format.
  * @typedef {object} GameState
- * @property {1} schemaVersion
+ * @property {2} schemaVersion
  * @property {PlayerState} player
  * @property {Record<GearSlot, GearItem|null>} equipment
  * @property {GearItem[]} inventory
  * @property {number} materials
+ * @property {number} gold
  * @property {ProgressionState} progression
  */
 export {};

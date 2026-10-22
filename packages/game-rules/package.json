@@ -8,6 +8,7 @@
   },
   "exports": {
     "./balance": "./src/balance.js",
+    "./save": "./src/saveMigration.js",
     "./combat": "./src/combat.js",
     "./simulation": "./src/simulation.js"
   }

@@ -90,14 +90,15 @@ export function getGearStatSummary(item) {
 
 export function createInitialState(idFactory) {
   const state = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     player: {
       level: 1, xp: 0, xpToNext: 100, pendingLevelUps: 0,
+      availableStatPoints: 0, spentStatPoints: 0, statResetCount: 0,
       currentHp: BALANCE.basePlayer.maxHp,
       baseStats: { ...BALANCE.basePlayer },
     },
     equipment: createStarterEquipment(idFactory),
-    inventory: [], materials: 0,
+    inventory: [], materials: 0, gold: 0,
     progression: { chapter: 1, currentStage: 1, unlockedChapter: 1, unlockedStage: 1, clearedStageIds: [] },
   };
   state.player.currentHp = derivePlayerStats(state).maxHp;

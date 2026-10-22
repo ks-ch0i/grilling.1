@@ -1,6 +1,6 @@
 # Task: T02 저장 v2 모델과 기존 로컬 저장 이행
 
-## Status: pending
+## Status: done
 
 ## Goal
 모든 새 게임 상태를 schemaVersion 2로 저장하고, 기존 v1 로컬/계정 저장을 손실 없이 결정적으로 이행한다. 게임 도메인, 로컬 저장, API 공유 코드가 같은 migration 결과를 사용하게 한다.
@@ -81,10 +81,10 @@
 - Assert v1 shared saves are imported only when legacy owner is absent or matches active identity; another account's v1 key is ignored.
 
 ## Acceptance Criteria
-- [ ] Initial and saved game states validate only under schemaVersion2.
-- [ ] Existing local save migration is deterministic, idempotent, and retains all decided fields.
-- [ ] A failed v2 write never deletes or overwrites the v1 source.
-- [ ] Account save migration cannot cross tenant/object identities.
+- [x] Initial and saved game states validate only under schemaVersion2.
+- [x] Existing local save migration is deterministic, idempotent, and retains all decided fields.
+- [x] A failed v2 write never deletes or overwrites the v1 source.
+- [x] Account save migration cannot cross tenant/object identities.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
@@ -103,6 +103,13 @@ Task: T02-save-v2-and-legacy-migration
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- commit: included with this task's implementation and verification.
+
+## Critical Review
+- 계정 분리 검토에서 공유 v1 소유권을 클라우드 생성 전 확보하고, 손상된 owner 기록과 저장 실패 시 가져오기를 차단하도록 수정했다.
+- 계정 전환 중 늦은 GET/sync 응답이 새 계정 상태를 바꾸지 않도록 generation guard와 회귀 테스트를 추가했다.
+- 오프라인 계정 v1 이행의 v2 저장 실패가 `savedLocally: true`로 보이던 문제를 수정하고 v1 원본 보존 테스트를 추가했다.
+- 최종 재검토에서 잔여 차단 이슈가 없음을 확인했다.
+- Node 22.12.0 지정 테스트 28/28 및 Vite 빌드 통과. 전체 테스트의 12개 실패는 후속 P02 T06-T08에서 교체할 v1 클라우드 저장/PvP/스테이지 fixture에 한정된다.

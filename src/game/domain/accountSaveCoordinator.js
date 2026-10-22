@@ -1,4 +1,10 @@
-import { SAVE_KEY, isValidGameState, readSavedGame, saveGameState } from './saveStore.js';
+import {
+  LEGACY_SAVE_KEY,
+  isValidGameState,
+  readOrMigrateSavedGame,
+  readSavedGame,
+  saveGameState,
+} from './saveStore.js';
 
 export const LEGACY_OWNER_KEY = 'lancer-belt-scroll-game:save:v1:legacy-owner';
 
@@ -11,6 +17,11 @@ function accountIdentity(account) {
 
 export function accountSaveKey(account) {
   const { tenantId, objectId } = accountIdentity(account);
+  return `lancer-belt-scroll-game:save:v2:${tenantId}:${objectId}`;
+}
+
+export function legacyAccountSaveKey(account) {
+  const { tenantId, objectId } = accountIdentity(account);
   return `lancer-belt-scroll-game:save:v1:${tenantId}:${objectId}`;
 }
 
@@ -20,7 +31,7 @@ export function accountSyncKey(account) {
 
 export function recoveryKeyPrefix(account) {
   const { tenantId, objectId } = accountIdentity(account);
-  return `lancer-belt-scroll-game:recovery:v1:${tenantId}:${objectId}:`;
+  return `lancer-belt-scroll-game:recovery:v2:${tenantId}:${objectId}:`;
 }
 
 function storageFor(storage) {
@@ -61,6 +72,7 @@ function writeSyncState(storage, key, value) {
 
 function readLegacyOwner(storage) {
   const saved = readJson(storage, LEGACY_OWNER_KEY);
+  if (saved.invalid) return { tenantId: '__invalid__', objectId: '__invalid__' };
   if (!saved.exists) return null;
   if (!saved.value || typeof saved.value.tenantId !== 'string' || typeof saved.value.objectId !== 'string') {
     return { tenantId: '__invalid__', objectId: '__invalid__' };
@@ -111,8 +123,10 @@ export function createAccountSaveCoordinator({
   let activeAccount = null;
   let activeIdentity = null;
   let activeState = null;
+  let activeGeneration = 0;
   let mode = 'offline';
   let syncPromise = null;
+  let syncGeneration = null;
   let onlineListener;
   let onCloudSaveSynced = () => {};
 
@@ -207,7 +221,7 @@ export function createAccountSaveCoordinator({
     return { ok: true, state: activeState, revision, savedLocally: saved.ok && metadataSaved, recoveredLocal };
   }
 
-  function offlineResult(localState, fallbackState = null) {
+  function offlineResult(localState, fallbackState = null, savedLocally = Boolean(localState)) {
     const state = localState ?? fallbackState;
     if (!state) return { status: 'offline-unavailable', state: undefined, mode: 'offline' };
     activeState = state;
@@ -217,7 +231,7 @@ export function createAccountSaveCoordinator({
       state: activeState,
       revision: readSyncState(storage, accountSyncKey(activeAccount)).revision,
       mode,
-      savedLocally: Boolean(localState),
+      savedLocally: Boolean(savedLocally),
     };
   }
 
@@ -225,64 +239,73 @@ export function createAccountSaveCoordinator({
     return owner === null || isOwner(owner, activeIdentity);
   }
 
-  function claimLegacyOwner() {
+  function claimLegacyOwner(identity = activeIdentity) {
     try {
       const target = storageFor(storage);
-      target.setItem(LEGACY_OWNER_KEY, JSON.stringify(activeIdentity));
-      return isOwner(readLegacyOwner(target), activeIdentity);
+      target.setItem(LEGACY_OWNER_KEY, JSON.stringify(identity));
+      return isOwner(readLegacyOwner(target), identity);
     } catch {
       return false;
     }
   }
 
-  async function putInitialState(state, legacyMigration) {
-    const localResult = saveGameState(state, storage, accountSaveKey(activeAccount));
-    const metadataSaved = writeSyncState(storage, accountSyncKey(activeAccount), { revision: null, pending: true });
+  async function putInitialState(state, generation = activeGeneration) {
+    const account = activeAccount;
+    const localResult = saveGameState(state, storage, accountSaveKey(account));
+    const metadataSaved = writeSyncState(storage, accountSyncKey(account), { revision: null, pending: true });
     activeState = state;
     let response;
     try {
-      response = await api.putCurrent(activeAccount, { state }, { kind: 'create' });
+      response = await api.putCurrent(account, { state }, { kind: 'create' });
     } catch (error) {
+      if (generation !== activeGeneration) return { status: 'stale-account-operation' };
       if (error?.name === 'CloudSaveAuthenticationError') return { status: 'error', code: 'authentication-required' };
-      if (error instanceof TypeError) return offlineResult(readSavedGame(storage, accountSaveKey(activeAccount)), state);
+      if (error instanceof TypeError) return offlineResult(readSavedGame(storage, accountSaveKey(account)), state);
       return { status: 'error', code: 'cloud-save-unavailable', cause: error };
     }
+    if (generation !== activeGeneration) return { status: 'stale-account-operation' };
     if (response.status === 200 || response.status === 201) {
       const envelope = envelopeFrom(response);
       const installed = installCloudState(envelope);
       if (installed.ok) notifyCloudSaveSynced(installed.state, installed.revision);
-      const ownerSaved = !legacyMigration || !installed.ok || claimLegacyOwner();
       return installed.ok
-        ? { status: 'ready', state: activeState, revision: installed.revision, mode: 'online', savedLocally: localResult.ok && metadataSaved && installed.savedLocally, legacyOwnerSaved: ownerSaved, recoveredLocal: installed.recoveredLocal }
+        ? { status: 'ready', state: activeState, revision: installed.revision, mode: 'online', savedLocally: localResult.ok && metadataSaved && installed.savedLocally, recoveredLocal: installed.recoveredLocal }
         : { status: 'error', code: installed.error };
     }
     if (response.status === 409) {
       const current = envelopeFrom(response);
       const installed = installCloudState(current, { backup: [state] });
       if (installed.ok) notifyCloudSaveSynced(installed.state, installed.revision);
-      const ownerSaved = !legacyMigration || !installed.ok || claimLegacyOwner();
       return installed.ok
-        ? { status: 'ready', state: activeState, revision: installed.revision, mode: 'online', savedLocally: localResult.ok && metadataSaved && installed.savedLocally, legacyOwnerSaved: ownerSaved, recoveredLocal: installed.recoveredLocal }
+        ? { status: 'ready', state: activeState, revision: installed.revision, mode: 'online', savedLocally: localResult.ok && metadataSaved && installed.savedLocally, recoveredLocal: installed.recoveredLocal }
         : { status: 'error', code: installed.error };
     }
-    if (response.status >= 500) return offlineResult(readSavedGame(storage, accountSaveKey(activeAccount)), state);
+    if (response.status >= 500) return offlineResult(readSavedGame(storage, accountSaveKey(account)), state);
     return { status: 'error', code: response.status === 401 || response.status === 403 ? 'authentication-required' : 'cloud-save-rejected' };
   }
 
   async function loadAccountSave(account) {
+    const generation = ++activeGeneration;
     activeAccount = account;
     activeIdentity = accountIdentity(account);
     activeState = null;
-    const localState = readSavedGame(storage, accountSaveKey(account));
+    const localLoad = readOrMigrateSavedGame(storage, accountSaveKey(account), legacyAccountSaveKey(account));
+    const localState = localLoad.state;
+    if (localLoad.source === 'legacy' && localLoad.currentRaw !== null) {
+      const preserved = backupSerialized(localLoad.currentRaw);
+      if (!preserved.ok) return { status: 'error', code: 'recovery-backup-failed' };
+    }
     let response;
     try {
       response = await api.getCurrent(account);
     } catch (error) {
+      if (generation !== activeGeneration) return { status: 'stale-account-operation' };
       if (error?.name === 'CloudSaveAuthenticationError') return { status: 'error', code: 'authentication-required' };
-      if (error instanceof TypeError) return offlineResult(localState);
+      if (error instanceof TypeError) return offlineResult(localState, null, localLoad.savedLocally);
       return { status: 'error', code: 'cloud-save-unavailable', cause: error };
     }
-    if (response.status >= 500) return offlineResult(localState);
+    if (generation !== activeGeneration) return { status: 'stale-account-operation' };
+    if (response.status >= 500) return offlineResult(localState, null, localLoad.savedLocally);
     if (response.status === 401 || response.status === 403) return { status: 'error', code: 'authentication-required' };
 
     if (response.status === 200) {
@@ -291,7 +314,7 @@ export function createAccountSaveCoordinator({
       const legacyAllowed = ownerCanUseLegacy(legacyOwner);
       const backups = [
         { state: localState, raw: readRaw(storage, accountSaveKey(account)) },
-        ...(legacyAllowed ? [{ state: readSavedGame(storage, SAVE_KEY), raw: readRaw(storage, SAVE_KEY) }] : []),
+        ...(legacyAllowed ? [{ state: null, raw: readRaw(storage, LEGACY_SAVE_KEY) }] : []),
       ].filter((entry) => entry.state || entry.raw !== null);
       const installed = installCloudState(envelope, { backup: backups });
       return installed.ok
@@ -301,7 +324,10 @@ export function createAccountSaveCoordinator({
     if (response.status !== 404) return { status: 'error', code: 'cloud-save-unavailable', httpStatus: response.status };
 
     const legacyOwner = readLegacyOwner(storage);
-    const legacyState = ownerCanUseLegacy(legacyOwner) ? readSavedGame(storage, SAVE_KEY) : null;
+    const legacyLoad = ownerCanUseLegacy(legacyOwner)
+      ? readOrMigrateSavedGame(storage, accountSaveKey(account), LEGACY_SAVE_KEY, { persistLegacy: false })
+      : null;
+    const legacyState = legacyLoad?.state ?? null;
     const localRaw = readRaw(storage, accountSaveKey(account));
     if (!localState && localRaw !== null) {
       const preserved = backupSerialized(localRaw);
@@ -309,7 +335,10 @@ export function createAccountSaveCoordinator({
     }
     const source = localState ? 'account' : legacyState ? 'legacy' : 'initial';
     const state = localState ?? legacyState ?? initialStateFactory();
-    return putInitialState(state, source === 'legacy' && legacyOwner === null);
+    if (source === 'legacy' && legacyOwner === null && !claimLegacyOwner(activeIdentity)) {
+      return { status: 'error', code: 'legacy-owner-save-failed' };
+    }
+    return putInitialState(state, generation);
   }
 
   async function refreshAccountSave() {
@@ -317,10 +346,11 @@ export function createAccountSaveCoordinator({
     return loadAccountSave(activeAccount);
   }
 
-  async function performSync() {
+  async function performSync(generation = activeGeneration) {
     if (!activeAccount || !activeIdentity || !activeState) return { ok: false, error: 'account-not-ready' };
-    const key = accountSaveKey(activeAccount);
-    const metaKey = accountSyncKey(activeAccount);
+    const account = activeAccount;
+    const key = accountSaveKey(account);
+    const metaKey = accountSyncKey(account);
     const meta = readSyncState(storage, metaKey);
     const state = readSavedGame(storage, key);
     if (!meta.pending) return { ok: true, synced: false, mode };
@@ -331,8 +361,9 @@ export function createAccountSaveCoordinator({
       : { kind: 'update', expectedRevision: meta.revision };
     let response;
     try {
-      response = await api.putCurrent(activeAccount, { state }, condition);
+      response = await api.putCurrent(account, { state }, condition);
     } catch (error) {
+      if (generation !== activeGeneration) return { ok: false, error: 'stale-account-operation' };
       if (error?.name === 'CloudSaveAuthenticationError') return { ok: false, error: 'authentication-required' };
       if (error instanceof TypeError) {
         mode = 'offline';
@@ -340,6 +371,7 @@ export function createAccountSaveCoordinator({
       }
       return { ok: false, error: 'cloud-save-unavailable', cause: error };
     }
+    if (generation !== activeGeneration) return { ok: false, error: 'stale-account-operation' };
     if (response.status >= 500) {
       mode = 'offline';
       return { ok: false, error: 'network-unavailable', status: response.status };
@@ -350,7 +382,7 @@ export function createAccountSaveCoordinator({
       const current = envelopeFrom(response);
       const installed = installCloudState(current, { backup: [latestState] });
       if (!installed.ok) return { ok: false, error: installed.error };
-      try { onConflict({ account: activeAccount, recoverySaved: Boolean(latestState), state: activeState }); } catch { /* UI callbacks cannot change save resolution. */ }
+      try { onConflict({ account, recoverySaved: Boolean(latestState), state: activeState }); } catch { /* UI callbacks cannot change save resolution. */ }
       return { ok: false, error: 'save-conflict', state: activeState, recoveredLocal: installed.recoveredLocal };
     }
     if (response.status !== 200 && response.status !== 201) return { ok: false, error: 'cloud-save-rejected', status: response.status };
@@ -369,16 +401,22 @@ export function createAccountSaveCoordinator({
   }
 
   function syncPendingSave() {
-    if (syncPromise) return syncPromise;
+    const generation = activeGeneration;
+    if (syncPromise && syncGeneration === generation) return syncPromise;
     let retryAfterSync = false;
-    syncPromise = performSync().then((result) => {
+    const currentPromise = performSync(generation).then((result) => {
       retryAfterSync = result.ok && result.pending;
       return result;
     }).finally(() => {
-      syncPromise = null;
-      if (retryAfterSync) queueMicrotask(() => { void syncPendingSave(); });
+      if (syncPromise === currentPromise) {
+        syncPromise = null;
+        syncGeneration = null;
+      }
+      if (retryAfterSync && generation === activeGeneration) queueMicrotask(() => { void syncPendingSave(); });
     });
-    return syncPromise;
+    syncPromise = currentPromise;
+    syncGeneration = generation;
+    return currentPromise;
   }
 
   function saveLocal(state) {
