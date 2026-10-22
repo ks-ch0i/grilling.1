@@ -1,4 +1,4 @@
-﻿import { BALANCE, GEAR_SLOT, RARITY, STAT_KEYS, getStageDropWeights } from '../data/balance.js';
+﻿import { BALANCE, GEAR_SLOT, RARITY, STAT_KEYS, getGearUpgradeBand, getStageDropWeights } from '../data/balance.js';
 
 const RARITIES = Object.values(RARITY);
 const SLOTS = Object.values(GEAR_SLOT);
@@ -152,21 +152,23 @@ export function getGearUpgradeCost(currentLevel) {
   return cost;
 }
 
-function improveValue(key, value, rng, greatSuccess) {
+function improveValue(key, value, rng, greatSuccess, level) {
   const specialRange = BALANCE.gearUpgrade.specialIncrease[key];
   const multiplier = greatSuccess ? 2 : 1;
   if (specialRange) {
     const increase = specialRange.min + rng() * (specialRange.max - specialRange.min);
-    return Number((value + increase * multiplier).toFixed(6));
+    const improved = Number((value + increase * multiplier).toFixed(6));
+    return key === 'critChance' || key === 'damageReduction' ? Math.min(1, improved) : improved;
   }
 
-  const { min, max } = BALANCE.gearUpgrade.ordinaryIncrease;
+  const { min, max } = getGearUpgradeBand(level);
   const rate = min + rng() * (max - min);
   const normalValue = ['maxHp', 'attack', 'defense'].includes(key)
     ? Math.ceil(value * (1 + rate))
     : Number((value * (1 + rate)).toFixed(6));
   const gain = normalValue - value;
-  return value + gain * multiplier;
+  const improved = value + gain * multiplier;
+  return Number.isInteger(value) ? improved : Number(improved.toFixed(6));
 }
 
 function upgradeItem(item, rng, greatSuccess) {
@@ -179,12 +181,12 @@ function upgradeItem(item, rng, greatSuccess) {
   const mode = modes[randomIndex(modes.length, rng)];
   if ((mode === 'stat-only' || mode === 'both') && statKeys.length) {
     const key = statKeys[randomIndex(statKeys.length, rng)];
-    stats[key] = improveValue(key, stats[key], rng, greatSuccess);
+    stats[key] = improveValue(key, stats[key], rng, greatSuccess, item.level);
     if (key === 'critChance') stats[key] = Math.min(1, stats[key]);
   }
   if ((mode === 'effect-only' || mode === 'both') && effects.length) {
     const index = randomIndex(effects.length, rng);
-    effects[index].value = improveValue(effects[index].id, effects[index].value, rng, greatSuccess);
+    effects[index].value = improveValue(effects[index].id, effects[index].value, rng, greatSuccess, item.level);
   }
   return { ...item, level: item.level + 1, stats, effects };
 }
@@ -211,12 +213,45 @@ export function upgradeGear(state, itemId, rng = Math.random) {
   if (item.level >= BALANCE.gearMaxLevel) return { ok: false, reason: 'max-level' };
   const cost = getGearUpgradeCost(item.level);
   if (state.materials < cost) return { ok: false, reason: 'insufficient-materials', cost };
+  const band = getGearUpgradeBand(item.level);
+  const destructionRoll = rng();
+  const failureRoll = rng();
+  const resultDetails = {
+    failureChance: band.failureChance,
+    destructionChance: band.destructionChance,
+    greatSuccessChance: BALANCE.gearUpgrade.greatSuccessChance,
+  };
+  const materials = state.materials - cost;
+  if (destructionRoll < band.destructionChance) {
+    let nextState = location === 'inventory'
+      ? { ...state, materials, inventory: state.inventory.filter((candidate) => candidate.id !== itemId) }
+      : { ...state, materials, equipment: { ...state.equipment, [location]: null } };
+    if (location !== 'inventory') {
+      const maxHp = derivePlayerStats(nextState).maxHp;
+      nextState = {
+        ...nextState,
+        player: { ...state.player, currentHp: Math.min(state.player.currentHp, maxHp) },
+      };
+    }
+    return { ok: true, state: nextState, outcome: 'destroyed', cost, destroyedItem: item, greatSuccess: false, ...resultDetails };
+  }
+  if (failureRoll < band.failureChance) {
+    return {
+      ok: true,
+      state: { ...state, materials },
+      outcome: 'failed',
+      cost,
+      item,
+      greatSuccess: false,
+      ...resultDetails,
+    };
+  }
   const greatSuccess = rng() < BALANCE.gearUpgrade.greatSuccessChance;
   const upgraded = upgradeItem(item, rng, greatSuccess);
   const nextState = location === 'inventory'
-    ? { ...state, materials: state.materials - cost, inventory: state.inventory.map((candidate, i) => i === index ? upgraded : candidate) }
-    : { ...state, materials: state.materials - cost, equipment: { ...state.equipment, [location]: upgraded } };
-  return { ok: true, state: nextState, cost, item: upgraded, greatSuccess };
+    ? { ...state, materials, inventory: state.inventory.map((candidate, i) => i === index ? upgraded : candidate) }
+    : { ...state, materials, equipment: { ...state.equipment, [location]: upgraded } };
+  return { ok: true, state: nextState, outcome: 'success', cost, item: upgraded, greatSuccess, ...resultDetails };
 }
 
 export function derivePlayerStats(state) {

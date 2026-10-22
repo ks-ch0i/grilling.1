@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
+import { BALANCE, GEAR_SLOT, RARITY_COLOR, getGearUpgradeBand } from '../data/balance.js';
 import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
 import { allocateStatPoint, getStatResetCost, resetStatPoints, stageId } from '../domain/progression.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
@@ -184,7 +184,10 @@ export class TownScene extends Phaser.Scene {
         : this.gameState.inventory.find((candidate) => candidate.id === selected.id)
       : null;
     if (!item) {
-      this.add.text(944, 202, '장비를 선택하면\n능력치와 행동을 볼 수 있습니다.', { fontFamily:'sans-serif', fontSize:'16px', color:'#aeb9c4', lineSpacing:8 });
+      const message = this.upgradeFeedback?.itemId === null
+        ? this.upgradeFeedback.message
+        : '장비를 선택하면\n능력치와 행동을 볼 수 있습니다.';
+      this.add.text(944, 202, message, { fontFamily:'sans-serif', fontSize:'16px', color:'#aeb9c4', lineSpacing:8 });
       return;
     }
     this.add.text(940, 198, SLOT_LABEL[item.slot] + ' · ' + RARITY_LABEL[item.rarity] + '\n장비 레벨 ' + item.level + '/' + BALANCE.gearMaxLevel, { fontFamily:'sans-serif', fontSize:'17px', color:'#f4e6bf', lineSpacing:8 });
@@ -211,22 +214,42 @@ export class TownScene extends Phaser.Scene {
       }});
     }
     const cost = getGearUpgradeCost(item.level);
-    const canUpgrade = item.level < BALANCE.gearMaxLevel && this.gameState.materials >= cost;
-    const upgradeY = selected.type === 'inventory' ? y + 58 : y;
-    createButton(this, { x:936,y:upgradeY,width:296,height:48,label:item.level >= BALANCE.gearMaxLevel ? '최대 레벨' : '강화 · 재료 ' + cost,enabled:canUpgrade,onClick:() => {
+    const atMaxLevel = item.level >= BALANCE.gearMaxLevel;
+    const hasMaterials = this.gameState.materials >= cost;
+    const canUpgrade = !atMaxLevel && hasMaterials;
+    const upgradeY = selected.type === 'inventory' ? y + 106 : Math.max(420, detailY + 50);
+    if (canUpgrade) {
+      const band = getGearUpgradeBand(item.level);
+      const percent = (chance) => `${Math.round(chance * 100)}%`;
+      this.add.text(943, upgradeY - 48,
+        `실패 ${percent(band.failureChance)} · 파괴 ${percent(band.destructionChance)}\n성공 후 대성공 ${percent(BALANCE.gearUpgrade.greatSuccessChance)}`,
+        { fontFamily:'sans-serif', fontSize:'11px', color:'#d8e0e8', lineSpacing:2 });
+    }
+    const upgradeLabel = atMaxLevel
+      ? '최대 레벨'
+      : !hasMaterials
+        ? `재료 부족 · ${cost} 필요`
+        : `강화 · 재료 ${cost}`;
+    createButton(this, { x:936,y:upgradeY,width:296,height:48,label:upgradeLabel,enabled:canUpgrade,onClick:() => {
       const result=upgradeGear(this.gameState,item.id);
       if (!result.ok) {
         this.upgradeFeedback = null;
         this.refresh();
         return;
       }
-      this.upgradeFeedback = result.greatSuccess
-        ? { itemId:item.id, message:'강화 대성공!' }
-        : null;
-      this.selectedItem={...selected};
+      const messages = {
+        failed:'강화 실패 · 장비는 유지됩니다.',
+        destroyed:'강화 파괴 · 장비가 사라졌습니다.',
+        success:result.greatSuccess ? '강화 대성공!' : '강화 성공.',
+      };
+      this.upgradeFeedback = {
+        itemId:result.outcome === 'destroyed' ? null : item.id,
+        message:messages[result.outcome],
+      };
+      this.selectedItem = result.outcome === 'destroyed' ? null : { ...selected };
       this.commitState(result.state);
     }});
-    this.add.text(943, upgradeY + 53, '일반 능력치 1~5% · 특수 능력별 상승량\n대성공 5% · 상승량 2배', { fontFamily:'sans-serif', fontSize:'11px', color:'#9eacba' });
+    this.add.text(943, upgradeY + 53, '일반 능력치는 구간별 · 특수 능력은 종류별 고정 범위\n대성공 시 해당 증가량 2배', { fontFamily:'sans-serif', fontSize:'10px', color:'#9eacba', wordWrap:{width:286}, lineSpacing:2 });
     if (this.upgradeFeedback?.itemId === item.id) {
       this.add.text(943, upgradeY + 82, this.upgradeFeedback.message, { fontFamily:'sans-serif', fontSize:'13px', color:'#ffcf45' });
     }

@@ -1,6 +1,6 @@
 # Task: T04 장비 강화 실패·파괴·대성공
 
-## Status: pending
+## Status: done
 
 ## Goal
 장비 강화에 레벨별 실패·파괴 확률을 적용하고 재료 소모/장비 삭제를 처리한다. 강화 전에 현재 세 확률을 TownScene에 보여준다.
@@ -55,10 +55,10 @@
 - 결정적 RNG 테스트에서 파괴+성공, 파괴+실패, 비파괴 실패, 보통 성공, 대성공을 각각 검증한다. 동일 seed와 동일 상태는 같은 결과를 만들어야 한다.
 
 ## Acceptance Criteria
-- [ ] 1–30강 경계 확률이 T01 표와 일치한다.
-- [ ] 실패/파괴가 서로 독립적으로 적용되고 성공 상태에서도 파괴될 수 있다.
-- [ ] 실패·파괴·성공 모두 재료를 소비하며 비파괴 실패는 장비 값이 바뀌지 않는다.
-- [ ] TownScene에 시도 전 세 확률이 보이고 결과별 메시지/장비 목록이 맞게 갱신된다.
+- [x] 1–30강 경계 확률이 T01 표와 일치한다.
+- [x] 실패/파괴가 서로 독립적으로 적용되고 성공 상태에서도 파괴될 수 있다.
+- [x] 실패·파괴·성공 모두 재료를 소비하며 비파괴 실패는 장비 값이 바뀌지 않는다.
+- [x] TownScene에 시도 전 세 확률이 보이고 결과별 메시지/장비 목록이 맞게 갱신된다.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
@@ -77,7 +77,16 @@ Task: T04-gear-upgrade-outcomes
 - Show failure, destruction, and great success odds before upgrade
 ~~~
 
+## Critical Review
+- 독립 리뷰에서 장착 중 최대 HP 장비가 파괴될 때 현재 HP가 새 최대치를 넘는 P1 결함을 발견했다. 파괴 후 장비 기준 최대 HP로 현재 HP를 clamp하고, 회귀 테스트를 추가했다.
+- 재리뷰에서 HP 수정과 회귀 테스트 해결을 확인했으며, 추가 차단 이슈는 없었다.
+- RNG 순서/독립 판정, 확률 경계, 재료 전이, UI 피드백을 검토했다. TownScene 전용 테스트 harness는 없어 domain 테스트와 production build를 사용했다.
+
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- 지정 domain/balance 테스트: Node.js 22.12.0, 15/15 통과.
+- 전체 테스트: 169개 중 157개 통과, 12개 실패. 실패는 schema v1 cloud save/ranking snapshot/stage ticket API fixture이며 P02-T06~T07에서 v2 호환성을 반영할 때 갱신한다.
+- 빌드: Node.js 22.12.0 Vite production build 통과. 기존 500 kB chunk 크기 경고가 남아 있다.
+- `git diff --check`: 통과.
+- commit: pending (T04 변경과 메모리 포인터 동기화 후 커밋 예정)
