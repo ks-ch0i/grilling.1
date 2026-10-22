@@ -70,7 +70,7 @@ export function createStageRepository({ revision = 7, state = makeSaveState(), e
   }]]);
   const tickets = new Map(existingTicket ? [[existingTicket.RunId, structuredClone(existingTicket)]] : []);
   const bests = new Map();
-  const calls = { createTicket: [], completeRun: [], published: [] };
+  const calls = { createTicket: [], expireTicket: [], completeRun: [], published: [] };
   return {
     saves,
     tickets,
@@ -89,6 +89,13 @@ export function createStageRepository({ revision = 7, state = makeSaveState(), e
       if (Number(save.Revision) !== input.expectedSaveRevision) {
         return { kind: 'revision-mismatch', currentRevision: Number(save.Revision) };
       }
+      for (const ticket of tickets.values()) {
+        if (ticket.PlayerId === input.playerId && ticket.Status === 'issued' &&
+            (ticket.ExpiresAtUtc <= input.issuedAtUtc || ticket.SimulatorVersion !== input.simulatorVersion ||
+             ticket.BalanceVersion !== input.balanceVersion)) {
+          ticket.Status = 'expired';
+        }
+      }
       const active = [...tickets.values()].find((ticket) =>
         ticket.PlayerId === input.playerId && ticket.Status === 'issued' && ticket.ExpiresAtUtc > input.issuedAtUtc,
       );
@@ -102,6 +109,7 @@ export function createStageRepository({ revision = 7, state = makeSaveState(), e
       return row?.PlayerId === playerId ? structuredClone(row) : null;
     },
     async expireTicket(_transaction, playerId, runId) {
+      calls.expireTicket.push({ playerId, runId });
       const row = tickets.get(runId);
       if (row?.PlayerId === playerId && row.Status === 'issued') row.Status = 'expired';
     },

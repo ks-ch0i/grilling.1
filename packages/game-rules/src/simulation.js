@@ -29,10 +29,8 @@ function assertTicket(ticket) {
   if (!Number.isInteger(ticket.stage) || ticket.stage < 1 || ticket.stage > 10) {
     throw new RangeError('stage must be an integer from 1 to 10.');
   }
-  if (ticket.simulatorVersion !== 1) throw new RangeError('unsupported simulatorVersion.');
-  if (!Number.isInteger(ticket.balanceVersion) || ticket.balanceVersion < 1) {
-    throw new RangeError('balanceVersion must be a positive integer.');
-  }
+  if (ticket.simulatorVersion !== 2) throw new RangeError('unsupported simulatorVersion.');
+  if (ticket.balanceVersion !== 2) throw new RangeError('unsupported balanceVersion.');
   if (typeof ticket.issuedAtUtc !== 'string' || !ticket.issuedAtUtc) throw new TypeError('issuedAtUtc must be a non-empty string.');
 }
 

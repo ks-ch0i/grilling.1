@@ -1,7 +1,7 @@
 import { BALANCE, GEAR_SLOT } from '@knight-run/game-rules/balance';
+import { BALANCE_VERSION, SIMULATOR_VERSION } from './gameVersions.js';
 
-export const SIMULATOR_VERSION = 1;
-export const BALANCE_VERSION = 1;
+export { BALANCE_VERSION, SIMULATOR_VERSION };
 export const STAGE_RUN_TTL_MS = 30 * 60 * 1000;
 export const MAX_STAGE_RESULT_BYTES = 1024 * 1024;
 export const MAX_STAGE_INPUT_EVENTS = 100_000;
@@ -61,8 +61,9 @@ export function validateStageInputs(body) {
       if (event.kind === 'move' && [-1, 0, 1].includes(event.value)) {
         return { tick: event.tick, kind: 'move', value: event.value };
       }
-      if (event.kind === 'levelUp' && LEVEL_UP_STATS.has(event.value)) {
-        return { tick: event.tick, kind: 'levelUp', value: event.value };
+      if (event.kind === 'levelUp' && Array.isArray(event.value) && event.value.length <= 2 &&
+          event.value.every((stat) => LEVEL_UP_STATS.has(stat))) {
+        return { tick: event.tick, kind: 'levelUp', value: [...event.value] };
       }
       invalid('invalid-input-log', 'An input event has an unsupported kind or value.');
     }),
@@ -112,6 +113,8 @@ export function derivePlayerCombatSnapshot(state, chapter, stage) {
     snapshot.xp = state.player.xp;
     snapshot.xpToNext = state.player.xpToNext;
     snapshot.pendingLevelUps = state.player.pendingLevelUps;
+    snapshot.availableStatPoints = state.player.availableStatPoints;
+    snapshot.spentStatPoints = state.player.spentStatPoints;
     snapshot.replayXpMultiplier = state.progression.clearedStageIds.includes(`${chapter}-${stage}`)
       ? BALANCE.replayXpMultiplier
       : 1;

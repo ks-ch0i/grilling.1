@@ -69,6 +69,27 @@ test('result endpoint forwards only the input log and server receive time', asyn
   assert.equal(handlers.calls.submit[0].receivedAtUtc.toISOString(), '2026-10-21T02:01:00.000Z');
 });
 
+test('result endpoint accepts zero to two valid level-up allocations and rejects legacy or malformed values before SQL', async () => {
+  const handlers = await createHandlers();
+  for (const value of [[], ['attack'], ['attack', 'defense']]) {
+    const response = await handlers.submit(new Request(`https://game.internal/api/stage-runs/${RUN_ID}/result`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: [{ tick: 0, kind: 'levelUp', value }] }),
+    }), { params: { runId: RUN_ID } });
+    assert.equal(response.status, 200);
+  }
+
+  const invalidHandlers = await createHandlers({ sqlPoolProvider: async () => assert.fail('invalid allocation must not open SQL') });
+  for (const value of ['attack', ['unknown'], ['attack', 'defense', 'maxHp']]) {
+    const response = await invalidHandlers.submit(new Request(`https://game.internal/api/stage-runs/${RUN_ID}/result`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: [{ tick: 0, kind: 'levelUp', value }] }),
+    }), { params: { runId: RUN_ID } });
+    assert.equal(response.status, 400);
+    assert.equal(parseBody(response).code, 'invalid-input-log');
+  }
+});
+
 test('client-supplied result claims and oversized traces are rejected before SQL', async () => {
   const handlers = await createHandlers({
     sqlPoolProvider: async () => assert.fail('invalid result body must not open SQL'),

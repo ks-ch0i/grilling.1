@@ -169,6 +169,7 @@ export async function submitStageResult(pool, identity, runId, body, receivedAtU
     return { status: 410, code: 'run-expired' };
   }
   if (Number(row.SimulatorVersion) !== SIMULATOR_VERSION || Number(row.BalanceVersion) !== BALANCE_VERSION) {
+    await deps.withTransaction(pool, (transaction) => deps.repository.expireTicket(transaction, playerId, runId));
     return { status: 409, code: 'unsupported-simulator-version' };
   }
 

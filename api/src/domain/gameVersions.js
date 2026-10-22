@@ -1,0 +1,3 @@
+export const SIMULATOR_VERSION = 2;
+export const BALANCE_VERSION = 2;
+export const PVP_SIMULATOR_VERSION = 1;

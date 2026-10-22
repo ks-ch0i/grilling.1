@@ -48,8 +48,8 @@ const stageTicket = (overrides = {}) => ({
   seed: 123456789,
   chapter: 1,
   stage: 1,
-  simulatorVersion: 1,
-  balanceVersion: 1,
+  simulatorVersion: 2,
+  balanceVersion: 2,
   issuedAtUtc: '2026-10-21T00:00:00.000Z',
   ...overrides,
 });
@@ -150,6 +150,14 @@ test('ranked enemy counts use one ticket-seeded draw and preserve the following 
   }
 
   assert.deepEqual([...seenCounts].sort((left, right) => left - right), [4, 5, 6, 7, 8, 9, 10]);
+});
+
+test('ranked simulation accepts only the current simulator and balance versions', async () => {
+  const { createRankedRun } = await loadRules();
+
+  assert.doesNotThrow(() => createRankedRun(stageTicket(), player()));
+  assert.throws(() => createRankedRun(stageTicket({ simulatorVersion: 1 }), player()), /unsupported simulatorVersion/i);
+  assert.throws(() => createRankedRun(stageTicket({ balanceVersion: 1 }), player()), /unsupported balanceVersion/i);
 });
 
 test('the simulator advances fixed 60 Hz ticks and keeps the last movement direction', async () => {

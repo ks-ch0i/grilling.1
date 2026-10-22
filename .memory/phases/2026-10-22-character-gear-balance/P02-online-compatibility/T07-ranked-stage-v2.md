@@ -1,6 +1,6 @@
 # Task: T07 스테이지 랭킹 simulator/balance v2
 
-## Status: pending
+## Status: done
 
 ## Goal
 스테이지 랭킹 티켓과 입력 검증을 v2 공유 시뮬레이터 및 밸런스 규칙에 맞춘다. 기존 v1 결과는 유지하고 새 결과만 v2로 기록한다.
@@ -48,10 +48,10 @@
 - Assert a stored v1 ticket submission is rejected without result/best mutation, while pre-existing completed v1 best rows remain returned alongside v2 results.
 
 ## Acceptance Criteria
-- [ ] New stage tickets/results are explicitly simulator 2 and balance 2.
-- [ ] Server and browser validate/replay the same stat allocation and enemy-count rules.
-- [ ] Stale v1 in-flight results cannot enter the v2 ranking.
-- [ ] Historical v1 rankings remain readable and are not recomputed.
+- [x] New stage tickets/results are explicitly simulator 2 and balance 2.
+- [x] Server and browser validate/replay the same stat allocation and enemy-count rules.
+- [x] Stale v1 in-flight results cannot enter the v2 ranking.
+- [x] Historical v1 rankings remain readable and are not recomputed.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
@@ -71,6 +71,9 @@ Task: T07-ranked-stage-v2
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- Node.js 22.12.0: 지정 stage/client tests, 전체 루트 테스트, `npm --prefix api test`, Vite production build 통과.
+- 비판적 리뷰: 새 티켓 발급을 막던 진행 중 v1 티켓을 만료 처리하고, 클라이언트도 unsupported-version 응답 뒤 대기 티켓을 정리하도록 수정했다. API 정규화 후 0/1/2개 능력치 배분 입력이 동일하게 재생되는 검증도 추가했다.
+- 리뷰 후속 메모: 과거 랭킹 조회 테스트는 서비스 응답 변환을 확인하지만 SQL query를 직접 실행하지는 않는다. 랭킹 SQL은 이번 Task에서 바뀌지 않았다.
+- commit: 지정 T07 커밋 메시지 사용.

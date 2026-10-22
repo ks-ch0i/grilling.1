@@ -34,10 +34,13 @@ export async function createTicket(transaction, input) {
   await new sql.Request(transaction)
     .input('PlayerId', sql.UniqueIdentifier, input.playerId)
     .input('NowUtc', sql.DateTime2, input.issuedAtUtc)
+    .input('SimulatorVersion', sql.Int, input.simulatorVersion)
+    .input('BalanceVersion', sql.Int, input.balanceVersion)
     .query(`
       UPDATE dbo.StageRunTickets
       SET Status = N'expired'
-      WHERE PlayerId = @PlayerId AND Status = N'issued' AND ExpiresAtUtc <= @NowUtc;
+      WHERE PlayerId = @PlayerId AND Status = N'issued' AND
+        (ExpiresAtUtc <= @NowUtc OR SimulatorVersion <> @SimulatorVersion OR BalanceVersion <> @BalanceVersion);
     `);
 
   const active = await new sql.Request(transaction)

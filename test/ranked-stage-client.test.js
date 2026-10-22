@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createRankedRun, replayRankedRun } from '@knight-run/game-rules/simulation';
+import { validateStageInputs } from '../api/src/domain/stageRank.js';
 import {
   createFixedStepAccumulator,
   createRankedRunClient,
@@ -35,8 +37,8 @@ function ticketFor(state, overrides = {}) {
     chapter: 1,
     stage: 1,
     seed: 123456,
-    simulatorVersion: 1,
-    balanceVersion: 1,
+    simulatorVersion: 2,
+    balanceVersion: 2,
     issuedAtUtc: '2026-10-21T00:00:00.000Z',
     expiresAtUtc: '2026-10-21T00:30:00.000Z',
     playerSnapshot: deriveRankedPlayerSnapshot(state, 1, 1),
@@ -65,6 +67,38 @@ test('ranked snapshot includes derived combat stats and saved level progression'
     level: 3, xp: 26, xpToNext: 144, pendingLevelUps: 0,
     availableStatPoints: 0, spentStatPoints: 0, replayXpMultiplier: 0.3,
   });
+});
+
+test('API-normalized level allocations replay identically to the client input log on a seeded v2 ticket', () => {
+  const state = gameState({
+    player: {
+      ...gameState().player,
+      currentHp: 100000,
+      pendingLevelUps: 3,
+      baseStats: { maxHp: 100000, attack: 1000, defense: 1000, critChance: 0.05, critMultiplier: 2, moveSpeed: 200 },
+    },
+  });
+  const ticket = ticketFor(state);
+  const recorder = createRunInputRecorder();
+  recorder.recordLevelUp(0, []);
+  recorder.recordLevelUp(0, ['attack']);
+  recorder.recordLevelUp(0, ['attack', 'defense']);
+  recorder.recordMove(0, 1);
+  const clientInputs = recorder.getInputs();
+  const apiInputs = validateStageInputs({ inputs: clientInputs }).inputs;
+
+  assert.deepEqual(apiInputs, clientInputs);
+  const clientReplay = replayRankedRun(ticket, ticket.playerSnapshot, clientInputs);
+  const apiReplay = replayRankedRun(ticket, ticket.playerSnapshot, apiInputs);
+  assert.deepEqual(apiReplay, clientReplay);
+  assert.equal(apiReplay.valid, true);
+
+  const initial = createRankedRun(ticket, ticket.playerSnapshot);
+  const repeated = createRankedRun(ticket, ticket.playerSnapshot);
+  const enemyCount = initial.enemies.filter((enemy) => !enemy.isBoss).length;
+  assert.ok(enemyCount >= 4 && enemyCount <= 10);
+  assert.equal(initial.randomState, repeated.randomState);
+  assert.deepEqual(initial.enemies, repeated.enemies);
 });
 
 test('offline ticket preparation keeps the run local and does not call ranking APIs', async () => {
@@ -184,6 +218,8 @@ test('ticket request failures, expired tickets, and a second snapshot mismatch s
   const state = gameState();
   for (const scenario of [
     { name: 'revision conflict', response: { status: 409, code: 'save-revision-conflict' } },
+    { name: 'legacy simulator ticket', response: { status: 201, ticket: ticketFor(state, { simulatorVersion: 1 }) } },
+    { name: 'legacy balance ticket', response: { status: 201, ticket: ticketFor(state, { balanceVersion: 1 }) } },
     { name: 'ticket expired', response: { status: 201, ticket: ticketFor(state, { expiresAtUtc: '2026-10-20T23:59:00.000Z' }) } },
     { name: 'snapshot mismatch', response: { status: 201, ticket: ticketFor(state, { playerSnapshot: { ...deriveRankedPlayerSnapshot(state, 1, 1), attack: 999 } }) } },
   ]) {
@@ -278,4 +314,31 @@ test('409, 410, and 422 result responses never claim a ranked clear', async (t) 
       assert.deepEqual(await client.submitResult(ticketFor(state), []), { verified: false, code: response.code });
     });
   }
+});
+
+test('unsupported-version rejection clears a pending ticket before the next ranked request', async () => {
+  const state = gameState();
+  const calls = [];
+  const client = createRankedRunClient({
+    apiClient: {
+      startStageRun: async () => {
+        calls.push('ticket');
+        return { status: 201, ticket: ticketFor(state) };
+      },
+      submitStageResult: async (_account, runId) => {
+        calls.push(['result', runId]);
+        return { status: 409, code: 'unsupported-simulator-version' };
+      },
+    },
+    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'online',
+    syncPendingSave: async () => ({ ok: true }), isOnline: () => true,
+    now: () => new Date('2026-10-21T00:01:00.000Z'),
+  });
+
+  const first = await client.prepareStage({ chapter: 1, stage: 1, gameState: state });
+  assert.equal((await client.submitResult(first.ticket, [])).code, 'unsupported-simulator-version');
+  const second = await client.prepareStage({ chapter: 1, stage: 1, gameState: state });
+
+  assert.equal(second.ranked, true);
+  assert.deepEqual(calls, ['ticket', ['result', first.ticket.runId], 'ticket']);
 });

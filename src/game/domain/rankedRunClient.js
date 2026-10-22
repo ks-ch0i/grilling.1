@@ -47,6 +47,11 @@ function unranked(reason) {
   return { ranked: false, reason };
 }
 
+function terminalStageResponse(result) {
+  return result?.status === 200 || result?.status === 410 || result?.status === 422 ||
+    (result?.status === 409 && ['run-already-completed', 'unsupported-simulator-version'].includes(result.code));
+}
+
 export async function requestStageTicket(apiClient, { chapter, stage, saveRevision, account } = {}) {
   if (!apiClient || typeof apiClient.startStageRun !== 'function') {
     throw new TypeError('A stage-run API client is required.');
@@ -69,7 +74,7 @@ function validTicket(ticket, chapter, stage, now) {
   if (!ticket || typeof ticket !== 'object' || typeof ticket.runId !== 'string' || !ticket.runId ||
       ticket.chapter !== chapter || ticket.stage !== stage ||
       !Number.isInteger(ticket.seed) || ticket.seed < 1 || ticket.seed > 0xffffffff ||
-      ticket.simulatorVersion !== 1 || !Number.isInteger(ticket.balanceVersion) || ticket.balanceVersion < 1 ||
+      ticket.simulatorVersion !== 2 || ticket.balanceVersion !== 2 ||
       typeof ticket.issuedAtUtc !== 'string' || typeof ticket.expiresAtUtc !== 'string' ||
       !ticket.playerSnapshot || typeof ticket.playerSnapshot !== 'object') return false;
   const expiresAt = Date.parse(ticket.expiresAtUtc);
@@ -127,8 +132,7 @@ export function createRankedRunClient({
     if (!isOnline()) return false;
     try {
       const result = await apiClient.submitStageResult(account, ticket.runId, { inputs });
-      const terminal = result?.status === 200 || result?.status === 410 || result?.status === 422 ||
-        (result?.status === 409 && result.code === 'run-already-completed');
+      const terminal = terminalStageResponse(result);
       if (terminal && pendingTicket?.runId === ticket.runId) pendingTicket = null;
       return terminal;
     } catch {
@@ -184,8 +188,7 @@ export function createRankedRunClient({
     if (!isOnline()) return { verified: false, code: 'network-unavailable' };
     try {
       const result = await apiClient.submitStageResult(account, ticket.runId, { inputs });
-      if (result?.status === 200 || result?.status === 410 || result?.status === 422 ||
-          (result?.status === 409 && result.code === 'run-already-completed')) {
+      if (terminalStageResponse(result)) {
         if (pendingTicket?.runId === ticket.runId) pendingTicket = null;
       }
       if (result?.status === 200 && result.verified === true && result.outcome === 'clear' &&

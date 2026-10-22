@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as pvpRepository from '../repositories/pvpRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
+import { PVP_SIMULATOR_VERSION } from '../domain/gameVersions.js';
 import {
   MATCH_TIME_LIMIT_MS,
   MATCH_TTL_MS,
@@ -108,7 +109,7 @@ export async function findOpponent(pool, identity, body, dependencies) {
         player2SnapshotRevision: candidate.snapshotRevision,
         window,
         seed,
-        simulatorVersion: 1,
+        simulatorVersion: PVP_SIMULATOR_VERSION,
         issuedAtUtc,
         expiresAtUtc,
       }));
