@@ -1,6 +1,6 @@
 # Task: T03 자유 능력치 배정과 마을 초기화
 
-## Status: pending
+## Status: done
 
 ## Goal
 레벨업마다 자유 포인트 두 점을 지급하고, 전투 레벨업 창과 마을에서 배정할 수 있게 한다. 마을에서 골드를 내고 능력치 포인트를 초기화할 수 있게 한다.
@@ -38,7 +38,9 @@
 - Related Files:
   - packages/game-rules/src/simulation.js :: assertCombatSnapshot, applyLevelUp, validateTickInputs, validateInputLog, stepRankedRun, replayRankedRun — levelUp value array; modify.
   - src/game/scenes/BattleScene.js :: showLevelUp, ranked input recording — allow 0–2 allocation events; modify.
+  - src/game/domain/rankedRunClient.js :: deriveRankedPlayerSnapshot, sameSnapshot, createRunInputRecorder — include stat point counters and array allocation events; modify.
   - test/game-rules-simulation.test.js :: level-up event replay cases; modify.
+  - test/ranked-stage-client.test.js :: snapshot and input recorder contracts; modify.
 
 #### Details
 - Data & Schema Fields:
@@ -64,15 +66,20 @@
 - 어느 화면도 임의의 레벨/XP/장비 상태를 초기화하지 않는다.
 
 ## Acceptance Criteria
-- [ ] 도메인 함수가 중복 배정, 보류, 포인트 부족, 비용 부족, 첫 비용 및 연속 초기화 비용을 정확히 처리한다.
-- [ ] 마을 초기화는 레벨/XP/장비를 보존하고 배정 점수를 환급한다.
-- [ ] 온라인/오프라인 랭킹 재생에서 빈 배열 또는 최대 2개 선택이 동일한 player state를 만든다.
-- [ ] TownScene과 레벨업 창에서 잔여 포인트와 비용을 사용자가 이해할 수 있게 표시한다.
+- [x] 도메인 함수가 중복 배정, 보류, 포인트 부족, 비용 부족, 첫 비용 및 연속 초기화 비용을 정확히 처리한다.
+- [x] 마을 초기화는 레벨/XP/장비를 보존하고 배정 점수를 환급한다.
+- [x] 온라인/오프라인 랭킹 재생에서 빈 배열 또는 최대 2개 선택이 동일한 player state를 만든다.
+- [x] TownScene과 레벨업 창에서 잔여 포인트와 비용을 사용자가 이해할 수 있게 표시한다.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
-- node --test test/stat-points.test.js test/game-rules-simulation.test.js — 포인트 계산, 비용 증가, 입력 로그 replay가 통과해야 한다.
+- node --test test/stat-points.test.js test/game-rules-simulation.test.js test/ranked-stage-client.test.js — 포인트 계산, 비용 증가, 입력 로그 replay 및 client snapshot 계약이 통과해야 한다.
 - npm run build — Phaser scene import 및 UI bundle이 통과해야 한다.
+
+## Critical Review
+- 별도 리뷰어가 progression/reset 계산, TownScene UI, 배열 입력 replay와 테스트를 검토했으며 T03 범위에서 차단 이슈를 찾지 못했다.
+- 리뷰에서 현재 stage ticket version guard가 simulatorVersion 1로 남아 있음을 확인했다. 이는 T03 범위 밖이며 P02-T07에서 `rankedRunClient.js`와 `packages/game-rules/src/simulation.js`의 stage ticket 검증을 v2로 갱신할 통합 항목으로 이월한다. PvP 티켓의 별도 v1 guard는 그대로 둔다.
+- 검토 중 수정 사항: 없음.
 
 ## Commit Message
 ~~~text
@@ -87,6 +94,10 @@ Task: T03-stat-points-and-town-reset
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- 지정 테스트: Node.js 22.12.0, 41/41 통과.
+- 전체 테스트: 160개 중 148개 통과, 12개 실패. 실패는 API cloud save, ranking snapshot, stage ticket의 schema v1 fixture로 P02-T06~T07 작업에서 갱신할 항목이다.
+- 빌드: Node.js 22.12.0 Vite production build 통과. 기존 500 kB chunk 크기 경고가 남아 있다.
+- `git diff --check`: 통과.
+- commit: pending (T03 변경과 메모리 포인터 동기화 후 커밋 예정)

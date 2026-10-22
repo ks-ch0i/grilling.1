@@ -25,6 +25,8 @@ export function deriveRankedPlayerSnapshot(state, chapter, stage) {
     xp: state.player.xp,
     xpToNext: state.player.xpToNext,
     pendingLevelUps: state.player.pendingLevelUps,
+    availableStatPoints: state.player.availableStatPoints,
+    spentStatPoints: state.player.spentStatPoints,
     replayXpMultiplier: isReplay ? BALANCE.replayXpMultiplier : 1,
   };
 }
@@ -32,7 +34,7 @@ export function deriveRankedPlayerSnapshot(state, chapter, stage) {
 function sameSnapshot(expected, actual) {
   const numericFields = [
     'maxHp', 'currentHp', 'attack', 'defense', 'critChance', 'critMultiplier', 'moveSpeed',
-    'level', 'xp', 'xpToNext', 'pendingLevelUps', 'replayXpMultiplier',
+    'level', 'xp', 'xpToNext', 'pendingLevelUps', 'availableStatPoints', 'spentStatPoints', 'replayXpMultiplier',
   ];
   if (numericFields.some((field) => expected[field] !== actual?.[field])) return false;
   const sortEffects = (effects) => [...(effects ?? [])]
@@ -239,9 +241,12 @@ export function createRunInputRecorder({ maxEvents = MAX_RANKED_INPUT_EVENTS, ma
       if (result.ok) lastDirection = direction;
       return result;
     },
-    recordLevelUp(tick, stat) {
-      if (!LEVEL_UP_STATS.has(stat)) throw new RangeError('Unsupported ranked level-up stat.');
-      return append({ tick, kind: 'levelUp', value: stat });
+    recordLevelUp(tick, allocations) {
+      if (!Array.isArray(allocations) || allocations.length > 2 ||
+          Array.from({ length: allocations.length }, (_, index) => allocations[index]).some((stat) => !LEVEL_UP_STATS.has(stat))) {
+        throw new RangeError('Unsupported ranked level-up allocation.');
+      }
+      return append({ tick, kind: 'levelUp', value: [...allocations] });
     },
     getInputs() { return inputs.map((event) => ({ ...event })); },
     getError() { return error; },

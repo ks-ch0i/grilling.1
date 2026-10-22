@@ -54,12 +54,22 @@ function assertCombatSnapshot(snapshot, name = 'player') {
     !effect || typeof effect.id !== 'string' || !Number.isFinite(effect.value))) {
     throw new TypeError(`${name}.effects must contain effect id/value pairs.`);
   }
-  const progression = [snapshot.level, snapshot.xp, snapshot.xpToNext, snapshot.pendingLevelUps, snapshot.replayXpMultiplier];
+  const progression = [
+    snapshot.level,
+    snapshot.xp,
+    snapshot.xpToNext,
+    snapshot.pendingLevelUps,
+    snapshot.availableStatPoints,
+    snapshot.spentStatPoints,
+    snapshot.replayXpMultiplier,
+  ];
   if (progression.some((value) => value !== undefined) &&
       (!Number.isInteger(snapshot.level) || snapshot.level < 1 ||
        !Number.isFinite(snapshot.xp) || snapshot.xp < 0 ||
        !Number.isFinite(snapshot.xpToNext) || snapshot.xpToNext <= 0 ||
        !Number.isInteger(snapshot.pendingLevelUps) || snapshot.pendingLevelUps < 0 ||
+       !Number.isSafeInteger(snapshot.availableStatPoints) || snapshot.availableStatPoints < 0 ||
+       !Number.isSafeInteger(snapshot.spentStatPoints) || snapshot.spentStatPoints < 0 ||
        !Number.isFinite(snapshot.replayXpMultiplier) || snapshot.replayXpMultiplier < 0 || snapshot.replayXpMultiplier > 1)) {
     throw new RangeError(`${name} progression snapshot is invalid.`);
   }
@@ -99,6 +109,8 @@ export function createRankedRun(ticket, playerSnapshot) {
       xp: playerSnapshot.xp ?? 0,
       xpToNext: playerSnapshot.xpToNext ?? 100,
       pendingLevelUps: playerSnapshot.pendingLevelUps ?? 0,
+      availableStatPoints: playerSnapshot.availableStatPoints ?? 0,
+      spentStatPoints: playerSnapshot.spentStatPoints ?? 0,
       replayXpMultiplier: playerSnapshot.replayXpMultiplier ?? 1,
     },
     enemies,
@@ -144,17 +156,34 @@ function grantRunXp(player, amount) {
   return { ...player, xp, pendingLevelUps };
 }
 
-function applyLevelUp(player, statKey) {
-  if (!LEVEL_UP_KEYS.includes(statKey)) throw new RangeError('invalid-level-up-stat.');
+function validLevelUpAllocation(value) {
+  if (!Array.isArray(value) || value.length > 2) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (!LEVEL_UP_KEYS.includes(value[index])) return false;
+  }
+  return true;
+}
+
+function applyLevelUp(player, allocations) {
+  if (!validLevelUpAllocation(allocations)) throw new RangeError('invalid-level-up-allocation.');
   if (player.pendingLevelUps < 1) throw new RangeError('level-up-without-pending-selection.');
-  const gain = BALANCE.levelUp[statKey];
+  const availableStatPoints = player.availableStatPoints + 2 - allocations.length;
+  const spentStatPoints = player.spentStatPoints + allocations.length;
+  if (!Number.isSafeInteger(availableStatPoints) || !Number.isSafeInteger(spentStatPoints)) {
+    throw new RangeError('invalid-stat-point-balance.');
+  }
   const next = { ...player, pendingLevelUps: player.pendingLevelUps - 1, level: player.level + 1 };
   next.xpToNext = xpRequiredForLevel(next.level + 1);
-  if (statKey === 'maxHp') {
-    next.maxHp += gain;
-    next.currentHp = Math.min(next.maxHp, next.currentHp + gain);
-  } else {
-    next[statKey] += gain;
+  next.availableStatPoints = availableStatPoints;
+  next.spentStatPoints = spentStatPoints;
+  for (const statKey of allocations) {
+    const gain = BALANCE.levelUp[statKey];
+    if (statKey === 'maxHp') {
+      next.maxHp += gain;
+      next.currentHp = Math.min(next.maxHp, next.currentHp + gain);
+    } else {
+      next[statKey] += gain;
+    }
   }
   return next;
 }
@@ -169,7 +198,7 @@ function validateTickInputs(inputForTick, tick) {
       moveCount += 1;
       if (moveCount > 1) throw new RangeError('duplicate-move-event.');
     } else if (event.kind === 'levelUp') {
-      if (!LEVEL_UP_KEYS.includes(event.value)) throw new RangeError('invalid-level-up-stat.');
+      if (!validLevelUpAllocation(event.value)) throw new RangeError('invalid-level-up-allocation.');
     } else {
       throw new RangeError('invalid-input-event-kind.');
     }
@@ -286,7 +315,7 @@ export function stepRankedRun(state, inputForTick = []) {
     if (event.kind === 'move') next.movementDirection = event.value;
     else {
       next.player = applyLevelUp(next.player, event.value);
-      events.push({ type: 'levelUp', tick: state.tick, stat: event.value, level: next.player.level });
+      events.push({ type: 'levelUp', tick: state.tick, stats: [...event.value], level: next.player.level });
     }
   }
   next.player.x = clamp(
@@ -321,7 +350,7 @@ function validateInputLog(inputs) {
       previousTickMoveCount += 1;
       if (previousTickMoveCount > 1) return 'duplicate-move-event';
     } else if (event.kind === 'levelUp') {
-      if (!LEVEL_UP_KEYS.includes(event.value)) return 'invalid-level-up-stat';
+      if (!validLevelUpAllocation(event.value)) return 'invalid-level-up-allocation';
     } else {
       return 'invalid-input-event-kind';
     }

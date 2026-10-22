@@ -4,6 +4,34 @@ import { derivePlayerStats } from './gear.js';
 
 export { getStageEnemyStats };
 
+const ALLOCATABLE_STATS = new Set(['attack', 'defense', 'maxHp']);
+
+function hasValidStatPoints(player) {
+  return Number.isSafeInteger(player.availableStatPoints) && player.availableStatPoints >= 0 &&
+    Number.isSafeInteger(player.spentStatPoints) && player.spentStatPoints >= 0;
+}
+
+function validAllocations(allocations) {
+  if (!Array.isArray(allocations) || allocations.length > 2) return false;
+  for (let index = 0; index < allocations.length; index += 1) {
+    if (!ALLOCATABLE_STATS.has(allocations[index])) return false;
+  }
+  return true;
+}
+
+function withAllocatedStats(state, allocations) {
+  const baseStats = { ...state.player.baseStats };
+  let currentHp = state.player.currentHp;
+  for (const statKey of allocations) {
+    const gain = BALANCE.levelUp[statKey];
+    baseStats[statKey] += gain;
+    if (statKey === 'maxHp') currentHp += gain;
+  }
+  const next = { ...state, player: { ...state.player, baseStats, currentHp } };
+  next.player.currentHp = Math.min(next.player.currentHp, derivePlayerStats(next).maxHp);
+  return next;
+}
+
 export function xpRequiredForLevel(targetLevel) {
   if (!Number.isInteger(targetLevel) || targetLevel < 2) {
     throw new RangeError('targetLevel must be an integer greater than or equal to 2.');
@@ -38,30 +66,81 @@ export function grantXp(state, amount, isReplay = false) {
   };
 }
 
-export function chooseLevelUpStat(state, statKey) {
-  const gains = BALANCE.levelUp;
-  if (!Object.hasOwn(gains, statKey)) return { ok: false, reason: 'invalid-stat' };
+export function resolveLevelUp(state, allocations) {
+  if (!validAllocations(allocations)) return { ok: false, reason: 'invalid-allocation' };
   if (state.player.pendingLevelUps < 1) return { ok: false, reason: 'no-pending-level-up' };
-  const oldMaxHp = state.player.baseStats.maxHp;
-  const baseStats = { ...state.player.baseStats, [statKey]: state.player.baseStats[statKey] + gains[statKey] };
+  if (!hasValidStatPoints(state.player)) return { ok: false, reason: 'invalid-stat-points' };
+  const availableStatPoints = state.player.availableStatPoints + 2 - allocations.length;
+  const spentStatPoints = state.player.spentStatPoints + allocations.length;
+  if (!Number.isSafeInteger(availableStatPoints) || !Number.isSafeInteger(spentStatPoints)) {
+    return { ok: false, reason: 'invalid-stat-points' };
+  }
   const level = state.player.level + 1;
-  const currentHp = statKey === 'maxHp'
-    ? Math.min(baseStats.maxHp, state.player.currentHp + baseStats.maxHp - oldMaxHp)
-    : Math.min(baseStats.maxHp, state.player.currentHp);
+  const allocated = withAllocatedStats(state, allocations);
   return {
     ok: true,
     state: {
       ...state,
       player: {
-        ...state.player,
+        ...allocated.player,
         level,
-        baseStats,
-        currentHp,
         xpToNext: xpRequiredForLevel(level + 1),
         pendingLevelUps: state.player.pendingLevelUps - 1,
+        availableStatPoints,
+        spentStatPoints,
       },
     },
   };
+}
+
+export function allocateStatPoint(state, statKey) {
+  if (!ALLOCATABLE_STATS.has(statKey)) return { ok: false, reason: 'invalid-stat' };
+  if (!hasValidStatPoints(state.player)) return { ok: false, reason: 'invalid-stat-points' };
+  if (state.player.availableStatPoints < 1) return { ok: false, reason: 'insufficient-stat-points' };
+  const next = withAllocatedStats(state, [statKey]);
+  next.player.availableStatPoints -= 1;
+  next.player.spentStatPoints += 1;
+  if (!hasValidStatPoints(next.player)) return { ok: false, reason: 'invalid-stat-points' };
+  return { ok: true, state: next };
+}
+
+export function getStatResetCost(resetCount) {
+  if (!Number.isSafeInteger(resetCount) || resetCount < 0) {
+    throw new RangeError('resetCount must be a non-negative safe integer.');
+  }
+  const cost = Math.ceil(1000 * (1.5 ** resetCount));
+  if (!Number.isSafeInteger(cost)) throw new RangeError('stat reset cost exceeds the safe integer range.');
+  return cost;
+}
+
+export function resetStatPoints(state) {
+  const { player, gold } = state;
+  if (!hasValidStatPoints(player) || !Number.isSafeInteger(player.statResetCount) || player.statResetCount < 0) {
+    return { ok: false, reason: 'invalid-stat-points' };
+  }
+  if (!Number.isSafeInteger(gold) || gold < 0) return { ok: false, reason: 'invalid-gold' };
+  if (player.spentStatPoints < 1) return { ok: false, reason: 'no-stat-points-spent' };
+  const cost = getStatResetCost(player.statResetCount);
+  if (gold < cost) return { ok: false, reason: 'insufficient-gold', cost };
+  const availableStatPoints = player.availableStatPoints + player.spentStatPoints;
+  const statResetCount = player.statResetCount + 1;
+  if (!Number.isSafeInteger(availableStatPoints) || !Number.isSafeInteger(statResetCount)) {
+    return { ok: false, reason: 'invalid-stat-points' };
+  }
+  const next = {
+    ...state,
+    gold: gold - cost,
+    player: {
+      ...player,
+      baseStats: { ...BALANCE.basePlayer },
+      currentHp: player.currentHp,
+      availableStatPoints,
+      spentStatPoints: 0,
+      statResetCount,
+    },
+  };
+  next.player.currentHp = Math.min(next.player.currentHp, derivePlayerStats(next).maxHp);
+  return { ok: true, state: next, cost };
 }
 
 export function stageId(chapter, stage) {

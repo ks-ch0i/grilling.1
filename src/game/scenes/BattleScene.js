@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
-import { chooseLevelUpStat, completeStage, getStageEnemyStats, grantXp, retryStage } from '../domain/progression.js';
+import { completeStage, getStageEnemyStats, grantXp, resolveLevelUp, retryStage } from '../domain/progression.js';
 import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulation';
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
@@ -518,38 +518,60 @@ export class BattleScene extends Phaser.Scene {
     this.combatPaused = true;
     this.levelModal = this.add.container(0, 0).setScrollFactor(0).setDepth(200);
     this.levelModal.add(this.add.rectangle(640, 360, 1280, 720, 0x090d12, 0.78));
-    this.levelModal.add(this.add.rectangle(640, 355, 470, 300, 0x202d3b).setStrokeStyle(2, 0xd8ba77));
-    this.levelModal.add(this.add.text(640, 250, '레벨 업!  능력치를 선택하세요', { fontFamily:'sans-serif',fontSize:'23px',color:'#ffdf94' }).setOrigin(0.5));
-    const choices=[['attack','공격력 +2'],['defense','방어력 +5'],['maxHp','최대 HP +10']];
+    this.levelModal.add(this.add.rectangle(640, 360, 500, 414, 0x202d3b).setStrokeStyle(2, 0xd8ba77));
+    this.levelModal.add(this.add.text(640, 184, '레벨 업!  능력치를 선택하세요', { fontFamily:'sans-serif',fontSize:'23px',color:'#ffdf94' }).setOrigin(0.5));
+    this.levelModal.add(this.add.text(640, 218, '이번 레벨에서 0~2점을 배정할 수 있습니다.', { fontFamily:'sans-serif',fontSize:'14px',color:'#d4dde7' }).setOrigin(0.5));
+    this.levelModal.add(this.add.text(640, 247, `미사용 ${this.gameState.player.availableStatPoints}점 · 이번 레벨 +2점`, { fontFamily:'sans-serif',fontSize:'15px',color:'#f4e6bf' }).setOrigin(0.5));
+    const labels={attack:'공격력',defense:'방어력',maxHp:'최대 HP'};
+    const choices=[['attack','공격력 +5'],['defense','방어력 +10'],['maxHp','최대 HP +30']];
+    const allocations=[];
+    const selected=this.add.text(640, 276, '선택: 보류', { fontFamily:'sans-serif',fontSize:'14px',color:'#c8d4df' }).setOrigin(0.5);
+    this.levelModal.add(selected);
+    const refreshSelected=()=>selected.setText(allocations.length
+      ? `선택: ${allocations.map((key)=>labels[key]).join(' + ')}`
+      : '선택: 보류');
     this.levelModalButtons=[];
     choices.forEach(([key,label],index)=>{
-      const button=createButton(this,{x:445,y:292+index*66,width:390,height:52,label,onClick:()=>{
-        if (this.rankedRunState && !this.rankedRunState.outcome) {
-          const tick = this.rankedRunState.tick;
-          const recorded = this.rankedRecorder.recordLevelUp(tick, key);
-          if (!recorded.ok) this.markRankedUnavailable(recorded.reason);
-          this.rankedQueuedInputs.push({ tick, kind:'levelUp', value:key });
-        }
-        const result=chooseLevelUpStat(this.gameState,key);
-        if(!result.ok)return;
-        this.gameState=result.state;
-        this.player.stats=derivePlayerStats(this.gameState);
-        this.player.maxHp=this.player.stats.maxHp;
-        this.player.currentHp=Math.min(this.player.maxHp,this.gameState.player.currentHp);
-        this.gameState={...this.gameState,player:{...this.gameState.player,currentHp:this.player.currentHp}};
-        this.saveState(this.gameState);
-        this.levelModalButtons.forEach((levelButton)=>levelButton.destroy());
-        this.levelModalButtons=[];
-        this.levelModal.destroy();
-        this.levelModal=null;
-        this.combatPaused=this.isPortrait();
-        if(this.gameState.player.pendingLevelUps>0)this.showLevelUp();
-        else if(this.pendingStageClear){const next=this.pendingStageClear;this.pendingStageClear=null;this.showStageClear(next.nextChapter,next.nextStage);}
-        this.updateHud();
+      const button=createButton(this,{x:445,y:300+index*54,width:390,height:46,label,onClick:()=>{
+        if (allocations.length >= 2) return;
+        allocations.push(key);
+        refreshSelected();
       }});
       button.setDepth(201);
+      this.levelModal.add(button);
       this.levelModalButtons.push(button);
     });
+    const confirmLevelUp=(selectedAllocations)=>{
+      const result=resolveLevelUp(this.gameState,selectedAllocations);
+      if(!result.ok)return;
+      if (this.rankedRunState && !this.rankedRunState.outcome) {
+        const tick = this.rankedRunState.tick;
+        const recorded = this.rankedRecorder.recordLevelUp(tick, selectedAllocations);
+        if (!recorded.ok) this.markRankedUnavailable(recorded.reason);
+        this.rankedQueuedInputs.push({ tick, kind:'levelUp', value:[...selectedAllocations] });
+      }
+      this.gameState=result.state;
+      this.player.stats=derivePlayerStats(this.gameState);
+      this.player.maxHp=this.player.stats.maxHp;
+      this.player.currentHp=Math.min(this.player.maxHp,this.gameState.player.currentHp);
+      this.gameState={...this.gameState,player:{...this.gameState.player,currentHp:this.player.currentHp}};
+      this.saveState(this.gameState);
+      this.levelModal.destroy(true);
+      this.levelModalButtons=[];
+      this.levelModal=null;
+      this.combatPaused=this.isPortrait();
+      if(this.gameState.player.pendingLevelUps>0)this.showLevelUp();
+      else if(this.pendingStageClear){const next=this.pendingStageClear;this.pendingStageClear=null;this.showStageClear(next.nextChapter,next.nextStage);}
+      this.updateHud();
+    };
+    const undo=createButton(this,{x:421,y:495,width:145,height:44,label:'마지막 선택 취소',onClick:()=>{
+      if (allocations.length) allocations.pop();
+      refreshSelected();
+    }}).setDepth(201);
+    const defer=createButton(this,{x:572,y:495,width:132,height:44,label:'이번엔 보류',onClick:()=>confirmLevelUp([])}).setDepth(201);
+    const confirm=createButton(this,{x:710,y:495,width:149,height:44,label:'선택 확정',onClick:()=>confirmLevelUp([...allocations])}).setDepth(201);
+    this.levelModal.add([undo,defer,confirm]);
+    this.levelModalButtons.push(undo,defer,confirm);
   }
 
   showMessage(message) {

@@ -10,12 +10,16 @@ import {
 
 function gameState(overrides = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    gold: 0,
     player: {
       level: 1,
       xp: 0,
       xpToNext: 100,
       pendingLevelUps: 0,
+      availableStatPoints: 0,
+      spentStatPoints: 0,
+      statResetCount: 0,
       currentHp: 80,
       baseStats: { maxHp: 100, attack: 10, defense: 5, critChance: 0.05, critMultiplier: 2, moveSpeed: 200 },
     },
@@ -58,7 +62,8 @@ test('ranked snapshot includes derived combat stats and saved level progression'
   assert.deepEqual(deriveRankedPlayerSnapshot(state, 1, 2), {
     maxHp: 100, currentHp: 80, attack: 10, defense: 5,
     critChance: 0.05, critMultiplier: 2, moveSpeed: 200, effects: [],
-    level: 3, xp: 26, xpToNext: 144, pendingLevelUps: 0, replayXpMultiplier: 0.3,
+    level: 3, xp: 26, xpToNext: 144, pendingLevelUps: 0,
+    availableStatPoints: 0, spentStatPoints: 0, replayXpMultiplier: 0.3,
   });
 });
 
@@ -203,19 +208,21 @@ test('input recorder stores direction changes and same-tick level choices within
   assert.equal(recorder.recordMove(0, 0).recorded, false);
   assert.equal(recorder.recordMove(0, 1).recorded, true);
   assert.equal(recorder.recordMove(1, 1).recorded, false);
-  recorder.recordLevelUp(8, 'attack');
+  recorder.recordLevelUp(8, ['attack', 'attack']);
   recorder.recordMove(8, 0);
   assert.deepEqual(recorder.getInputs(), [
     { tick: 0, kind: 'move', value: 1 },
-    { tick: 8, kind: 'levelUp', value: 'attack' },
+    { tick: 8, kind: 'levelUp', value: ['attack', 'attack'] },
     { tick: 8, kind: 'move', value: 0 },
   ]);
+  assert.throws(() => recorder.recordLevelUp(9, 'attack'), RangeError);
+  assert.throws(() => recorder.recordLevelUp(9, ['attack', 'defense', 'maxHp']), RangeError);
 });
 
 test('input recorder disables ranking beyond event and encoded payload limits', () => {
   const eventLimited = createRunInputRecorder({ maxEvents: 1 });
   eventLimited.recordMove(0, 1);
-  assert.equal(eventLimited.recordLevelUp(1, 'attack').ok, false);
+  assert.equal(eventLimited.recordLevelUp(1, ['attack']).ok, false);
   assert.equal(eventLimited.getError(), 'too-many-input-events');
 
   const byteLimited = createRunInputRecorder({ maxBytes: 20 });

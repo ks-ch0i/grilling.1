@@ -33,6 +33,13 @@ const player = (overrides = {}) => ({
   critMultiplier: 2,
   moveSpeed: 200,
   effects: [],
+  level: 1,
+  xp: 0,
+  xpToNext: 100,
+  pendingLevelUps: 0,
+  availableStatPoints: 0,
+  spentStatPoints: 0,
+  replayXpMultiplier: 1,
   ...overrides,
 });
 
@@ -142,14 +149,17 @@ test('stage replays reject reversed ticks, duplicate movement and invalid level-
     { tick: 0, kind: 'move', value: -1 },
   ]);
   const unavailableLevelUp = replayRankedRun(stageTicket(), player(), [
-    { tick: 0, kind: 'levelUp', value: 'attack' },
+    { tick: 0, kind: 'levelUp', value: ['attack'] },
   ]);
   const invalidLevelUpStat = replayRankedRun(stageTicket(), player(), [
-    { tick: 0, kind: 'levelUp', value: 'invalid' },
+    { tick: 0, kind: 'levelUp', value: ['invalid'] },
+  ]);
+  const nonArrayLevelUp = replayRankedRun(stageTicket(), player(), [
+    { tick: 0, kind: 'levelUp', value: 'attack' },
   ]);
   const invalidSeed = replayRankedRun(stageTicket({ seed: 0 }), player(), []);
 
-  for (const result of [reversed, duplicateMove, unavailableLevelUp, invalidLevelUpStat, invalidSeed]) {
+  for (const result of [reversed, duplicateMove, unavailableLevelUp, invalidLevelUpStat, nonArrayLevelUp, invalidSeed]) {
     assert.equal(result.valid, false);
     assert.equal(result.outcome, 'invalid');
     assert.ok(result.rejectReason);
@@ -199,7 +209,7 @@ test('a valid pending level-up is applied before the fixed boss encounter', asyn
   const { replayRankedRun } = await loadRules();
   const result = replayRankedRun(stageTicket({ stage: 5 }), player(), [
     { tick: 0, kind: 'move', value: 1 },
-    { tick: 2979, kind: 'levelUp', value: 'attack' },
+    { tick: 2979, kind: 'levelUp', value: ['attack'] },
   ]);
 
   assert.equal(result.valid, true);
@@ -224,7 +234,7 @@ test('ranked stage replay starts from saved XP and applies replay XP before leve
     if (state.tick === 0) tickInputs.push({ tick: state.tick, kind: 'move', value: 1 });
     if (state.player.pendingLevelUps > 0) {
       selectedAtTick = state.tick;
-      tickInputs.push({ tick: state.tick, kind: 'levelUp', value: 'attack' });
+      tickInputs.push({ tick: state.tick, kind: 'levelUp', value: ['attack'] });
     }
     inputs.push(...tickInputs);
     state = stepRankedRun(state, tickInputs).state;
@@ -236,6 +246,44 @@ test('ranked stage replay starts from saved XP and applies replay XP before leve
   assert.equal(replay.outcome, 'clear');
   assert.equal(state.player.level, 3);
   assert.equal(state.player.xp, 5);
+  assert.equal(state.player.spentStatPoints, 1);
+});
+
+test('level-up replay applies an allocation array and awards unspent points deterministically', async () => {
+  const { createRankedRun, stepRankedRun, replayRankedRun } = await loadRules();
+  const snapshot = player({ pendingLevelUps: 1, availableStatPoints: 2 });
+  const ticket = stageTicket();
+  const initial = createRankedRun(ticket, snapshot);
+  const selected = stepRankedRun(initial, [{ tick: 0, kind: 'levelUp', value: ['attack', 'attack'] }]).state;
+  const held = stepRankedRun(initial, [{ tick: 0, kind: 'levelUp', value: [] }]).state;
+  const incomplete = replayRankedRun(ticket, snapshot, []);
+
+  assert.equal(selected.player.attack, initial.player.attack + 10);
+  assert.equal(selected.player.availableStatPoints, 2);
+  assert.equal(selected.player.spentStatPoints, 2);
+  assert.equal(selected.player.pendingLevelUps, 0);
+  assert.equal(held.player.availableStatPoints, 4);
+  assert.equal(held.player.spentStatPoints, 0);
+  assert.equal(incomplete.valid, false);
+  assert.equal(incomplete.outcome, 'incomplete');
+  assert.equal(incomplete.rejectReason, 'level-up-selection-required');
+});
+
+test('ranked snapshots require valid stat-point counters and allocation arrays have a two-key limit', async () => {
+  const { createRankedRun, stepRankedRun, replayRankedRun } = await loadRules();
+  const snapshot = player({ pendingLevelUps: 1 });
+  assert.throws(() => createRankedRun(stageTicket(), { ...snapshot, availableStatPoints: undefined }), RangeError);
+
+  const sparse = [];
+  sparse.length = 1;
+  for (const value of ['attack', ['attack', 'defense', 'maxHp'], ['speed'], sparse]) {
+    const result = replayRankedRun(stageTicket(), snapshot, [{ tick: 0, kind: 'levelUp', value }]);
+    assert.equal(result.valid, false);
+    assert.equal(result.rejectReason, 'invalid-level-up-allocation');
+  }
+  assert.throws(() => stepRankedRun(createRankedRun(stageTicket(), snapshot), [
+    { tick: 0, kind: 'levelUp', value: ['attack', 'defense', 'maxHp'] },
+  ]), /invalid-level-up-allocation/);
 });
 
 test('stage inputs cannot claim a clear before all enemies are defeated', async () => {
