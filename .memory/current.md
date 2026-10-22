@@ -1,23 +1,26 @@
 # Current Context
 
 ## Active Plan
-[사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
+[캐릭터·장비 밸런스와 강화 실패·파괴](./plans/2026-10-22-character-gear-balance.md)
 
 ## Active Phase
-[P03 Azure 인프라 코드](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md)
+[P01 공유 밸런스와 게임플레이](./phases/2026-10-22-character-gear-balance/P01-gameplay-and-save/phase.md)
 
 ## Active Task
-[T10 Azure 인프라 구성](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/T10-azure-infrastructure.md)
+[T02 저장 v2 모델과 기존 로컬 저장 결정적 이행](./phases/2026-10-22-character-gear-balance/P01-gameplay-and-save/T02-save-v2-and-legacy-migration.md)
 
 ## Status
-- 계획 생성: 2026-10-21.
-- P01 완료: 공유 결정적 시뮬레이터, Functions 인증·SQL 기반, 클라우드 저장, 스테이지 검증 랭킹, 공개 스냅샷과 비동기 PvP Elo API를 구현하고 검증했다. P02 T06 Entra 계정 로그인/계정별 저장, T07 60Hz 티켓 기반 스테이지 전투/검증 제출, T08 PvP 스냅샷 매칭/서버 판정 전투, T09 SignalR 전광판/폴링 복구를 구현하고 검증했다.
-- 현재 저장 schemaVersion 1은 유지한다. 사용자 계정 저장·보상은 클라이언트 계산으로 남고 경쟁 기록만 서버 재생 검증한다.
-- P01은 API까지, P02는 브라우저 연결, P03은 Azure template/workflow 준비, P04는 실제 사내 Azure 배포 및 E2E다.
-- P04는 SQL 지속 비용, 리소스 그룹/위치, SignalR Free 수용 한도를 확인하고 사용자의 명시적 진행 지시가 있기 전까지 Azure 리소스를 만들지 않는다.
-- SignalR Free 제약(동시 연결 20, 일일 메시지 20,000, Dev/Test only)을 P04 이전에 다시 확인한다.
-- T10 템플릿·배포 설정과 로컬 검증은 완료했다. 사용자가 아직 직접적인 배포 계획이 없다고 확인했으므로, read-only what-if은 실제 배포 계획과 대상 구독/리소스 그룹이 정해질 때까지 보류한다.
-- 기존 작업공간의 .agents/, .codeburn/, AGENTS.md, CODEBURN-SETUP.md, README.md, examples/ 미추적 항목은 그대로 보존했다.
+- 계획 생성: 2026-10-22. 기준 결정은 .memory/decisions/2026-10-22-character-gear-balance.md다.
+- 새 계획은 P01 게임플레이/저장 5개 Task, P02 온라인 호환 3개 Task로 구성했다.
+- P01-T01 공통 밸런스 규칙은 구현·검증을 마쳤다. 1,024개 고정 seed 표본에서 C1S1과 C1S10 모두 전투를 완주했다.
+- 다음 실행 항목은 P01-T02 저장 v2 모델과 기존 로컬 저장 결정적 이행이다.
+- 이전 작업공간의 .agents/, .codeburn/, AGENTS.md, CODEBURN-SETUP.md, README.md, examples/ 미추적 파일은 변경하지 않았다.
+
+## Deferred Plan
+- 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
+- 보류 위치: [P03 Azure 인프라 코드](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md), [T10 Azure 인프라 구성](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/T10-azure-infrastructure.md)
+- T10 템플릿/workflow와 로컬 검증은 끝났고, target subscription/resource group을 정한 직접 배포 계획이 없으므로 what-if만 보류 상태다. P04 실제 배포도 보류하며 Azure 리소스는 만들지 않는다.
+- 재개 조건: 구체적인 배포 계획과 대상 구독/리소스 그룹이 정해졌을 때 T10 what-if을 수행한다. 실제 Azure 배포는 별도 명시적 진행 지시와 비용 확인이 필요하다.
 
 ## Next Step (IMPORTANT)
-T10의 what-if은 직접적인 배포 계획과 대상 구독/리소스 그룹이 정해질 때 수행한다. 실제 리소스 생성과 Azure 배포는 P04의 비용 확인 및 사용자의 명시적 진행 지시 전까지 수행하지 않는다.
+P01-T02 청사진을 읽고 저장 스키마와 기존 저장 이행 경로를 검토한 뒤 결정적 migration을 구현한다.

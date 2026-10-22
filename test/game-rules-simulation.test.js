@@ -60,9 +60,10 @@ test('the game-rules package exposes versioned balance and combat contracts', as
   const oldProgression = await import('../src/game/domain/progression.js');
 
   assert.equal(oldBalance.BALANCE, rules.BALANCE);
+  assert.equal(oldBalance.getGearUpgradeBand, rules.getGearUpgradeBand);
   assert.equal(oldProgression.getStageEnemyStats, rules.getStageEnemyStats);
   assert.deepEqual(rules.BALANCE.basePlayer, {
-    maxHp: 100,
+    maxHp: 200,
     attack: 10,
     defense: 5,
     critChance: 0.05,
@@ -79,11 +80,11 @@ test('the game-rules package exposes versioned balance and combat contracts', as
   };
   assert.deepEqual(rules.resolveContact(combatInput), oldCombat.resolveContact(combatInput));
   assert.deepEqual(rules.getStageEnemyStats(2, 5, true), {
-    maxHp: 975,
-    hp: 975,
-    currentHp: 975,
-    attack: 78,
-    defense: 66,
+    maxHp: 143,
+    hp: 143,
+    currentHp: 143,
+    attack: 26,
+    defense: 12,
     isBoss: true,
   });
 });
@@ -170,10 +171,10 @@ test('body contact applies mutual damage once, knocks back, and allows a later r
   assert.equal(contacts.length, 2);
   assert.equal(contacts[0].targetId, 'enemy-1');
   assert.equal(contacts[1].targetId, 'enemy-1');
-  assert.equal(contacts[0].playerDamage, 0);
-  assert.equal(contacts[0].enemyDamage, 0);
+  assert.equal(contacts[0].playerDamage, 12);
+  assert.equal(contacts[0].enemyDamage, 6);
   assert.ok(state.player.x < 700);
-  assert.equal(state.player.currentHp, 10000);
+  assert.equal(state.player.currentHp, 9976);
 });
 
 test('a boss stage spawns its fixed boss after the tenth normal enemy', async () => {
@@ -191,7 +192,7 @@ test('a boss stage spawns its fixed boss after the tenth normal enemy', async ()
   assert.equal(bossEvent.tick, 2978);
   assert.equal(bossEvent.x, 10500);
   assert.equal(state.enemies.at(-1).id, 'boss');
-  assert.equal(state.enemies.at(-1).maxHp, 540);
+  assert.equal(state.enemies.at(-1).maxHp, 81);
 });
 
 test('a valid pending level-up is applied before the fixed boss encounter', async () => {
