@@ -77,7 +77,8 @@ test('the game-rules package exposes versioned balance and combat contracts', as
     critMultiplier: 2,
     moveSpeed: 200,
   });
-  assert.equal(rules.BALANCE.normalEnemyCount, 10);
+  assert.deepEqual(rules.BALANCE.normalEnemyCount, { min: 4, max: 10 });
+  assert.deepEqual(rules.BALANCE.goldRewards, { normalEnemy: 11, boss: 55, stageClear: 175 });
   assert.equal(rules.BALANCE.knockbackPixels, 96);
   assert.deepEqual(rules.GEAR_SLOT, oldBalance.GEAR_SLOT);
   assert.deepEqual(rules.RARITY, oldBalance.RARITY);
@@ -112,6 +113,45 @@ test('the seeded generator is repeatable and rejects invalid seeds', async () =>
   assert.equal(rollCritical(criticalStats, createSeededRandom(123456789)), false);
 });
 
+test('ranked enemy counts use one ticket-seeded draw and preserve the following contact stream', async () => {
+  const { createRankedRun, createSeededRandom, stepRankedRun } = await loadRules();
+  const seenCounts = new Set();
+
+  for (const seed of [1, 2304, 4608, 6912, 9216, 11392, 13824]) {
+    const ticket = stageTicket({ seed });
+    const first = createRankedRun(ticket, player());
+    const second = createRankedRun(ticket, player());
+    const enemyCount = first.enemies.filter((enemy) => !enemy.isBoss).length;
+    const expectedCount = 4 + Math.floor(createSeededRandom(seed)() * 7);
+    let expectedRandomState = seed >>> 0;
+    expectedRandomState ^= expectedRandomState << 13;
+    expectedRandomState ^= expectedRandomState >>> 17;
+    expectedRandomState ^= expectedRandomState << 5;
+    expectedRandomState >>>= 0;
+
+    assert.equal(enemyCount, expectedCount);
+    assert.ok(enemyCount >= 4 && enemyCount <= 10);
+    assert.equal(first.randomState, expectedRandomState);
+    assert.deepEqual(first.enemies, second.enemies);
+    assert.deepEqual(first, second);
+    seenCounts.add(enemyCount);
+
+    const runToFirstContact = (initial) => {
+      let state = initial;
+      const contacts = [];
+      for (let tick = 0; tick < 220 && contacts.length === 0; tick += 1) {
+        const result = stepRankedRun(state, tick === 0 ? [{ tick, kind: 'move', value: 1 }] : []);
+        state = result.state;
+        contacts.push(...result.events.filter((event) => event.type === 'contact'));
+      }
+      return { state, contacts };
+    };
+    assert.deepEqual(runToFirstContact(first), runToFirstContact(second));
+  }
+
+  assert.deepEqual([...seenCounts].sort((left, right) => left - right), [4, 5, 6, 7, 8, 9, 10]);
+});
+
 test('the simulator advances fixed 60 Hz ticks and keeps the last movement direction', async () => {
   const { createRankedRun, stepRankedRun } = await loadRules();
   const initial = createRankedRun(stageTicket(), player());
@@ -132,7 +172,7 @@ test('a stage replay produces the same clear result for the same ticket and inpu
   assert.deepEqual(first, {
     valid: true,
     outcome: 'clear',
-    elapsedTicks: 2979,
+    elapsedTicks: 2351,
     playerHp: 10000,
     rejectReason: null,
   });
@@ -187,9 +227,10 @@ test('body contact applies mutual damage once, knocks back, and allows a later r
   assert.equal(state.player.currentHp, 9976);
 });
 
-test('a boss stage spawns its fixed boss after the tenth normal enemy', async () => {
+test('a boss stage spawns its fixed boss after the ticket-selected normal enemy count', async () => {
   const { createRankedRun, stepRankedRun } = await loadRules();
   let state = createRankedRun(stageTicket({ stage: 5 }), player());
+  const expectedNormalCount = state.enemies.filter((enemy) => !enemy.isBoss).length;
   let bossEvent;
 
   for (let tick = 0; tick < 3200 && !bossEvent; tick += 1) {
@@ -199,21 +240,32 @@ test('a boss stage spawns its fixed boss after the tenth normal enemy', async ()
   }
 
   assert.ok(bossEvent);
-  assert.equal(bossEvent.tick, 2978);
   assert.equal(bossEvent.x, 10500);
+  assert.equal(state.normalDefeated, expectedNormalCount);
+  assert.equal(state.enemies.filter((enemy) => !enemy.isBoss).length, expectedNormalCount);
   assert.equal(state.enemies.at(-1).id, 'boss');
   assert.equal(state.enemies.at(-1).maxHp, 81);
 });
 
-test('a valid pending level-up is applied before the fixed boss encounter', async () => {
-  const { replayRankedRun } = await loadRules();
-  const result = replayRankedRun(stageTicket({ stage: 5 }), player(), [
-    { tick: 0, kind: 'move', value: 1 },
-    { tick: 2979, kind: 'levelUp', value: ['attack'] },
-  ]);
+test('a pending level-up is applied before a seed-selected boss encounter', async () => {
+  const { createRankedRun, replayRankedRun, stepRankedRun } = await loadRules();
+  const ticket = stageTicket({ stage: 5 });
+  const snapshot = player({ xp: 95 });
+  let state = createRankedRun(ticket, snapshot);
+  const inputs = [];
+
+  while (!state.outcome && state.tick < 10000) {
+    const tickInputs = [];
+    if (state.tick === 0) tickInputs.push({ tick: state.tick, kind: 'move', value: 1 });
+    if (state.player.pendingLevelUps > 0) tickInputs.push({ tick: state.tick, kind: 'levelUp', value: ['attack'] });
+    inputs.push(...tickInputs);
+    state = stepRankedRun(state, tickInputs).state;
+  }
+  const result = replayRankedRun(ticket, snapshot, inputs);
 
   assert.equal(result.valid, true);
   assert.equal(result.outcome, 'clear');
+  assert.equal(state.player.spentStatPoints, 1);
 });
 
 test('ranked stage replay starts from saved XP and applies replay XP before level-up inputs', async () => {
@@ -221,8 +273,8 @@ test('ranked stage replay starts from saved XP and applies replay XP before leve
   const ticket = stageTicket();
   const snapshot = player({
     level: 2,
-    xp: 95,
-    xpToNext: 120,
+    xp: 18,
+    xpToNext: 20,
     pendingLevelUps: 0,
     replayXpMultiplier: 0.3,
   });
@@ -245,7 +297,7 @@ test('ranked stage replay starts from saved XP and applies replay XP before leve
   assert.equal(replay.valid, true);
   assert.equal(replay.outcome, 'clear');
   assert.equal(state.player.level, 3);
-  assert.equal(state.player.xp, 5);
+  assert.equal(state.player.xp, 22);
   assert.equal(state.player.spentStatPoints, 1);
 });
 
@@ -302,6 +354,63 @@ test('a replay records death at the first lethal body contact', async () => {
   assert.equal(result.valid, true);
   assert.equal(result.outcome, 'death');
   assert.equal(result.playerHp, 0);
+});
+
+test('a mutual final-normal kill records the kill before death without clearing the stage', async () => {
+  const { createRankedRun, stepRankedRun } = await loadRules();
+  const state = createRankedRun(stageTicket(), player({
+    maxHp:1,
+    currentHp:1,
+    attack:100000,
+    defense:0,
+    moveSpeed:0,
+  }));
+  const normalEnemies = state.enemies.filter((enemy) => !enemy.isBoss);
+  const finalEnemy = normalEnemies.at(-1);
+  state.enemies = state.enemies.map((enemy) => ({ ...enemy, active:enemy.id === finalEnemy.id }));
+  state.normalDefeated = normalEnemies.length - 1;
+  state.player.x = finalEnemy.x;
+
+  const result = stepRankedRun(state, []);
+  const eventTypes = result.events.map((event) => event.type);
+
+  assert.equal(result.state.outcome, 'death');
+  assert.equal(result.state.normalDefeated, normalEnemies.length);
+  assert.ok(eventTypes.indexOf('enemyDefeated') < eventTypes.indexOf('playerDeath'));
+  assert.equal(eventTypes.includes('stageClear'), false);
+});
+
+test('a mutual boss kill records the boss defeat before death without clearing the stage', async () => {
+  const { createRankedRun, stepRankedRun } = await loadRules();
+  const state = createRankedRun(stageTicket({ stage:5 }), player({
+    maxHp:10000,
+    currentHp:10000,
+    attack:100000,
+    defense:100000,
+    moveSpeed:0,
+  }));
+  const normalEnemies = state.enemies.filter((enemy) => !enemy.isBoss);
+  const finalEnemy = normalEnemies.at(-1);
+  state.enemies = state.enemies.map((enemy) => ({ ...enemy, active:enemy.id === finalEnemy.id }));
+  state.normalDefeated = normalEnemies.length - 1;
+  state.player.x = finalEnemy.x;
+  const normalKill = stepRankedRun(state, []);
+  const boss = normalKill.state.enemies.find((enemy) => enemy.isBoss);
+  assert.ok(boss);
+
+  normalKill.state.player = {
+    ...normalKill.state.player,
+    currentHp:1,
+    defense:0,
+    x:boss.x,
+  };
+  const result = stepRankedRun(normalKill.state, []);
+  const eventTypes = result.events.map((event) => event.type);
+
+  assert.equal(result.state.outcome, 'death');
+  assert.ok(eventTypes.includes('enemyDefeated'));
+  assert.ok(eventTypes.indexOf('enemyDefeated') < eventTypes.indexOf('playerDeath'));
+  assert.equal(eventTypes.includes('stageClear'), false);
 });
 
 test('a PvP replay uses a fixed opponent and resolves a body-contact win', async () => {

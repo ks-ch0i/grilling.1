@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
-import { completeStage, getStageEnemyStats, grantXp, resolveLevelUp, retryStage } from '../domain/progression.js';
+import { completeStage, createGoldRoom, getStageEnemyStats, getStageGoldRequirement, grantGold, grantXp, resetInvalidGoldBalance, resolveLevelUp, retryStage } from '../domain/progression.js';
 import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulation';
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
@@ -33,6 +33,14 @@ export class BattleScene extends Phaser.Scene {
     this.stage = data.stage ?? this.gameState.progression.currentStage;
     this.isReplay = Boolean(data.isReplay);
     this.transitioning = false;
+    this.goldRewardFailureShown = false;
+    this.goldFailureBeforeCombat = false;
+    this.stageGoldRequirement = 0;
+    this.normalEnemyCountOverride = Number.isSafeInteger(data.normalEnemyCountOverride) &&
+      data.normalEnemyCountOverride >= BALANCE.normalEnemyCount.min &&
+      data.normalEnemyCountOverride <= BALANCE.normalEnemyCount.max
+      ? data.normalEnemyCountOverride
+      : null;
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.stageSnapshot = data.stageSnapshot ?? this.gameState;
     this.rankedRunClient = data.rankedRunClient;
@@ -55,12 +63,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    this.initializeRankedRun();
     this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     this.drawWorld();
     this.createPlayer();
     this.spawnStage();
-    this.initializeRankedRun();
     this.cameras.main.startFollow(this.player.view, false, 1, 0);
     this.cameras.main.setDeadzone(1280 * 0.45, 720);
     this.cursors = this.input.keyboard.addKeys({ left:'A', right:'D' });
@@ -72,6 +80,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerupoutside', () => { this.touchDirection = 0; });
     this.createHud();
     if (this.isPortrait()) this.combatPaused = true;
+    this.checkStageGoldCapacity();
     this.resizeHandler = () => this.updatePortraitState();
     this.scale.on('resize', this.resizeHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', this.resizeHandler));
@@ -93,21 +102,9 @@ export class BattleScene extends Phaser.Scene {
         this.rankedReason = 'run-expired';
       }
       this.rankedRunState = createRankedRun(this.rankedTicket, this.rankedTicket.playerSnapshot);
-      this.player.x = this.rankedRunState.player.x;
-      this.player.currentHp = this.rankedRunState.player.currentHp;
-      this.player.maxHp = this.rankedRunState.player.maxHp;
-      this.player.stats = {
-        maxHp: this.rankedRunState.player.maxHp,
-        attack: this.rankedRunState.player.attack,
-        defense: this.rankedRunState.player.defense,
-        critChance: this.rankedRunState.player.critChance,
-        critMultiplier: this.rankedRunState.player.critMultiplier,
-        moveSpeed: this.rankedRunState.player.moveSpeed,
-      };
-      this.player.view.x = this.player.x;
       this.gameState = {
         ...this.gameState,
-        player: { ...this.gameState.player, currentHp: this.player.currentHp },
+        player: { ...this.gameState.player, currentHp: this.rankedRunState.player.currentHp },
       };
     } catch {
       this.rankedRunState = null;
@@ -145,13 +142,22 @@ export class BattleScene extends Phaser.Scene {
   }
 
   createPlayer() {
-    const stats = derivePlayerStats(this.gameState);
+    const rankedPlayer = this.rankedRunState?.player;
+    const stats = rankedPlayer ? {
+      maxHp:rankedPlayer.maxHp,
+      attack:rankedPlayer.attack,
+      defense:rankedPlayer.defense,
+      critChance:rankedPlayer.critChance,
+      critMultiplier:rankedPlayer.critMultiplier,
+      moveSpeed:rankedPlayer.moveSpeed,
+    } : derivePlayerStats(this.gameState);
+    const x = rankedPlayer?.x ?? 120;
     this.player = {
-      x: 120,
-      currentHp: this.gameState.player.currentHp,
+      x,
+      currentHp: rankedPlayer?.currentHp ?? this.gameState.player.currentHp,
       maxHp: stats.maxHp,
       stats,
-      view: this.add.container(120, FLOOR_Y),
+      view: this.add.container(x, FLOOR_Y),
     };
     const horse = this.gameState.equipment[GEAR_SLOT.HORSE];
     const armor = this.gameState.equipment[GEAR_SLOT.ARMOR];
@@ -180,15 +186,31 @@ export class BattleScene extends Phaser.Scene {
   }
 
   spawnStage() {
-    for (let index = 0; index < BALANCE.normalEnemyCount; index += 1) {
+    if (this.rankedRunState) {
+      const enemies = this.rankedRunState.enemies;
+      this.normalEnemyCount = enemies.filter((enemy) => !enemy.isBoss).length;
+      this.hasBoss = this.rankedRunState.hasBoss;
+      enemies.forEach((enemy, index) => this.createEnemy(enemy.x, enemy.isBoss, index + 1, enemy));
+      return;
+    }
+    const { min, max } = BALANCE.normalEnemyCount;
+    this.normalEnemyCount = this.normalEnemyCountOverride ?? min + Math.floor(Math.random() * (max - min + 1));
+    this.normalEnemyCountOverride = null;
+    for (let index = 0; index < this.normalEnemyCount; index += 1) {
       const x = 700 + index * 950;
       this.createEnemy(x, false, index + 1);
     }
     this.hasBoss = this.stage % 5 === 0;
   }
 
-  createEnemy(x, isBoss, index = 0) {
-    const stats = getStageEnemyStats(this.chapter, this.stage, isBoss);
+  checkStageGoldCapacity() {
+    this.stageGoldRequirement = getStageGoldRequirement(this.normalEnemyCount, this.hasBoss);
+    const result = grantGold(this.gameState, this.stageGoldRequirement);
+    if (!result.ok) this.showGoldRewardFailure(result.reason, this.stageGoldRequirement, { beforeCombat:true });
+  }
+
+  createEnemy(x, isBoss, index = 0, simulatedEnemy = null) {
+    const stats = simulatedEnemy ?? getStageEnemyStats(this.chapter, this.stage, isBoss);
     const scale = isBoss ? 1.65 : 1;
     const width = ENEMY_WIDTH * scale;
     const container = this.add.container(x, FLOOR_Y);
@@ -210,15 +232,15 @@ export class BattleScene extends Phaser.Scene {
       container.add(label);
     }
     this.enemies.push({
-      id: isBoss ? 'boss' : 'enemy-' + index,
+      id: simulatedEnemy?.id ?? (isBoss ? 'boss' : 'enemy-' + index),
       x,
       width,
-      currentHp: stats.maxHp,
+      currentHp: simulatedEnemy?.currentHp ?? stats.maxHp,
       maxHp: stats.maxHp,
       attack: stats.attack,
       defense: stats.defense,
       isBoss,
-      active: true,
+      active: simulatedEnemy?.active ?? true,
       view: container,
       healthFill: fill,
       healthBarWidth: barWidth,
@@ -394,15 +416,20 @@ export class BattleScene extends Phaser.Scene {
         if (target) this.showDamageText(target.x, FLOOR_Y - 115, event.enemyDamage, event.critical, 0xffd36e);
       } else if (event.type === 'enemyDefeated') {
         const enemy = this.enemies.find((candidate) => candidate.id === event.targetId);
-        if (enemy?.active) this.defeatEnemy(enemy, { ranked:true });
+        if (enemy?.active) this.defeatEnemy(enemy, {
+          ranked:true,
+          playerDied:events.some((candidate) => candidate.type === 'playerDeath'),
+        });
       } else if (event.type === 'bossSpawned') {
         this.hasBoss = true;
-        if (!this.enemies.some((enemy) => enemy.id === 'boss')) this.createEnemy(event.x, true);
+        const boss = state.enemies.find((enemy) => enemy.id === 'boss');
+        if (boss && !this.enemies.some((enemy) => enemy.id === 'boss')) this.createEnemy(event.x, true, 0, boss);
       } else if (event.type === 'stageClear') {
         this.finishStage();
       } else if (event.type === 'playerDeath') {
         this.showGameOver();
       }
+      if (this.goldRewardFailureShown) break;
     }
     if (events.some((event) => event.type === 'contact' || event.type === 'playerDeath')) {
       this.saveState(this.gameState);
@@ -442,13 +469,14 @@ export class BattleScene extends Phaser.Scene {
         this.time.delayedCall(110, () => this.player?.view?.setAlpha(1));
       }
       this.showDamageText(enemy.x, FLOOR_Y - 115, result.enemyDamage, result.critical, 0xffd36e);
+      if (result.enemyDefeated) this.defeatEnemy(enemy, { playerDied:this.player.currentHp <= 0 });
+      if (this.goldRewardFailureShown) return;
       if (this.player.currentHp <= 0) {
         this.gameState = retryStage(this.stageSnapshot, this.gameState).state;
         this.saveState(this.gameState);
         this.showGameOver();
         return;
       }
-      if (result.enemyDefeated) this.defeatEnemy(enemy);
       this.applyKnockback(enemy.x);
       this.updateHud();
     }
@@ -469,21 +497,28 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets:label, y:y-44, alpha:0, duration:620, onComplete:()=>label.destroy() });
   }
 
-  defeatEnemy(enemy, { ranked = false } = {}) {
+  defeatEnemy(enemy, { ranked = false, playerDied = false } = {}) {
+    if (!enemy?.active) return;
+    const goldReward = grantGold(this.gameState, enemy.isBoss ? BALANCE.goldRewards.boss : BALANCE.goldRewards.normalEnemy);
+    if (!goldReward.ok) {
+      this.showGoldRewardFailure(goldReward.reason, this.stageGoldRequirement);
+      return;
+    }
     enemy.active = false;
     enemy.view.setVisible(false);
     this.normalDefeated += enemy.isBoss ? 0 : 1;
+    this.gameState = goldReward.state;
     if (!enemy.isBoss) {
       const reward = grantXp(this.gameState, BALANCE.xpRewards.normalEnemy, this.isReplay);
       if (reward.ok) this.gameState = reward.state;
     }
     if (enemy.isBoss) {
-      this.dropGear(enemy.x, true);
-      if (!ranked) this.finishStage();
+      if (!playerDied) this.dropGear(enemy.x, true);
+      if (!ranked && !playerDied) this.finishStage();
       return;
     }
-    if (Math.random() < BALANCE.normalDropChance) this.dropGear(enemy.x, false);
-    if (!ranked && this.normalDefeated >= BALANCE.normalEnemyCount) {
+    if (!playerDied && Math.random() < BALANCE.normalDropChance) this.dropGear(enemy.x, false);
+    if (!ranked && !playerDied && this.normalDefeated >= this.normalEnemyCount) {
       if (this.hasBoss) this.createEnemy(10500, true);
       else this.finishStage();
     }
@@ -584,12 +619,127 @@ export class BattleScene extends Phaser.Scene {
     this.messageText=null;
   }
 
+  showGoldRewardFailure(reason, requiredGold, { beforeCombat = false } = {}) {
+    if (this.goldRewardFailureShown) return;
+    this.goldRewardFailureShown = true;
+    this.goldFailureBeforeCombat = beforeCombat;
+    const recoveryGoldRequirement = beforeCombat
+      ? requiredGold
+      : getStageGoldRequirement(BALANCE.normalEnemyCount.max, this.hasBoss);
+    const repair = reason === 'gold-overflow'
+      ? createGoldRoom(this.gameState, recoveryGoldRequirement)
+      : reason === 'invalid-gold'
+        ? resetInvalidGoldBalance(this.gameState)
+        : { ok:false, reason };
+    this.finished = true;
+    this.combatPaused = true;
+    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(260);
+    overlay.add(this.add.rectangle(640, 360, 1280, 720, 0x080c11, 0.82));
+    overlay.add(this.add.rectangle(640, 345, 600, 320, 0x2b2225).setStrokeStyle(2, 0xb65e62));
+    overlay.add(this.add.text(640, 255, '골드 보상을 처리할 수 없습니다', {
+      fontFamily:'sans-serif', fontSize:'24px', color:'#ffb6ad',
+    }).setOrigin(0.5));
+    const detail = reason === 'gold-overflow'
+      ? `이 스테이지 보상 ${recoveryGoldRequirement.toLocaleString()}G를 더하면 안전한 골드 범위를 넘습니다.`
+      : '저장된 골드 값이 유효하지 않습니다.';
+    overlay.add(this.add.text(640, 305, detail, {
+      fontFamily:'sans-serif', fontSize:'15px', color:'#e2d0cd',
+    }).setOrigin(0.5));
+    const repairDetail = reason === 'gold-overflow' && repair.ok
+      ? `${repair.adjustment.toLocaleString()}G를 조정하면 이 스테이지의 보상을 받을 수 있습니다.`
+      : reason === 'invalid-gold'
+        ? '복구를 선택하면 골드 잔액만 0G로 초기화됩니다.'
+        : '골드 잔액을 복구할 수 없습니다.';
+    overlay.add(this.add.text(640, 334, repairDetail, {
+      fontFamily:'sans-serif', fontSize:'15px', color:'#e2d0cd',
+    }).setOrigin(0.5));
+    if (reason === 'gold-overflow' && repair.ok && repair.adjustment > 0) {
+      overlay.add(this.add.text(640, 356, '사망하면 아직 받지 않은 보상은 차감액으로 돌려받지 않습니다.', {
+        fontFamily:'sans-serif', fontSize:'13px', color:'#e2d0cd',
+      }).setOrigin(0.5));
+    }
+    if (repair.ok) {
+      const repairLabel = reason === 'gold-overflow'
+        ? `골드 ${repair.adjustment.toLocaleString()}G 조정 후 재시작`
+        : '골드 0G로 복구 후 재시작';
+      createButton(this, {
+        x:445, y:398, width:390, height:54, label:repairLabel,
+        onClick:() => { void this.restartStageAfterGoldRepair(repair.state); },
+      }).setDepth(261);
+    }
+    createButton(this, {
+      x:480, y:458, width:320, height:42, label:'마을로 돌아가기',
+      onClick:() => { void this.returnToTownAfterGoldFailure(); },
+    }).setDepth(261);
+  }
+
+  async restartStageAfterGoldRepair(repairedState) {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    const retry = this.goldFailureBeforeCombat
+      ? { ...repairedState }
+      : { ...retryStage(this.stageSnapshot, this.gameState).state, gold:repairedState.gold };
+    this.saveState(retry);
+    let ranked = { ranked:false, reason:this.rankedReason };
+    if (this.goldFailureBeforeCombat && this.rankedTicket && this.rankedRunClient) {
+      ranked = { ranked:true, ticket:this.rankedTicket, gameState:retry };
+    } else if (!this.goldFailureBeforeCombat && this.rankedRunClient) {
+      try {
+        if (this.rankedTicket) await this.rankedRunClient.abandonRun(this.rankedTicket);
+        ranked = await this.rankedRunClient.prepareStage({ chapter:this.chapter, stage:this.stage, gameState:retry });
+      } catch {
+        ranked = { ranked:false, reason:'ticket-request-failed' };
+      }
+    }
+    const gameState = ranked.gameState ?? retry;
+    const stageSnapshot = typeof structuredClone === 'function'
+      ? structuredClone(gameState)
+      : JSON.parse(JSON.stringify(gameState));
+    this.scene.restart({
+      gameState,
+      saveState:this.saveState,
+      rankedRunClient:this.rankedRunClient,
+      pvpClient:this.pvpClient,
+      rankingClient:this.rankingClient,
+      rankedTicket:ranked.ranked ? ranked.ticket : null,
+      rankedReason:ranked.reason,
+      chapter:this.chapter,
+      stage:this.stage,
+      isReplay:this.isReplay,
+      normalEnemyCountOverride:this.goldFailureBeforeCombat && !ranked.ranked ? this.normalEnemyCount : null,
+      stageSnapshot,
+    });
+  }
+
+  async returnToTownAfterGoldFailure() {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    if (this.rankedTicket && this.rankedRunClient) {
+      try {
+        await this.rankedRunClient.abandonRun(this.rankedTicket);
+      } catch {
+        // Returning to the town remains available if the run ticket cannot be abandoned.
+      }
+    }
+    this.scene.start('TownScene', {
+      gameState:this.gameState,
+      saveState:this.saveState,
+      rankedRunClient:this.rankedRunClient,
+      pvpClient:this.pvpClient,
+      rankingClient:this.rankingClient,
+      unlockedStageId:`${this.chapter}-${this.stage}`,
+    });
+  }
+
   finishStage() {
     if (this.finished) return;
-    this.finished=true;
     this.combatPaused=true;
     const completed=completeStage(this.gameState,this.chapter,this.stage);
-    if (!completed.ok) return;
+    if (!completed.ok) {
+      this.showGoldRewardFailure(completed.reason, this.stageGoldRequirement);
+      return;
+    }
+    this.finished=true;
     this.gameState={...completed.state,progression:{...completed.state.progression,chapter:completed.nextChapter,currentStage:completed.nextStage}};
     this.player.currentHp=this.gameState.player.currentHp;
     this.saveState(this.gameState);

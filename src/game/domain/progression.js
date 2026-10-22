@@ -66,6 +66,45 @@ export function grantXp(state, amount, isReplay = false) {
   };
 }
 
+export function grantGold(state, amount) {
+  if (!Number.isSafeInteger(state.gold) || state.gold < 0 || !Number.isSafeInteger(amount) || amount < 0) {
+    return { ok: false, reason: 'invalid-gold' };
+  }
+  const gold = state.gold + amount;
+  if (!Number.isSafeInteger(gold)) return { ok: false, reason: 'gold-overflow' };
+  return { ok: true, state: { ...state, gold }, granted: amount };
+}
+
+export function createGoldRoom(state, requiredGold) {
+  if (!Number.isSafeInteger(state.gold) || state.gold < 0 || !Number.isSafeInteger(requiredGold) || requiredGold < 0) {
+    return { ok: false, reason: 'invalid-gold' };
+  }
+  if (Number.isSafeInteger(state.gold + requiredGold)) {
+    return { ok: true, state, adjustment: 0 };
+  }
+  const availableGold = Number.MAX_SAFE_INTEGER - requiredGold;
+  const adjustment = state.gold - availableGold;
+  if (!Number.isSafeInteger(availableGold) || availableGold < 0 || !Number.isSafeInteger(adjustment) || adjustment < 1) {
+    return { ok: false, reason: 'gold-overflow' };
+  }
+  return { ok: true, state: { ...state, gold: availableGold }, adjustment };
+}
+
+export function resetInvalidGoldBalance(state) {
+  if (Number.isSafeInteger(state.gold) && state.gold >= 0) return { ok: false, reason: 'gold-is-valid' };
+  return { ok: true, state: { ...state, gold: 0 } };
+}
+
+export function getStageGoldRequirement(normalEnemyCount, hasBoss) {
+  const { min, max } = BALANCE.normalEnemyCount;
+  if (!Number.isSafeInteger(normalEnemyCount) || normalEnemyCount < min || normalEnemyCount > max || typeof hasBoss !== 'boolean') {
+    throw new RangeError('stage gold requirement needs a valid normal enemy count and boss flag.');
+  }
+  return normalEnemyCount * BALANCE.goldRewards.normalEnemy +
+    (hasBoss ? BALANCE.goldRewards.boss : 0) +
+    BALANCE.goldRewards.stageClear;
+}
+
 export function resolveLevelUp(state, allocations) {
   if (!validAllocations(allocations)) return { ok: false, reason: 'invalid-allocation' };
   if (state.player.pendingLevelUps < 1) return { ok: false, reason: 'no-pending-level-up' };
@@ -158,6 +197,8 @@ export function getDropWeights(stageIndex) {
 }
 
 export function completeStage(state, chapter, stage) {
+  const goldReward = grantGold(state, BALANCE.goldRewards.stageClear);
+  if (!goldReward.ok) return goldReward;
   const id = stageId(chapter, stage);
   const replay = state.progression.clearedStageIds.includes(id);
   const clearedStageIds = replay
@@ -176,7 +217,7 @@ export function completeStage(state, chapter, stage) {
   const maxHp = derivePlayerStats(state).maxHp;
   const player = { ...state.player, currentHp: Math.max(state.player.currentHp, Math.ceil(maxHp * BALANCE.healAfterStage)) };
   const xpAward = BALANCE.xpRewards.stageClear + (stage % 5 === 0 ? BALANCE.xpRewards.boss : 0);
-  const xpResult = grantXp({ ...state, player }, xpAward, replay);
+  const xpResult = grantXp({ ...goldReward.state, player }, xpAward, replay);
   if (!xpResult.ok) return xpResult;
   return {
     ok: true,
@@ -201,6 +242,7 @@ export function completeStage(state, chapter, stage) {
 export function retryStage(stageSnapshot, currentState) {
   const restored = {
     ...stageSnapshot,
+    gold: currentState.gold,
     player: { ...currentState.player },
     progression: { ...stageSnapshot.progression },
   };

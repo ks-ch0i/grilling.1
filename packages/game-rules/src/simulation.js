@@ -93,14 +93,17 @@ function createEnemy(id, x, isBoss, chapter, stage) {
 export function createRankedRun(ticket, playerSnapshot) {
   assertTicket(ticket);
   assertCombatSnapshot(playerSnapshot);
-  const enemies = Array.from({ length: BALANCE.normalEnemyCount }, (_, index) =>
+  const countRandom = nextRandom(ticket.seed);
+  const enemyCount = BALANCE.normalEnemyCount.min +
+    Math.floor(countRandom.value * (BALANCE.normalEnemyCount.max - BALANCE.normalEnemyCount.min + 1));
+  const enemies = Array.from({ length: enemyCount }, (_, index) =>
     createEnemy(`enemy-${index + 1}`, 700 + index * 950, false, ticket.chapter, ticket.stage));
   return {
     mode: 'stage',
     ticket: { ...ticket },
     tick: 0,
     elapsedTicks: 0,
-    randomState: ticket.seed >>> 0,
+    randomState: countRandom.state,
     player: {
       ...playerSnapshot,
       effects: playerSnapshot.effects.map((effect) => ({ ...effect })),
@@ -217,6 +220,7 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
   let rejectReason = state.rejectReason;
   let updatedPlayer = player;
   let updatedRandomState = randomState;
+  const normalEnemyCount = enemies.filter((enemy) => !enemy.isBoss).length;
 
   for (const enemy of enemies) {
     if (!enemy.active) {
@@ -250,21 +254,19 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
       playerHp: result.playerHp,
       enemyHp: result.enemyHp,
     });
-    if (updatedPlayer.currentHp <= 0) {
-      outcome = 'death';
-      events.push({ type: 'playerDeath', tick: state.tick });
-      break;
-    }
+    const playerDied = updatedPlayer.currentHp <= 0;
     if (result.enemyDefeated) {
       enemy.active = false;
       events.push({ type: 'enemyDefeated', tick: state.tick, targetId: enemy.id });
       if (enemy.isBoss) {
-        outcome = 'clear';
-        events.push({ type: 'stageClear', tick: state.tick });
+        if (!playerDied) {
+          outcome = 'clear';
+          events.push({ type: 'stageClear', tick: state.tick });
+        }
       } else {
         normalDefeated += 1;
         updatedPlayer = grantRunXp(updatedPlayer, BALANCE.xpRewards.normalEnemy);
-        if (normalDefeated >= BALANCE.normalEnemyCount) {
+        if (normalDefeated >= normalEnemyCount && !playerDied) {
           if (state.hasBoss) {
             if (!bossSpawned) {
               enemies.push(createEnemy('boss', BOSS_X, true, state.ticket.chapter, state.ticket.stage));
@@ -277,6 +279,11 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
           }
         }
       }
+    }
+    if (playerDied) {
+      outcome = 'death';
+      events.push({ type: 'playerDeath', tick: state.tick });
+      break;
     }
     const directionAway = updatedPlayer.x <= enemy.x ? -1 : 1;
     updatedPlayer.x = clamp(

@@ -1,6 +1,6 @@
 # Task: T05 시드 적 수와 골드 보상
 
-## Status: pending
+## Status: done
 
 ## Goal
 일반 적을 스테이지마다 4–10마리 배정하고, 처치/클리어 골드를 추가한다. 죽음 후 재시도에도 이미 받은 처치 골드를 유지한다.
@@ -46,10 +46,10 @@
   5. Ranked replay validates enemy defeats/count through the shared sim; client reward application follows the existing client-calculated progression path. Do not claim server validation of gold.
 
 ## Acceptance Criteria
-- [ ] Ranked seed 1..N yields the same 4–10 enemy count and contact replay on client/server.
-- [ ] Non-ranked stages draw uniformly from inclusive 4–10, with the 5th/10th stages retaining their boss.
-- [ ] Each enemy pays once; failed stages preserve kill gold but pay no clear reward; clear pays 175.
-- [ ] Retry preserves all current gold without duplicating or losing previous kill rewards.
+- [x] Ranked seed 1..N yields the same 4–10 enemy count and contact replay on client/server.
+- [x] Non-ranked stages draw uniformly from inclusive 4–10, with the 5th/10th stages retaining their boss.
+- [x] Each enemy pays once; failed stages preserve kill gold but pay no clear reward; clear pays 175.
+- [x] Retry preserves all current gold without duplicating or losing previous kill rewards.
 
 ## Validation
 - node --version — Node.js 22.12.0 이상이어야 한다.
@@ -68,7 +68,16 @@ Task: T05-stage-enemy-count-and-gold
 - Award kill and clear gold while retaining failed-run earnings
 ~~~
 
+## Critical Review
+- 독립 리뷰에서 상호 처치 시 적 처치 이벤트와 골드 보상이 플레이어 사망 분기에서 누락되는 문제를 발견했다. 적 처치를 사망보다 먼저 처리하고, 사망이면 스테이지 클리어와 드롭은 막았다. 일반 적/보스 마지막 상호 처치 회귀 테스트를 추가했다.
+- 골드 안전 정수 overflow가 전투 화면을 멈추게 하는 문제를 발견했다. 전투 입장 전 전체 예상 보상 용량을 확인하고, 부족하면 사용자가 잔액 차감 또는 잘못된 골드 0 초기화를 확인한 뒤 재시작할 수 있게 했다.
+- 재리뷰에서 복구 재시작의 Scene 상태 latch와 재랜덤 적 수 문제를 발견해 init에서 상태를 초기화하고, 입장 전 복구는 기존 티켓/적 수를 보존했다. 전투 중 예외 복구는 최대 적 수 보상 공간을 확보한다.
+- 최종 리뷰에서 추가 차단 이슈가 없음을 확인했다.
+
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- 지정 Node.js 22.12.0 테스트: 28/28 통과.
+- Node.js 22.12.0 Vite production build 통과. 기존 500 kB chunk 경고가 남아 있다.
+- `git diff --check`: 통과.
+- commit: 지정 T05 커밋 메시지 사용.
