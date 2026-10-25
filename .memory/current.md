@@ -4,10 +4,10 @@
 [마창기사 UX·PvP 기록 및 안정성 개선](./plans/2026-10-25-knight-run-follow-up-backlog.md)
 
 ## Active Phase
-[P04 저장 데이터 무결성](./phases/2026-10-25-knight-run-follow-up-backlog/P04-save-integrity/phase.md)
+None (plan complete)
 
 ## Active Task
-[T09 저장 데이터 신뢰 경계 평가](./phases/2026-10-25-knight-run-follow-up-backlog/P04-save-integrity/T09-save-integrity-assessment.md)
+None (plan complete)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -20,6 +20,8 @@
 - P02-T06 마을 PvP 경기 기록 overlay 완료: 루트 테스트 157개, focused tests 23개, Vite build 통과. 브라우저 surface 부재로 수동 QA는 미실행. Commit `e0e88e0`.
 - P02-T07 PvP 데이터 보관 구조·선택지 결정안 완료: schema/repository/service 정적 대조. 운영 데이터 변경이나 cleanup은 수행하지 않음. Commit `71b7193`.
 - P03-T08 생성 기사 스프라이트 적용 완료: 20-frame transparent sheet, manifest, normal/ranked visuals. 루트 161 tests와 build 통과. Browser manual QA는 미실행. Commit `adf9c9d`.
+- P04-T09 저장 신뢰 경계 평가 완료: client-owned 저장의 구조 검증과 gameplay provenance를 구분하고, 세 권위 모델 및 단계별 권고안을 작성. 코드·스키마·저장 데이터·Azure 변경 없음. Commit `6cc4343`.
+- 4개 Phase, 9개 Task 전체 완료. 선택이 필요한 PvP 보관 기간은 결정 문서에 남아 있고, 저장 권위 전환은 사용자 선택 후 별도 계획으로 진행.
 
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
@@ -27,4 +29,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-T09 청사진을 읽고 클라이언트 저장 데이터의 신뢰 경계와 서버 권위형 전환 선택지를 읽기 전용으로 평가한다. 저장 데이터는 변경하지 않는다.
+계획의 구현 작업은 완료했다. 다음은 `.memory/decisions/2026-10-25-knight-run-save-integrity-review.md`의 권위 모델·필드·오프라인 보상 정책과 `.memory/decisions/2026-10-25-pvp-data-retention.md`의 보관 선택을 확정한 뒤, 필요한 별도 계획을 만드는 것이다.

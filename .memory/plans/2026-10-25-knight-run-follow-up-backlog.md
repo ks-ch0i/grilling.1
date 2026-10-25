@@ -18,7 +18,7 @@
 | P01 | `done` | 루트 테스트 자동화, 마을 키보드·터치 조작, Phaser 지연 로딩 | [P01](../phases/2026-10-25-knight-run-follow-up-backlog/P01-quality-and-controls/phase.md) |
 | P02 | `done` | PvP 최근 이력 API·마을 화면, 상세 기록 보관 정책 결정 | [P02](../phases/2026-10-25-knight-run-follow-up-backlog/P02-pvp-history-and-retention/phase.md) |
 | P03 | `done` | 생성된 기사 애니메이션 이미지의 전투 화면 시범 적용 | [P03](../phases/2026-10-25-knight-run-follow-up-backlog/P03-combat-visuals/phase.md) |
-| P04 | `in_progress` | 클라이언트 소유 저장 데이터의 신뢰 경계와 서버 권위형 전환안 조사 | [P04](../phases/2026-10-25-knight-run-follow-up-backlog/P04-save-integrity/phase.md) |
+| P04 | `done` | 클라이언트 소유 저장 데이터의 신뢰 경계와 서버 권위형 전환안 조사 | [P04](../phases/2026-10-25-knight-run-follow-up-backlog/P04-save-integrity/phase.md) |
 
 ## Ordering and Dependencies
 - P01-T01은 루트 게임 회귀 테스트를 반복 실행할 수 있게 한다. 이후 UI와 로딩 변경은 해당 테스트 및 빌드로 검증한다.
