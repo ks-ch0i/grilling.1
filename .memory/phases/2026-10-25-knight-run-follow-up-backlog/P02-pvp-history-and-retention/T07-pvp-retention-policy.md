@@ -1,6 +1,6 @@
 # Task: T07 PvP 상세 데이터 보관 정책 결정안
 
-## Status: pending
+## Status: done
 
 ## Goal
 PvP 결과 요약, 원본 입력 로그, 경기 당시 전투 스냅샷에 서로 다른 보관 기준이 필요한지 조사하고, 실제 데이터 삭제 전에 사용자가 결정할 수 있는 정책안과 후속 구현 범위를 제시한다.
@@ -47,15 +47,15 @@ PvP 결과 요약, 원본 입력 로그, 경기 당시 전투 스냅샷에 서�
   4. 권고안을 제시하고 사용자에게 기간과 요약/payload의 처리 방식을 선택해 달라고 요청한다. 선택 전에는 cleanup SQL이나 자동화 구현을 시작하지 않는다.
 
 ## Acceptance Criteria
-- [ ] 보관 대상과 각 데이터의 현재 사용처가 목록화된다.
-- [ ] RatedPairDays 외래키·일일 중복 방지 규칙과 물리 삭제의 영향을 설명한다.
-- [ ] 요약과 원본 payload의 보관기간 선택지가 분리되어 제시된다.
-- [ ] 사용자 선택 전 데이터가 변경되지 않고, 후속 cleanup 구현에 필요한 결정을 구체적으로 요청한다.
+- [x] 보관 대상과 각 데이터의 현재 사용처가 목록화된다.
+- [x] RatedPairDays 외래키·일일 중복 방지 규칙과 물리 삭제의 영향을 설명한다.
+- [x] 요약과 원본 payload의 보관기간 선택지가 분리되어 제시된다.
+- [x] 사용자 선택 전 데이터는 변경하지 않았고, 후속 cleanup 구현에 필요한 결정을 구체적으로 요청한다.
 
 ## Validation
-- SQL migration 및 repository 사용처를 정적으로 대조한다.
+- SQL migration 및 repository/service 사용처를 정적으로 대조했다.
 - 결과 문서에 실제 운영 데이터 접근·용량 측정을 했다고 주장하지 않는다.
-- cleanup, SQL migration, timer function은 이 Task에서 실행하지 않는다.
+- cleanup, SQL migration, timer function은 실행하지 않았다.
 
 ## Commit Message
 ~~~text
@@ -70,6 +70,6 @@ Task: T07-pvp-retention-policy
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과
 - commit: pending
