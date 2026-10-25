@@ -32,6 +32,9 @@ export class BootScene extends Phaser.Scene {
     this.scene.start('TownScene', {
       gameState,
       saveState: bootstrap?.saveState,
+      hasUnverifiedShadow: bootstrap?.hasUnverifiedShadow,
+      selectLocalShadow: bootstrap?.selectLocalShadow,
+      recoverLegacySave: bootstrap?.recoverLegacySave,
       rankedRunClient: bootstrap?.rankedRunClient,
       pvpClient: bootstrap?.pvpClient,
       rankingClient: bootstrap?.rankingClient,

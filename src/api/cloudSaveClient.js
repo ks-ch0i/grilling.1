@@ -45,6 +45,11 @@ export function createCloudSaveClient({
       if (result.status === 200) return { status: 200, envelope: result.body };
       return { status: result.status, ...result.body };
     },
+    async getLegacySave(account) {
+      const result = await request(account, '/profile/legacy-save');
+      if (result.status === 200) return { status:200, archive:result.body.archive };
+      return { status:result.status, ...result.body };
+    },
     async putCurrent(account, body, condition) {
       if (!body?.state || body.state.schemaVersion !== 2) {
         throw new TypeError('Cloud save state must use schemaVersion 2.');

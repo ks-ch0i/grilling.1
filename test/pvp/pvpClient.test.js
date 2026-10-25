@@ -49,9 +49,9 @@ function makeClient(overrides = {}) {
     account,
     getCurrentState:() => currentState,
     getSaveRevision:() => revision,
-    getMode:() => 'online',
+    getMode:() => 'verified-online',
     syncPendingSave:async() => { calls.push(['sync']); return { ok:true, pending:false }; },
-    refreshAccountSave:async() => { calls.push(['refresh']); return { status:'ready', mode:'online' }; },
+    refreshAccountSave:async() => { calls.push(['refresh']); return { status:'ready', mode:'verified-online' }; },
     isOnline:() => overrides.online !== false,
     now,
   });

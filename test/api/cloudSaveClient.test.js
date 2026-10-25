@@ -22,6 +22,26 @@ test('cloud save client sends a bearer token and preserves the server envelope',
   assert.equal(calls[0].options.headers.authorization, 'Bearer access-token');
 });
 
+test('archived legacy save is fetched only through the authenticated recovery route', async () => {
+  const calls = [];
+  const archive = { schemaVersion:2, revision:3, state:{ schemaVersion:2, gold:9 }, trust:'unverified' };
+  const client = createCloudSaveClient({
+    apiBaseUrl:'/api/',
+    getAccessToken:async (user) => { assert.equal(user, account); return 'access-token'; },
+    fetchImplementation:async (url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify({ archive }), { status:200 });
+    },
+  });
+
+  const result = await client.getLegacySave(account);
+
+  assert.deepEqual(result, { status:200, archive });
+  assert.equal(calls[0].url, '/api/profile/legacy-save');
+  assert.equal(calls[0].options.method, undefined);
+  assert.equal(calls[0].options.headers.authorization, 'Bearer access-token');
+});
+
 test('conditional writes use If-Match or If-None-Match and only send the schema v2 state DTO', async () => {
   const calls = [];
   const client = createCloudSaveClient({

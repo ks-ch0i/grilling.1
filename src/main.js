@@ -33,7 +33,7 @@ function showAccountStatus(message = '') {
   notice.hidden = !message;
 }
 
-export async function createGame({ gameState, saveState, account, apiClient, applyProfileAction, getSaveMode, rankedRunClient, pvpClient, rankingClient }) {
+export async function createGame({ gameState, saveState, account, apiClient, applyProfileAction, getSaveMode, hasUnverifiedShadow, selectLocalShadow, recoverLegacySave, rankedRunClient, pvpClient, rankingClient }) {
   const container = document.querySelector('#game');
   if (!container) throw new Error('Game container "#game" was not found.');
   if (!gameState || typeof saveState !== 'function') throw new TypeError('An authenticated account save is required before creating the game.');
@@ -51,6 +51,9 @@ export async function createGame({ gameState, saveState, account, apiClient, app
         apiClient,
         applyProfileAction,
         getSaveMode,
+        hasUnverifiedShadow,
+        selectLocalShadow,
+        recoverLegacySave,
         rankedRunClient,
         pvpClient,
         rankingClient,
@@ -109,7 +112,7 @@ function syncMessage(result) {
     showAccountStatus('클라우드 저장을 적용했습니다. 이전 로컬 저장은 이 계정의 복구 저장에 보관했습니다.');
     showSaveWarning('저장 충돌이 발생해 클라우드 저장을 적용하고 로컬 저장을 복구용으로 보관했습니다.');
   } else if (result?.error === 'network-unavailable') {
-    showAccountStatus('오프라인 모드: 저장은 이 기기에 보관되며 연결이 복구되면 동기화됩니다.');
+    showAccountStatus('오프라인 진행은 이 기기에 보관되며 온라인 저장과 자동으로 합쳐지지 않습니다.');
   } else if (result?.error === 'authentication-required') {
     showSaveWarning('클라우드 인증이 필요합니다. 다시 로그인해 주세요.');
   } else if (result?.error) {
@@ -159,7 +162,7 @@ export async function startApplication({
           showSaveWarning();
           return saved;
         }
-        if (coordinator.getMode() === 'online' || window.navigator?.onLine) {
+        if (coordinator.getMode() === 'verified-online') {
           void coordinator.syncPendingSave().then(syncMessage).catch(() => syncMessage({ error: 'cloud-save-unavailable' }));
         }
         return saved;
@@ -174,7 +177,7 @@ export async function startApplication({
         syncPendingSave: coordinator.syncPendingSave,
         refreshAccountSave: coordinator.refreshAccountSave,
         saveState,
-        installVerifiedState: (envelope) => coordinator.installVerifiedState(account, envelope),
+        applyVerifiedState: (envelope) => coordinator.applyVerifiedState(envelope, account),
         isOnline: () => window.navigator?.onLine !== false,
       });
       const pvpClient = createPvpClient({
@@ -195,7 +198,13 @@ export async function startApplication({
         getAccessToken:auth.getApiAccessToken,
       });
       try {
-        game = await createGameInstance({ gameState: loaded.state, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient });
+        game = await createGameInstance({
+          gameState:loaded.state, saveState, account, apiClient,
+          hasUnverifiedShadow:coordinator.hasUnverifiedShadow,
+          selectLocalShadow:coordinator.selectLocalShadow,
+          recoverLegacySave:coordinator.recoverLegacySave,
+          rankedRunClient, pvpClient, rankingClient,
+        });
       } catch {
         try { await rankingClient.dispose(); } catch { /* The failed runtime has no active ranking session to keep. */ }
         setAuthMessage('게임 런타임을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.', { retry: true });
@@ -208,13 +217,12 @@ export async function startApplication({
       if (loaded.recoveredLocal) {
         showAccountStatus('클라우드 저장을 적용했습니다. 이전 로컬 저장은 이 계정의 복구 저장에 보관했습니다.');
         showSaveWarning('클라우드 저장이 달라 이전 로컬 저장을 복구용으로 보관했습니다.');
+      } else if (loaded.hasUnverifiedShadow) {
+        showAccountStatus('이 계정에 확인되지 않은 기기 진행이 있습니다. 마을에서 선택하거나 이전 저장을 확인할 수 있습니다.');
       } else {
-        showAccountStatus(loaded.mode === 'offline'
-          ? '오프라인 모드: 저장은 이 기기에 보관되며 연결 후 동기화됩니다.'
+        showAccountStatus(loaded.mode === 'offline-unverified'
+          ? '오프라인 진행은 이 기기에 보관되며 온라인 저장과 자동으로 합쳐지지 않습니다.'
           : '');
-      }
-      if (loaded.mode === 'offline' && window.navigator?.onLine) {
-        void coordinator.syncPendingSave().then(syncMessage).catch(() => syncMessage({ error: 'cloud-save-unavailable' }));
       }
     } catch {
       setAuthMessage('인증 또는 저장 서비스에 연결하지 못했습니다. 다시 시도해 주세요.', { signIn: true, retry: true });

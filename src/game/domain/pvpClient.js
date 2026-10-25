@@ -73,7 +73,7 @@ export function createPvpClient({
   account,
   getCurrentState = () => null,
   getSaveRevision = () => null,
-  getMode = () => 'offline',
+  getMode = () => 'offline-unverified',
   syncPendingSave = async () => ({ ok: false, error: 'save-sync-unavailable' }),
   refreshAccountSave = async () => ({ status: 'error', code: 'account-refresh-unavailable' }),
   isOnline = () => globalThis.navigator?.onLine !== false,
@@ -132,6 +132,9 @@ export function createPvpClient({
   }
 
   async function publishCurrentSnapshot() {
+    if (getMode() !== 'verified-online') {
+      return { ok:false, reason:getMode() === 'guest-unverified' ? 'guest-unverified' : 'unverified-shadow' };
+    }
     if (!isOnline()) return { ok:false, reason:'offline' };
     let synced;
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -146,14 +149,14 @@ export function createPvpClient({
     let refresh;
     try { refresh = await refreshAccountSave(); }
     catch { return { ok:false, reason:'save-refresh-failed' }; }
-    if (refresh?.status !== 'ready' || refresh.mode !== 'online' || getMode() !== 'online') {
+    if (refresh?.status !== 'ready' || refresh.mode !== 'verified-online' || getMode() !== 'verified-online') {
       return { ok:false, reason:refresh?.code ?? 'save-refresh-failed' };
     }
     let result = await publishContent(getCurrentState(), getSaveRevision());
     if (!result.ok && result.reason === 'save-revision-conflict' && isOnline()) {
       try { refresh = await refreshAccountSave(); }
       catch { return { ok:false, reason:'save-refresh-failed' }; }
-      if (refresh?.status !== 'ready' || refresh.mode !== 'online') return { ok:false, reason:'save-refresh-failed' };
+      if (refresh?.status !== 'ready' || refresh.mode !== 'verified-online') return { ok:false, reason:'save-refresh-failed' };
       result = await publishContent(getCurrentState(), getSaveRevision());
     }
     return result;

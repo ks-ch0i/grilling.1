@@ -86,17 +86,33 @@ export function createRankedRunClient({
   account,
   getSaveRevision = () => null,
   getCurrentState = () => null,
-  getMode = () => 'offline',
+  getMode = () => 'offline-unverified',
   syncPendingSave = async () => ({ ok: false, error: 'save-sync-unavailable' }),
   refreshAccountSave = async () => ({ status: 'error', code: 'account-refresh-unavailable' }),
   saveState = () => ({ ok: true }),
+  selectLocalShadow = async () => ({ ok:false, error:'local-shadow-unavailable' }),
+  applyVerifiedState = null,
   installVerifiedState = () => ({ ok: true }),
   isOnline = () => globalThis.navigator?.onLine !== false,
   now = () => new Date(),
 } = {}) {
   let pendingTicket = null;
+  const installVerifiedEnvelope = typeof applyVerifiedState === 'function'
+    ? applyVerifiedState
+    : installVerifiedState;
+
+  async function fallbackToLocal(reason) {
+    try {
+      const selected = await selectLocalShadow(reason, { preferExisting:true });
+      if (selected?.ok && selected.state) return { ...unranked(reason), gameState:selected.state, shadowSelected:true };
+    } catch { /* Local play remains available if recovery storage fails. */ }
+    return unranked(reason);
+  }
 
   async function syncBeforeTicket() {
+    if (getMode() !== 'verified-online') {
+      return { ok:false, reason:getMode() === 'guest-unverified' ? 'guest-unverified' : 'unverified-shadow' };
+    }
     if (!isOnline()) return { ok: false, reason: 'offline' };
     let synced;
     try {
@@ -105,14 +121,14 @@ export function createRankedRunClient({
       return { ok: false, reason: 'save-sync-failed' };
     }
     if (!synced?.ok) return { ok: false, reason: synced?.error ?? 'save-sync-failed' };
-    if (getMode() !== 'online') {
+    if (getMode() !== 'verified-online') {
       let refreshed;
       try {
         refreshed = await refreshAccountSave();
       } catch {
         return { ok: false, reason: 'save-refresh-failed' };
       }
-      if (refreshed?.status !== 'ready' || refreshed.mode !== 'online' || getMode() !== 'online') {
+      if (refreshed?.status !== 'ready' || refreshed.mode !== 'verified-online' || getMode() !== 'verified-online') {
         return { ok: false, reason: refreshed?.code ?? 'save-refresh-failed' };
       }
     }
@@ -142,13 +158,16 @@ export function createRankedRunClient({
   }
 
   async function prepareStage({ chapter, stage, gameState } = {}) {
-    if (!isOnline()) return unranked('offline');
-    if (pendingTicket && !await abandonTicket(pendingTicket)) return unranked('active-run-cleanup-failed');
+    if (getMode() !== 'verified-online') {
+      return fallbackToLocal(getMode() === 'guest-unverified' ? 'guest-unverified' : 'unverified-shadow');
+    }
+    if (!isOnline()) return fallbackToLocal('offline');
+    if (pendingTicket && !await abandonTicket(pendingTicket)) return fallbackToLocal('active-run-cleanup-failed');
     let synced = await syncBeforeTicket();
-    if (!synced.ok) return unranked(synced.reason);
+    if (!synced.ok) return fallbackToLocal(synced.reason);
     let currentState = gameState ?? synced.state;
     let issued = await issueTicket(chapter, stage, synced.revision);
-    if (!issued.ok) return unranked(issued.reason);
+    if (!issued.ok) return fallbackToLocal(issued.reason);
 
     let ticket = issued.ticket;
     const isValid = () => validTicket(ticket, chapter, stage, now()) &&
@@ -160,25 +179,25 @@ export function createRankedRunClient({
 
     if (!validTicket(ticket, chapter, stage, now())) {
       await abandonTicket(ticket);
-      return unranked('invalid-or-expired-ticket');
+      return fallbackToLocal('invalid-or-expired-ticket');
     }
 
     // Reconcile local state into the account save before a single ticket retry.
     const localSave = saveState(currentState);
-    if (localSave?.ok === false || !await abandonTicket(ticket)) return unranked('snapshot-mismatch');
+    if (localSave?.ok === false || !await abandonTicket(ticket)) return fallbackToLocal('snapshot-mismatch');
     synced = await syncBeforeTicket();
-    if (!synced.ok) return unranked(synced.reason);
+    if (!synced.ok) return fallbackToLocal(synced.reason);
     currentState = getCurrentState() ?? currentState;
     issued = await issueTicket(chapter, stage, synced.revision);
-    if (!issued.ok) return unranked(issued.reason);
+    if (!issued.ok) return fallbackToLocal(issued.reason);
     ticket = issued.ticket;
     if (!validTicket(ticket, chapter, stage, now())) {
       await abandonTicket(ticket);
-      return unranked('invalid-or-expired-ticket');
+      return fallbackToLocal('invalid-or-expired-ticket');
     }
     if (!sameSnapshot(deriveRankedPlayerSnapshot(currentState, chapter, stage), ticket.playerSnapshot)) {
       await abandonTicket(ticket);
-      return unranked('snapshot-mismatch');
+      return fallbackToLocal('snapshot-mismatch');
     }
     pendingTicket = ticket;
     return { ranked: true, ticket, playerSnapshot: ticket.playerSnapshot, gameState: currentState };
@@ -201,7 +220,7 @@ export function createRankedRunClient({
             !result.state || typeof result.state !== 'object') {
           return { verified: false, code: 'verified-state-missing', terminal: true };
         }
-        const installed = await installVerifiedState({ revision: result.revision, state: result.state });
+        const installed = await installVerifiedEnvelope({ revision: result.revision, state: result.state });
         if (installed?.ok === false) {
           return { verified: false, code: installed.error ?? 'verified-state-install-failed', terminal: true };
         }

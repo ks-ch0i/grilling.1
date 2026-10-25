@@ -51,6 +51,9 @@ export class TownScene extends Phaser.Scene {
     const bootstrap = this.game?.lancerBootstrap;
     this.applyProfileAction = bootstrap?.applyProfileAction;
     this.getSaveMode = bootstrap?.getSaveMode;
+    this.hasUnverifiedShadow = bootstrap?.hasUnverifiedShadow;
+    this.selectLocalShadow = bootstrap?.selectLocalShadow;
+    this.recoverLegacySave = bootstrap?.recoverLegacySave;
     this.profileActionPending = false;
     this.profileActionMessage = null;
     this.rankedRunClient = data.rankedRunClient;
@@ -183,7 +186,49 @@ export class TownScene extends Phaser.Scene {
   }
 
   hasAuthoritativeProfile() {
-    return typeof this.applyProfileAction === 'function' && this.getSaveMode?.() === 'online';
+    return typeof this.applyProfileAction === 'function' && this.getSaveMode?.() === 'verified-online';
+  }
+
+  async activateLocalSave() {
+    if (typeof this.selectLocalShadow !== 'function') return;
+    const selected = await this.selectLocalShadow('town-local-save-selected', { preferExisting:true });
+    if (!selected?.ok || !selected.state) {
+      this.profileActionMessage = '기기 저장을 선택하지 못했습니다. 저장 공간을 확인해 주세요.';
+      this.refresh();
+      return;
+    }
+    this.gameState = selected.state;
+    this.profileActionMessage = '기기 저장을 선택했습니다. 이 진행은 온라인 보상과 합쳐지지 않습니다.';
+    this.refresh();
+  }
+
+  confirmLegacyRecovery(hasShadow) {
+    this.showPvpNotice({
+      title:'이전 저장 복구',
+      message:hasShadow
+        ? '이전 저장을 적용하면 현재 기기 진행은 복구용으로 보관되고, 이 기기에서 플레이하는 저장이 바뀝니다.'
+        : '이전 저장을 확인합니다. 복구한 진행은 이 기기에서만 플레이되며 온라인 저장과 합쳐지지 않습니다.',
+      actions:[
+        { label:'복구', onClick:() => { void this.applyLegacyRecovery(hasShadow); } },
+        { label:'취소', onClick:() => { this.pvpOverlay?.destroy(true); this.pvpOverlay=null; this.refresh(); } },
+      ],
+    });
+  }
+
+  async applyLegacyRecovery(replaceShadow) {
+    this.pvpOverlay?.destroy(true);
+    this.pvpOverlay = null;
+    const recovered = await this.recoverLegacySave({ replaceShadow });
+    if (!recovered?.ok || !recovered.state) {
+      this.profileActionMessage = recovered?.error === 'legacy-save-not-found' || recovered?.error === 'legacy-recovery-unavailable'
+        ? '복구할 수 있는 이전 저장이 없습니다.'
+        : '이전 저장을 복구하지 못했습니다. 현재 저장은 유지됩니다.';
+      this.refresh();
+      return;
+    }
+    this.gameState = recovered.state;
+    this.profileActionMessage = '이전 저장을 복구했습니다. 현재 기기 진행은 복구용으로 보관했습니다.';
+    this.refresh();
   }
 
   async requestProfileAction(action) {
@@ -241,7 +286,6 @@ export class TownScene extends Phaser.Scene {
     if (this.profileActionMessage) {
       this.add.text(32, 696, this.profileActionMessage, { fontFamily:'sans-serif', fontSize:'12px', color:'#ffb6ad' });
     }
-
     this.add.rectangle(640, 128, 1216, 48, 0x1a2531, 0.96).setStrokeStyle(1, 0x47576a);
     this.add.text(44, 109, `미사용 ${player.availableStatPoints} · 배정 ${player.spentStatPoints} · 골드 ${gold}\n공격 ${stats.attack} · 방어 ${stats.defense} · 최대 HP ${stats.maxHp}`, { fontFamily:'sans-serif', fontSize:'12px', color:'#d8e0e8', lineSpacing:3 });
     const allocationButtons = [
@@ -292,6 +336,19 @@ export class TownScene extends Phaser.Scene {
     this.renderInventory();
     this.renderSelectedItem();
     this.renderStagePanel();
+    const hasShadow = Boolean(this.hasUnverifiedShadow?.());
+    if (hasShadow && typeof this.selectLocalShadow === 'function') {
+      createButton(this, {
+        x:918, y:620, width:158, height:36, label:'기기 진행 선택',
+        onClick:() => { void this.activateLocalSave(); },
+      });
+    }
+    if (typeof this.recoverLegacySave === 'function') {
+      createButton(this, {
+        x:1082, y:620, width:166, height:36, label:'이전 저장 확인',
+        onClick:() => this.confirmLegacyRecovery(hasShadow),
+      });
+    }
   }
 
   renderEquipment() {

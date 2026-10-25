@@ -103,20 +103,47 @@ test('API-normalized level allocations replay identically to the client input lo
 
 test('offline ticket preparation keeps the run local and does not call ranking APIs', async () => {
   let requests = 0;
+  const shadow = gameState({ player:{ ...gameState().player, xp:31 } });
   const client = createRankedRunClient({
     apiClient: { startStageRun: async () => { requests += 1; } },
     account: {},
     getSaveRevision: () => 1,
     getCurrentState: () => gameState(),
-    getMode: () => 'online',
+    getMode: () => 'verified-online',
     syncPendingSave: async () => ({ ok: true }),
+    selectLocalShadow:async () => ({ ok:true, state:shadow, mode:'offline-unverified' }),
     isOnline: () => false,
   });
 
-  assert.deepEqual(await client.prepareStage({ chapter: 1, stage: 1, gameState: gameState() }), {
-    ranked: false, reason: 'offline',
-  });
+  const result = await client.prepareStage({ chapter: 1, stage: 1, gameState: gameState() });
+  assert.equal(result.ranked, false);
+  assert.equal(result.reason, 'offline');
+  assert.equal(result.gameState, shadow);
+  assert.equal(result.shadowSelected, true);
   assert.equal(requests, 0);
+});
+
+test('ticket failure after the save becomes unverified starts battle from the selected shadow', async () => {
+  const shadow = gameState({ player:{ ...gameState().player, xp:45 } });
+  let mode = 'verified-online';
+  let tickets = 0;
+  const client = createRankedRunClient({
+    apiClient:{ startStageRun:async() => { tickets += 1; throw new TypeError('offline'); } },
+    account:{}, getSaveRevision:() => 3, getCurrentState:() => gameState(), getMode:() => mode,
+    syncPendingSave:async() => ({ ok:true }),
+    selectLocalShadow:async(_reason, options) => {
+      mode = 'offline-unverified';
+      return { ok:options.preferExisting, state:shadow, mode };
+    },
+    isOnline:() => true,
+  });
+
+  const result = await client.prepareStage({ chapter:1, stage:1, gameState:gameState() });
+  assert.equal(result.ranked, false);
+  assert.equal(result.reason, 'ticket-request-failed');
+  assert.equal(result.gameState, shadow);
+  assert.equal(result.shadowSelected, true);
+  assert.equal(tickets, 1);
 });
 
 test('ticket preparation syncs the save before requesting the ranked ticket', async () => {
@@ -131,7 +158,7 @@ test('ticket preparation syncs the save before requesting the ranked ticket', as
     account: { username: 'player' },
     getSaveRevision: () => 7,
     getCurrentState: () => state,
-    getMode: () => 'online',
+    getMode: () => 'verified-online',
     syncPendingSave: async () => { calls.push(['sync']); synced = true; return { ok: true }; },
     isOnline: () => true,
     now: () => new Date('2026-10-21T00:01:00.000Z'),
@@ -146,19 +173,22 @@ test('ticket preparation syncs the save before requesting the ranked ticket', as
   ]);
 });
 
-test('a cached offline save refreshes its cloud revision before requesting a ticket after reconnect', async () => {
+test('a cached unverified save never promotes itself to a ranked ticket after reconnect', async () => {
   const state = gameState();
-  let mode = 'offline';
+  let ticketRequests = 0;
+  let refreshes = 0;
   const client = createRankedRunClient({
-    apiClient: { startStageRun: async () => ({ status: 201, ticket: ticketFor(state) }) },
-    account: {}, getSaveRevision: () => 7, getCurrentState: () => state, getMode: () => mode,
+    apiClient: { startStageRun: async () => { ticketRequests += 1; return { status:201, ticket:ticketFor(state) }; } },
+    account: {}, getSaveRevision: () => 7, getCurrentState: () => state, getMode: () => 'offline-unverified',
     syncPendingSave: async () => ({ ok: true }),
-    refreshAccountSave: async () => { mode = 'online'; return { status: 'ready', mode }; },
+    refreshAccountSave: async () => { refreshes += 1; return { status:'ready', mode:'verified-online' }; },
     isOnline: () => true, now: () => new Date('2026-10-21T00:01:00.000Z'),
   });
 
   const result = await client.prepareStage({ chapter: 1, stage: 1, gameState: state });
-  assert.equal(result.ranked, true);
+  assert.deepEqual(result, { ranked:false, reason:'unverified-shadow' });
+  assert.equal(ticketRequests, 0);
+  assert.equal(refreshes, 0);
 });
 
 test('snapshot mismatch closes the first ticket, syncs, and retries once', async () => {
@@ -173,7 +203,7 @@ test('snapshot mismatch closes the first ticket, syncs, and retries once', async
       },
       submitStageResult: async (_account, runId, body) => { calls.push(['abandon', runId, body]); return { status: 422 }; },
     },
-    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'online',
+    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'verified-online',
     syncPendingSave: async () => { calls.push('sync'); return { ok: true }; },
     isOnline: () => true, now: () => new Date('2026-10-21T00:01:00.000Z'),
   });
@@ -198,7 +228,7 @@ test('a failed attempt closes its ticket before a retry can request a fresh snap
         return { status: 422, code: 'run-not-cleared' };
       },
     },
-    account: {}, getSaveRevision: () => 9, getCurrentState: () => state, getMode: () => 'online',
+    account: {}, getSaveRevision: () => 9, getCurrentState: () => state, getMode: () => 'verified-online',
     syncPendingSave: async () => ({ ok: true }), isOnline: () => true,
     now: () => new Date('2026-10-21T00:01:00.000Z'),
   });
@@ -229,7 +259,7 @@ test('ticket request failures, expired tickets, and a second snapshot mismatch s
           startStageRun: async () => scenario.response,
           submitStageResult: async () => ({ status: 422 }),
         },
-        account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'online',
+        account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'verified-online',
         syncPendingSave: async () => ({ ok: true }), isOnline: () => true,
         now: () => new Date('2026-10-21T00:01:00.000Z'),
       });
@@ -292,7 +322,7 @@ test('rank submission is skipped after disconnect and only verified success yiel
         };
       },
     },
-    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'online',
+    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'verified-online',
     syncPendingSave: async () => ({ ok: true }), isOnline: () => online,
     installVerifiedState: async (envelope) => {
       installs.push(envelope);
@@ -347,7 +377,7 @@ test('409, 410, and 422 result responses never claim a ranked clear', async (t) 
     await t.test(String(response.status), async () => {
       const client = createRankedRunClient({
         apiClient: { submitStageResult: async () => response }, account: {},
-        getSaveRevision: () => 1, getCurrentState: () => state, getMode: () => 'online',
+        getSaveRevision: () => 1, getCurrentState: () => state, getMode: () => 'verified-online',
         syncPendingSave: async () => ({ ok: true }), isOnline: () => true,
       });
       assert.deepEqual(await client.submitResult(ticketFor(state), []), {
@@ -371,7 +401,7 @@ test('unsupported-version rejection clears a pending ticket before the next rank
         return { status: 409, code: 'unsupported-simulator-version' };
       },
     },
-    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'online',
+    account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'verified-online',
     syncPendingSave: async () => ({ ok: true }), isOnline: () => true,
     now: () => new Date('2026-10-21T00:01:00.000Z'),
   });

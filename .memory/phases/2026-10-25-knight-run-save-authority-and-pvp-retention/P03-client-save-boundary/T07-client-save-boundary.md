@@ -1,6 +1,6 @@
 # Task: T07 계정별 verified save와 offline shadow 분리
 
-## Status: pending
+## Status: done
 
 ## Goal
 로그인 계정의 canonical server save와 오프라인/게스트 진행을 계정별로 분리한다. 재접속 때 미검증 XP·재화·아이템·진행도를 CloudSave PUT으로 자동 승격하지 않으며 원본은 복구 가능하게 보존한다.
@@ -58,10 +58,10 @@
 - Assert no network call carries inflated server-owned fields and no `online` event promotes a shadow.
 
 ## Acceptance Criteria
-- [ ] Verified online state and unverified shadow are separately keyed and account-scoped.
-- [ ] Offline and guest progress remains playable and recoverable.
-- [ ] Reconnect and CAS conflict never silently overwrite canonical server rewards.
-- [ ] Ticket request cannot use an unverified profile as a verified starting save.
+- [x] Verified online state and unverified shadow are separately keyed and account-scoped.
+- [x] Offline and guest progress remains playable and recoverable.
+- [x] Reconnect and CAS conflict never silently overwrite canonical server rewards.
+- [x] Ticket request cannot use an unverified profile as a verified starting save.
 
 ## Validation
 - `node --test test/save/accountSaveCoordinator.test.js test/ranked-stage-client.test.js test/save/saveStore.test.js` (workdir: repository root) — focused browser persistence tests pass
@@ -81,6 +81,7 @@ Task: T07-client-save-boundary
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과
+- Validation: focused save/ranked/PvP/API client tests passed (81); root suite passed (186); Vite build passed.
 - commit: pending
