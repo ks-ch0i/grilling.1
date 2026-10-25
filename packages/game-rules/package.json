@@ -10,6 +10,7 @@
     "./balance": "./src/balance.js",
     "./save": "./src/saveMigration.js",
     "./combat": "./src/combat.js",
-    "./simulation": "./src/simulation.js"
+    "./simulation": "./src/simulation.js",
+    "./rewards": "./src/rewards.js"
   }
 }

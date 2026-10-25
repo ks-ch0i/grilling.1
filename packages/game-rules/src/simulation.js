@@ -1,5 +1,6 @@
 import { BALANCE, getStageEnemyStats } from './balance.js';
 import { resolveContact } from './combat.js';
+import { resolveStageDrops, xpRequiredForLevel } from './rewards.js';
 
 const TICKS_PER_SECOND = 60;
 const WORLD_WIDTH = 11200;
@@ -117,6 +118,8 @@ export function createRankedRun(ticket, playerSnapshot) {
     enemies,
     contactPairs: [],
     normalDefeated: 0,
+      defeatedEnemies: [],
+      levelUps: [],
     hasBoss: ticket.stage % 5 === 0,
     bossSpawned: false,
     outcome: null,
@@ -132,15 +135,6 @@ function nextRandom(randomState) {
   state ^= state << 5;
   state >>>= 0;
   return { state, value: state / 0x100000000 };
-}
-
-function xpRequiredForLevel(targetLevel) {
-  let cost = 100;
-  for (let level = 3; level <= targetLevel; level += 1) {
-    const multiplier = level % 10 === 0 ? 2 : level % 5 === 0 ? 1.5 : 1.2;
-    cost = Math.ceil(cost * multiplier);
-  }
-  return cost;
 }
 
 function grantRunXp(player, amount) {
@@ -213,6 +207,7 @@ function updatePlayerAfterContact(player, result) {
 function applyStageContact(state, enemies, contactPairs, player, events, randomState) {
   const pairs = new Set(contactPairs);
   let normalDefeated = state.normalDefeated;
+  const defeatedEnemies = [...state.defeatedEnemies];
   let bossSpawned = state.bossSpawned;
   let outcome = state.outcome;
   let rejectReason = state.rejectReason;
@@ -256,6 +251,13 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
     if (result.enemyDefeated) {
       enemy.active = false;
       events.push({ type: 'enemyDefeated', tick: state.tick, targetId: enemy.id });
+      defeatedEnemies.push({
+        id: enemy.id,
+        isBoss: enemy.isBoss,
+        tick: state.tick,
+        x: enemy.x,
+        dropEligible: !playerDied,
+      });
       if (enemy.isBoss) {
         if (!playerDied) {
           outcome = 'clear';
@@ -297,6 +299,7 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
     enemies,
     contactPairs: [...pairs],
     normalDefeated,
+    defeatedEnemies,
     bossSpawned,
     randomState: updatedRandomState,
     outcome,
@@ -313,6 +316,8 @@ export function stepRankedRun(state, inputForTick = []) {
     player: { ...state.player, effects: state.player.effects.map((effect) => ({ ...effect })) },
     enemies: state.enemies.map((enemy) => ({ ...enemy })),
     contactPairs: [...state.contactPairs],
+    defeatedEnemies: [...state.defeatedEnemies],
+    levelUps: [...state.levelUps],
     elapsedTicks: state.tick + 1,
   };
   const events = [];
@@ -320,6 +325,7 @@ export function stepRankedRun(state, inputForTick = []) {
     if (event.kind === 'move') next.movementDirection = event.value;
     else {
       next.player = applyLevelUp(next.player, event.value);
+      next.levelUps.push({ tick: state.tick, allocations: [...event.value], level: next.player.level });
       events.push({ type: 'levelUp', tick: state.tick, stats: [...event.value], level: next.player.level });
     }
   }
@@ -374,13 +380,17 @@ function invalidStageResult(reason, playerSnapshot, elapsedTicks = 0) {
   };
 }
 
-function stageResult(state) {
+function stageResult(state, playerPath) {
+  const { collectedDropOrdinals } = resolveStageDrops(state.ticket, state.defeatedEnemies, playerPath);
   return {
     valid: state.outcome === 'clear' || state.outcome === 'death',
     outcome: state.outcome,
     elapsedTicks: state.elapsedTicks,
     playerHp: state.player.currentHp,
     rejectReason: state.rejectReason,
+    defeatedEnemies: state.defeatedEnemies.map((enemy) => ({ ...enemy })),
+    levelUps: state.levelUps.map((levelUp) => ({ ...levelUp, allocations: [...levelUp.allocations] })),
+    collectedDropOrdinals,
   };
 }
 
@@ -410,6 +420,7 @@ export function replayRankedRun(ticket, playerSnapshot, inputs) {
     return invalidStageResult(error.message, playerSnapshot);
   }
   let inputIndex = 0;
+  const playerPath = [];
   while (!state.outcome && state.tick < MAX_REPLAY_TICKS) {
     const tickInputs = [];
     while (inputIndex < inputs.length && inputs[inputIndex].tick === state.tick) {
@@ -431,6 +442,7 @@ export function replayRankedRun(ticket, playerSnapshot, inputs) {
     try {
       const step = stepRankedRun(state, tickInputs);
       state = step.state;
+      playerPath.push({ tick: state.tick, x: state.player.x });
     } catch (error) {
       return invalidStageResult(error.message, playerSnapshot, state.elapsedTicks);
     }
@@ -454,7 +466,7 @@ export function replayRankedRun(ticket, playerSnapshot, inputs) {
     };
   }
   if (inputIndex < inputs.length) return invalidStageResult('input-after-terminal-outcome', playerSnapshot, state.elapsedTicks);
-  return stageResult(state);
+  return stageResult(state, playerPath);
 }
 
 function assertPvpTicket(ticket) {

@@ -171,19 +171,26 @@ test('the simulator advances fixed 60 Hz ticks and keeps the last movement direc
 });
 
 test('a stage replay produces the same clear result for the same ticket and input log', async () => {
-  const { replayRankedRun } = await loadRules();
+  const { createRankedRun, replayRankedRun } = await loadRules();
   const inputs = [{ tick: 0, kind: 'move', value: 1 }];
-  const first = replayRankedRun(stageTicket(), player(), inputs);
-  const second = replayRankedRun(stageTicket(), player(), inputs);
+  const ticket = stageTicket();
+  const snapshot = player();
+  const first = replayRankedRun(ticket, snapshot, inputs);
+  const second = replayRankedRun(ticket, snapshot, inputs);
+  const { defeatedEnemies, levelUps, collectedDropOrdinals, ...summary } = first;
 
   assert.deepEqual(first, second);
-  assert.deepEqual(first, {
+  assert.deepEqual(summary, {
     valid: true,
     outcome: 'clear',
     elapsedTicks: 2351,
     playerHp: 10000,
     rejectReason: null,
   });
+  assert.equal(defeatedEnemies.length, createRankedRun(ticket, snapshot).enemies.length);
+  assert.ok(defeatedEnemies.every((enemy) => enemy.dropEligible));
+  assert.deepEqual(levelUps, []);
+  assert.ok(Array.isArray(collectedDropOrdinals));
 });
 
 test('stage replays reject reversed ticks, duplicate movement and invalid level-up inputs', async () => {
@@ -273,6 +280,9 @@ test('a pending level-up is applied before a seed-selected boss encounter', asyn
 
   assert.equal(result.valid, true);
   assert.equal(result.outcome, 'clear');
+  assert.equal(result.levelUps.length, 1);
+  assert.deepEqual(result.levelUps[0].allocations, ['attack']);
+  assert.equal(result.levelUps[0].level, 2);
   assert.equal(state.player.spentStatPoints, 1);
 });
 

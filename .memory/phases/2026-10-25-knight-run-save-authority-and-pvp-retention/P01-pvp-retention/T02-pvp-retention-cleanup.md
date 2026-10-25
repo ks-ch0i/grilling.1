@@ -82,4 +82,4 @@ Task: T02-pvp-retention-cleanup
 - [x] 구현 완료
 - [x] 검증 통과
 - Validation: focused cleanup tests 12 passed; API suite 116 passed; Function entry check passed.
-- commit: pending
+- commit: 8a78e39

@@ -7,7 +7,7 @@
 [P02 authoritative rewards API](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/phase.md)
 
 ## Active Task
-[T03 deterministic stage rewards](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/T03-deterministic-stage-rewards.md)
+[T04 authoritative reward profile storage](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/T04-authoritative-profile-storage.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -29,10 +29,12 @@
 
 - P01-T02 complete: added daily bounded PvP payload and old pair-day cleanup. Focused cleanup tests: 12 passed; API suite: 116 passed; Function entry check passed.
 
+- P02-T03 complete: shared rules now calculate deterministic XP, gold, collected drops, level progression and clear unlocks. Focused tests: 34 passed; root suite: 173 passed; Vite build passed with a Phaser chunk-size warning.
+
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
 - 보류 위치: [P03 Azure 인프라 코드](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md), [T10 Azure 인프라 구성](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/T10-azure-infrastructure.md)
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-Read the active T03 blueprint and implement deterministic stage rewards from verified replay results.
+Read the active T04 blueprint and persist the authoritative reward profile separately from CloudSave, then merge it into save responses.
