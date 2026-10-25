@@ -3,6 +3,7 @@ import { ManagedIdentityCredential } from '@azure/identity';
 import { registerMeFunction } from './functions/me.js';
 import { registerCloudSaveFunctions } from './functions/cloudSave.js';
 import { registerLegacySaveRecoveryFunction } from './functions/legacySaveRecovery.js';
+import { registerProfileActionFunction } from './functions/profileActions.js';
 import { registerStageRunFunctions } from './functions/stageRuns.js';
 import { registerRankingFunctions } from './functions/rankings.js';
 import { registerPlayerSnapshotFunction } from './functions/playerSnapshots.js';
@@ -27,6 +28,7 @@ const pvpResultService = createPvpResultService({
 registerMeFunction(app, { credential });
 registerCloudSaveFunctions(app, { credential });
 registerLegacySaveRecoveryFunction(app, { credential });
+registerProfileActionFunction(app, { credential });
 registerStageRunFunctions(app, { credential, service:stageService });
 registerRankingFunctions(app, { credential, stageService, pvpService:pvpResultService });
 registerPlayerSnapshotFunction(app, { credential });

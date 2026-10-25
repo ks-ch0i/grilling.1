@@ -90,4 +90,4 @@ Task: T04-authoritative-profile-storage
 - [x] 구현 완료
 - [x] 검증 통과
 - Validation: focused profile/recovery tests 22 passed; API suite 123 passed; Function entry check passed; SQL migration review confirmed original save bytes are copied before profile seeding and never rewritten.
-- commit: pending
+- commit: 1b937d0

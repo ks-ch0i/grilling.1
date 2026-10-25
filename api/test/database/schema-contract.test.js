@@ -10,6 +10,7 @@ const pvpVersionMigrationPath = path.join(apiRoot, 'migrations', '002-pvp-balanc
 const pvpHistoryMigrationPath = path.join(apiRoot, 'migrations', '003-pvp-history-indexes.sql');
 const pvpPayloadMigrationPath = path.join(apiRoot, 'migrations', '004-pvp-payload-retention.sql');
 const rewardProfileMigrationPath = path.join(apiRoot, 'migrations', '005-authoritative-reward-profile.sql');
+const profileActionMigrationPath = path.join(apiRoot, 'migrations', '006-profile-action-ledger.sql');
 
 test('initial schema defines account, save, stage, snapshot and PvP contracts', () => {
   assert.ok(existsSync(migrationPath), 'the initial SQL migration must exist');
@@ -84,4 +85,13 @@ test('reward profile migration archives original save bytes before default seedi
   assert.doesNotMatch(sql, /UPDATE\s+dbo\.CloudSaves|DELETE\s+FROM\s+dbo\.CloudSaves|DROP\s+COLUMN\s+SaveJson/i);
   assert.match(sql, /WHERE Reason = N'schema-v5-migration'/i);
   assert.match(sql, /VALUES \(5, N'authoritative-reward-profile'\)/i);
+});
+
+test('profile action migration adds an idempotent player/action ledger and schema version 6', () => {
+  assert.ok(existsSync(profileActionMigrationPath), 'the profile action ledger migration must exist');
+  const sql = readFileSync(profileActionMigrationPath, 'utf8');
+  assert.match(sql, /CREATE TABLE dbo\.PlayerProfileActions[\s\S]*?PlayerId uniqueidentifier NOT NULL[\s\S]*?ActionId uniqueidentifier NOT NULL[\s\S]*?RequestJson nvarchar\(2048\) NOT NULL[\s\S]*?ResultJson nvarchar\(max\) NOT NULL[\s\S]*?AppliedAtUtc datetime2/i);
+  assert.match(sql, /PRIMARY KEY \(PlayerId, ActionId\)/i);
+  assert.match(sql, /IF NOT EXISTS \(SELECT 1 FROM dbo\.SchemaVersions WHERE Version = 6\)/i);
+  assert.match(sql, /VALUES \(6, N'profile-action-ledger'\)/i);
 });

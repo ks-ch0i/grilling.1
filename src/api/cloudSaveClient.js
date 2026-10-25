@@ -62,6 +62,13 @@ export function createCloudSaveClient({
       if (result.status === 200 || result.status === 201) return { status: result.status, envelope: result.body };
       return { status: result.status, ...result.body };
     },
+    async applyProfileAction(account, body) {
+      const result = await request(account, '/profile/actions', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return { status: result.status, ...result.body };
+    },
     async startStageRun(account, body) {
       const result = await request(account, '/stage-runs', {
         method: 'POST',

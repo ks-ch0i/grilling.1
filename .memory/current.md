@@ -7,7 +7,7 @@
 [P02 authoritative rewards API](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/phase.md)
 
 ## Active Task
-[T05 profile economy actions](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/T05-profile-economy-actions.md)
+[T06 atomic stage rewards](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/T06-atomic-stage-rewards.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -31,6 +31,7 @@
 
 - P02-T03 complete: shared rules now calculate deterministic XP, gold, collected drops, level progression and clear unlocks. Focused tests: 34 passed; root suite: 173 passed; Vite build passed with a Phaser chunk-size warning.
 - P02-T04 complete: separated canonical rewards/progression into PlayerRewardProfiles, archived legacy save bytes and added identity-scoped unverified recovery. API suite: 123 passed; Function entry check passed. No migration was applied to an environment.
+- P02-T05 complete: added revision-bound, idempotent server commands for equip, dismantle, gold and material spending. Focused API tests: 17 passed; API suite: 141 passed; root suite: 178 passed; API check and Vite build passed. No database migration was applied.
 
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
@@ -38,4 +39,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-Read the active T05 blueprint and implement revision-bound, idempotent profile economy actions.
+Read the active T06 blueprint and implement atomic stage rewards for verified runs.

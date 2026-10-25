@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { BALANCE, GEAR_SLOT, RARITY_COLOR, getGearUpgradeBand } from '../data/balance.js';
-import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
-import { allocateStatPoint, getStatResetCost, resetStatPoints, stageId } from '../domain/progression.js';
+import { createInitialState, equipGear, dismantleGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
+import { allocateStatPoint, getStatResetCost, stageId } from '../domain/progression.js';
+import { installEquippedProfileItem, previewProfileSpend, runProfileSpendPreview } from '../domain/profileActionClient.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
 import { createKeyboardNavigation } from '../ui/keyboardNavigation.js';
 import { formatPvpHistoryRow, isCurrentPvpHistoryRequest } from '../ui/pvpHistory.js';
@@ -47,6 +48,11 @@ export class TownScene extends Phaser.Scene {
     this.upgradeFeedback = null;
     this.gameState = data.gameState ?? createInitialState();
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
+    const bootstrap = this.game?.lancerBootstrap;
+    this.applyProfileAction = bootstrap?.applyProfileAction;
+    this.getSaveMode = bootstrap?.getSaveMode;
+    this.profileActionPending = false;
+    this.profileActionMessage = null;
     this.rankedRunClient = data.rankedRunClient;
     this.pvpClient = data.pvpClient;
     this.rankingClient = data.rankingClient;
@@ -176,6 +182,43 @@ export class TownScene extends Phaser.Scene {
     this.refresh();
   }
 
+  hasAuthoritativeProfile() {
+    return typeof this.applyProfileAction === 'function' && this.getSaveMode?.() === 'online';
+  }
+
+  async requestProfileAction(action) {
+    if (this.profileActionPending || typeof this.applyProfileAction !== 'function') {
+      return { ok:false, error:'profile-actions-unavailable' };
+    }
+    this.profileActionPending = true;
+    this.refresh();
+    let result;
+    try {
+      result = await this.applyProfileAction(action);
+      if (result?.state) this.gameState = result.state;
+      if (!result?.ok) {
+        const messages = {
+          'insufficient-gold':'서버 골드가 부족합니다. 저장을 새로고침했습니다.',
+          'insufficient-materials':'서버 재료가 부족합니다. 저장을 새로고침했습니다.',
+          'inventory-item-not-found':'장비를 서버 보관함에서 찾을 수 없습니다. 저장을 새로고침했습니다.',
+          'save-revision-conflict':'저장 상태가 바뀌었습니다. 최신 저장을 적용했습니다.',
+          'network-unavailable':'서버에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도해 주세요.',
+          'authentication-required':'인증이 만료되었습니다. 다시 로그인해 주세요.',
+        };
+        this.profileActionMessage = messages[result?.error] ?? '서버 명령을 적용하지 못했습니다.';
+      } else {
+        this.profileActionMessage = null;
+      }
+    } catch {
+      result = { ok:false, error:'network-unavailable' };
+      this.profileActionMessage = '서버에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도해 주세요.';
+    } finally {
+      this.profileActionPending = false;
+      if (!result?.ok) this.refresh();
+    }
+    return result;
+  }
+
   refresh() {
     this.keyboardNavigation?.reset();
     this.inventoryScrollRow = clampInventoryScrollRow(
@@ -195,6 +238,9 @@ export class TownScene extends Phaser.Scene {
     this.add.text(700, 58, 'Lv.' + player.level + '  XP ' + player.xp + '/' + player.xpToNext, { fontFamily:'sans-serif', fontSize:'16px', color:'#f4e6bf' });
     this.add.text(700, 83, 'HP ' + player.currentHp + '/' + stats.maxHp + '   ATK ' + stats.attack + '   DEF ' + stats.defense + '   치명타 ' + (stats.critChance * 100).toFixed(1) + '%', { fontFamily:'sans-serif', fontSize:'14px', color:'#b8c7d5' });
     this.add.text(1035, 58, '재료 ' + materials + ' · 골드 ' + gold, { fontFamily:'sans-serif', fontSize:'17px', color:'#ffcf45' });
+    if (this.profileActionMessage) {
+      this.add.text(32, 696, this.profileActionMessage, { fontFamily:'sans-serif', fontSize:'12px', color:'#ffb6ad' });
+    }
 
     this.add.rectangle(640, 128, 1216, 48, 0x1a2531, 0.96).setStrokeStyle(1, 0x47576a);
     this.add.text(44, 109, `미사용 ${player.availableStatPoints} · 배정 ${player.spentStatPoints} · 골드 ${gold}\n공격 ${stats.attack} · 방어 ${stats.defense} · 최대 HP ${stats.maxHp}`, { fontFamily:'sans-serif', fontSize:'12px', color:'#d8e0e8', lineSpacing:3 });
@@ -205,7 +251,7 @@ export class TownScene extends Phaser.Scene {
     ];
     allocationButtons.forEach(({ key, x, width, label }) => createButton(this, {
       x, y:108, width, height:40, label,
-      enabled:player.availableStatPoints > 0,
+      enabled:player.availableStatPoints > 0 && !this.profileActionPending,
       onClick:() => {
         const result = allocateStatPoint(this.gameState, key);
         if (result.ok) this.commitState(result.state);
@@ -213,7 +259,7 @@ export class TownScene extends Phaser.Scene {
     }));
     let resetCost = null;
     try { resetCost = getStatResetCost(player.statResetCount); } catch { /* Corrupt or overflowing counts cannot trigger a reset. */ }
-    const canReset = player.spentStatPoints > 0 && resetCost !== null && gold >= resetCost;
+    const canReset = player.spentStatPoints > 0 && resetCost !== null && gold >= resetCost && !this.profileActionPending;
     const resetLabel = player.spentStatPoints < 1
       ? '초기화할 능력치 없음'
       : resetCost === null
@@ -223,9 +269,19 @@ export class TownScene extends Phaser.Scene {
           : `초기화 ${resetCost.toLocaleString()}G · 이후 ${ (gold - resetCost).toLocaleString()}G`;
     createButton(this, {
       x:878, y:108, width:354, height:40, label:resetLabel, enabled:canReset,
-      onClick:() => {
-        const result = resetStatPoints(this.gameState);
-        if (result.ok) this.commitState(result.state);
+      onClick:async () => {
+        if (this.hasAuthoritativeProfile()) {
+          const result = await runProfileSpendPreview(
+            this.gameState,
+            { type:'reset-stat-points' },
+            (action) => this.requestProfileAction(action),
+            { serverProfile:true },
+          );
+          if (result.ok) this.commitState(result.state);
+          return;
+        }
+        const preview = previewProfileSpend(this.gameState, { type:'reset-stat-points' });
+        if (preview.ok) this.commitState(preview.state);
       },
     });
 
@@ -332,20 +388,38 @@ export class TownScene extends Phaser.Scene {
     const y = Math.max(378, detailY + 14);
     if (selected.type === 'inventory') {
       const oldItem = this.gameState.equipment[item.slot];
-      const canEquip = !oldItem || this.gameState.inventory.length < BALANCE.inventoryCapacity;
-      createButton(this, { x:936,y,width:138,height:48,label:'장착',enabled:canEquip,onClick:() => {
-        const result=equipGear(this.gameState,item.id);
-        if(result.ok){this.selectedItem={type:'equipment',id:item.id};this.commitState(result.state);}
+      const canEquip = (!oldItem || this.gameState.inventory.length < BALANCE.inventoryCapacity) && !this.profileActionPending;
+      createButton(this, { x:936,y,width:138,height:48,label:'장착',enabled:canEquip,onClick:async () => {
+        if (this.hasAuthoritativeProfile()) {
+          const preview = equipGear(this.gameState, item.id);
+          if (!preview.ok) return;
+          const result = await this.requestProfileAction({ type:'equip-inventory-item', itemId:item.id });
+          if (result.ok && result.consumedItem) {
+            const nextState = installEquippedProfileItem(result.state, result.consumedItem);
+            this.selectedItem = { type:'equipment', id:result.consumedItem.id };
+            this.commitState(nextState);
+          }
+          return;
+        }
+        const result = equipGear(this.gameState, item.id);
+        if (result.ok) { this.selectedItem={type:'equipment',id:item.id}; this.commitState(result.state); }
       }});
-      createButton(this, { x:1084,y,width:148,height:48,label:'분해',onClick:() => {
-        const result=dismantleGear(this.gameState,item.id);
-        if(result.ok){this.selectedItem=null;this.commitState(result.state);}
+      createButton(this, { x:1084,y,width:148,height:48,label:'분해',enabled:!this.profileActionPending,onClick:async () => {
+        if (this.hasAuthoritativeProfile()) {
+          const result = await this.requestProfileAction({ type:'dismantle-inventory-item', itemId:item.id });
+          if (result.ok) { this.selectedItem=null; this.commitState(result.state); }
+          return;
+        }
+        const result = dismantleGear(this.gameState, item.id);
+        if (result.ok) { this.selectedItem=null; this.commitState(result.state); }
       }});
     }
     const cost = getGearUpgradeCost(item.level);
     const atMaxLevel = item.level >= BALANCE.gearMaxLevel;
     const hasMaterials = this.gameState.materials >= cost;
-    const canUpgrade = !atMaxLevel && hasMaterials;
+    const serverProfile = this.hasAuthoritativeProfile();
+    const inventoryUpgradeBlocked = serverProfile && selected.type === 'inventory';
+    const canUpgrade = !atMaxLevel && hasMaterials && !inventoryUpgradeBlocked && !this.profileActionPending;
     const upgradeY = selected.type === 'inventory' ? y + 106 : Math.max(420, detailY + 50);
     if (canUpgrade) {
       const band = getGearUpgradeBand(item.level);
@@ -356,26 +430,36 @@ export class TownScene extends Phaser.Scene {
     }
     const upgradeLabel = atMaxLevel
       ? '최대 레벨'
-      : !hasMaterials
+      : inventoryUpgradeBlocked
+        ? '장착 후 강화'
+        : !hasMaterials
         ? `재료 부족 · ${cost} 필요`
         : `강화 · 재료 ${cost}`;
-    createButton(this, { x:936,y:upgradeY,width:296,height:48,label:upgradeLabel,enabled:canUpgrade,onClick:() => {
-      const result=upgradeGear(this.gameState,item.id);
-      if (!result.ok) {
-        this.upgradeFeedback = null;
-        this.refresh();
-        return;
+    createButton(this, { x:936,y:upgradeY,width:296,height:48,label:upgradeLabel,enabled:canUpgrade,onClick:async () => {
+      let result;
+      if (this.hasAuthoritativeProfile()) {
+        result = await runProfileSpendPreview(
+          this.gameState,
+          { type:'upgrade-gear', itemId:item.id },
+          (action) => this.requestProfileAction(action),
+          { serverProfile:true },
+        );
+      } else {
+        const preview = previewProfileSpend(this.gameState, { type:'upgrade-gear', itemId:item.id });
+        result = preview.ok ? { ...preview, state:preview.state } : preview;
       }
+      if (!result.ok) return;
+      const upgrade = result.preview?.preview ?? result.preview;
       const messages = {
         failed:'강화 실패 · 장비는 유지됩니다.',
         destroyed:'강화 파괴 · 장비가 사라졌습니다.',
-        success:result.greatSuccess ? '강화 대성공!' : '강화 성공.',
+        success:upgrade?.greatSuccess ? '강화 대성공!' : '강화 성공.',
       };
       this.upgradeFeedback = {
-        itemId:result.outcome === 'destroyed' ? null : item.id,
-        message:messages[result.outcome],
+        itemId:upgrade?.outcome === 'destroyed' ? null : item.id,
+        message:messages[upgrade?.outcome],
       };
-      this.selectedItem = result.outcome === 'destroyed' ? null : { ...selected };
+      this.selectedItem = upgrade?.outcome === 'destroyed' ? null : { ...selected };
       this.commitState(result.state);
     }});
     this.add.text(943, upgradeY + 53, '일반 능력치는 구간별 · 특수 능력은 종류별 고정 범위\n대성공 시 해당 증가량 2배', { fontFamily:'sans-serif', fontSize:'10px', color:'#9eacba', wordWrap:{width:286}, lineSpacing:2 });

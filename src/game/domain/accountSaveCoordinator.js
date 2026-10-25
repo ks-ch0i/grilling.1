@@ -424,6 +424,56 @@ export function createAccountSaveCoordinator({
     return saveLocally(state, { pending: true });
   }
 
+  async function applyProfileAction(action, { actionId } = {}) {
+    if (typeof api.applyProfileAction !== 'function') return { ok: false, error: 'profile-actions-unavailable' };
+    if (!activeAccount || !activeState) return { ok: false, error: 'account-not-ready' };
+    if (typeof actionId !== 'string') actionId = globalThis.crypto?.randomUUID?.();
+    if (typeof actionId !== 'string') return { ok: false, error: 'action-id-unavailable' };
+
+    const synced = await syncPendingSave();
+    if (!synced.ok) return { ok: false, error: synced.error, state: activeState };
+    if (mode !== 'online') return { ok: false, error: 'network-unavailable', state: activeState };
+    const expectedSaveRevision = getSaveRevision();
+    if (!expectedSaveRevision) return { ok: false, error: 'save-revision-unavailable', state: activeState };
+
+    let response;
+    try {
+      response = await api.applyProfileAction(activeAccount, {
+        actionId,
+        expectedSaveRevision,
+        action,
+      });
+    } catch (error) {
+      if (error?.name === 'CloudSaveAuthenticationError') {
+        return { ok: false, error: 'authentication-required', actionId, state: activeState };
+      }
+      return { ok: false, error: 'network-unavailable', actionId, state: activeState };
+    }
+
+    if (response.status === 200) {
+      const installed = installCloudState({ revision: response.revision, state: response.state });
+      if (!installed.ok) return { ok: false, error: installed.error, actionId, state: activeState };
+      return { ...response, ok: true, actionId, state: activeState };
+    }
+    if (response.status === 409 && response.state && response.revision) {
+      const installed = installCloudState({ revision: response.revision, state: response.state });
+      return {
+        ...response,
+        ok: false,
+        error: response.code,
+        actionId,
+        state: installed.ok ? activeState : undefined,
+      };
+    }
+    return {
+      ...response,
+      ok: false,
+      error: response.code ?? (response.status >= 500 ? 'service-unavailable' : 'profile-action-rejected'),
+      actionId,
+      state: activeState,
+    };
+  }
+
   function attachOnlineSync(onSyncResult = () => {}) {
     if (!windowObject?.addEventListener || onlineListener) return;
     onlineListener = () => {
@@ -445,6 +495,7 @@ export function createAccountSaveCoordinator({
     loadAccountSave,
     refreshAccountSave,
     saveLocal,
+    applyProfileAction,
     syncPendingSave,
     attachOnlineSync,
     setCloudSaveCallback,

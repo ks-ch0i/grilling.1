@@ -89,6 +89,30 @@ test('stage ticket and result calls use the signed-in account and exact API payl
   assert.equal(calls[1].options.headers['content-type'], 'application/json');
 });
 
+test('profile action calls send only the command envelope to the authenticated route', async () => {
+  const calls = [];
+  const client = createCloudSaveClient({
+    apiBaseUrl: '/api/',
+    getAccessToken: async () => 'profile-token',
+    fetchImplementation: async (url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify({ revision: 4, appliedRevision: 4, state: { schemaVersion: 2 } }), { status: 200 });
+    },
+  });
+  const body = {
+    actionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    expectedSaveRevision: 3,
+    action: { type: 'spend-materials', amount: 12 },
+  };
+  const result = await client.applyProfileAction(account, body);
+
+  assert.equal(result.revision, 4);
+  assert.equal(calls[0].url, '/api/profile/actions');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[0].options.body), body);
+  assert.equal(calls[0].options.headers.authorization, 'Bearer profile-token');
+});
+
 test('PvP snapshot, search and result calls use their exact API routes and DTOs', async () => {
   const calls = [];
   const client = createCloudSaveClient({

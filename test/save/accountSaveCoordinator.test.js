@@ -395,6 +395,42 @@ test('cloud save callback only publishes a state after the matching revision is 
   assert.equal(callbacks[0].state.player.xp, changed.player.xp);
 });
 
+test('profile actions sync pending client state, bind to the current revision, and install canonical response state', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey, accountSyncKey } = await loadCoordinator();
+  const initial = newState();
+  const storage = createStorage();
+  const api = makeApi({
+    getCurrent:async() => ({ status:200, envelope:envelope(initial, 5) }),
+    putCurrent:async(_account, body) => ({ status:200, envelope:envelope(body.state, 6) }),
+  });
+  let actionCall;
+  api.applyProfileAction = async (account, body) => {
+    actionCall = { account, body };
+    const state = structuredClone(api.calls.put[0].body.state);
+    state.gold = 75;
+    return { status:200, revision:7, appliedRevision:7, state, replayed:false };
+  };
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState });
+  const loaded = await coordinator.loadAccountSave(accountA);
+  const changed = structuredClone(loaded.state);
+  changed.player.baseStats.attack += 1;
+  coordinator.saveLocal(changed);
+
+  const result = await coordinator.applyProfileAction({ type:'spend-gold', amount:25 });
+
+  assert.equal(api.calls.put.length, 1);
+  assert.equal(actionCall.account, accountA);
+  assert.equal(actionCall.body.expectedSaveRevision, 6);
+  assert.match(actionCall.body.actionId, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual(actionCall.body.action, { type:'spend-gold', amount:25 });
+  assert.equal(result.ok, true);
+  assert.equal(coordinator.getSaveRevision(), 7);
+  assert.equal(coordinator.getCurrentState().gold, 75);
+  assert.equal(coordinator.getCurrentState().player.baseStats.attack, changed.player.baseStats.attack);
+  assert.equal(JSON.parse(storage.getItem(accountSyncKey(accountA))).pending, false);
+  assert.equal(JSON.parse(storage.getItem(accountSaveKey(accountA))).gold, 75);
+});
+
 test('409 conflict backs up pending local state, applies cloud state and never auto-overwrites it', async () => {
   const { createAccountSaveCoordinator, accountSaveKey, accountSyncKey, recoveryKeyPrefix } = await loadCoordinator();
   const cloud = newState();

@@ -33,7 +33,7 @@ function showAccountStatus(message = '') {
   notice.hidden = !message;
 }
 
-export async function createGame({ gameState, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient }) {
+export async function createGame({ gameState, saveState, account, apiClient, applyProfileAction, getSaveMode, rankedRunClient, pvpClient, rankingClient }) {
   const container = document.querySelector('#game');
   if (!container) throw new Error('Game container "#game" was not found.');
   if (!gameState || typeof saveState !== 'function') throw new TypeError('An authenticated account save is required before creating the game.');
@@ -49,6 +49,8 @@ export async function createGame({ gameState, saveState, account, apiClient, ran
         saveState,
         account,
         apiClient,
+        applyProfileAction,
+        getSaveMode,
         rankedRunClient,
         pvpClient,
         rankingClient,
