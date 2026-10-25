@@ -99,6 +99,13 @@ export function createCloudSaveClient({
       });
       return { status: result.status, ...result.body };
     },
+    async getPvpMatchHistory(account, page) {
+      if (!Number.isSafeInteger(page) || page < 1 || page > 100_000) {
+        throw new TypeError('A valid PvP match-history page is required.');
+      }
+      const result = await request(account, `/pvp/matches/history?page=${page}`);
+      return { status: result.status, ...result.body };
+    },
     async getRankingTop(account, board) {
       if (!['stage', 'pvp'].includes(board)) throw new TypeError('A ranking board name is required.');
       const result = await request(account, `/rankings/${board}/top`);

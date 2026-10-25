@@ -1,6 +1,30 @@
 import { derivePlayerStats } from './gear.js';
 
 const MATCH_TICKS = 60 * 60;
+const PVP_HISTORY_PAGE_SIZE = 10;
+const MAX_PVP_HISTORY_PAGE = 100_000;
+
+function historyItemFrom(value) {
+  if (!value || typeof value !== 'object' ||
+      typeof value.matchId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.matchId) ||
+      typeof value.completedAtUtc !== 'string' || !Number.isFinite(Date.parse(value.completedAtUtc)) ||
+      typeof value.opponentDisplayName !== 'string' ||
+      !['win', 'loss', 'draw'].includes(value.outcome) ||
+      typeof value.rated !== 'boolean' ||
+      !Number.isSafeInteger(value.ratingBefore) ||
+      !Number.isSafeInteger(value.ratingAfter) ||
+      !Number.isSafeInteger(value.opponentRatingAfter)) return null;
+  return {
+    matchId: value.matchId,
+    completedAtUtc: value.completedAtUtc,
+    opponentDisplayName: value.opponentDisplayName,
+    outcome: value.outcome,
+    rated: value.rated,
+    ratingBefore: value.ratingBefore,
+    ratingAfter: value.ratingAfter,
+    opponentRatingAfter: value.opponentRatingAfter,
+  };
+}
 
 export function stableStringify(value) {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -56,7 +80,7 @@ export function createPvpClient({
   reauthenticate = async () => ({ ok: false }),
   now = () => new Date(),
 } = {}) {
-  for (const method of ['publishPvpSnapshot', 'searchPvpMatch', 'submitPvpResult']) {
+  for (const method of ['publishPvpSnapshot', 'searchPvpMatch', 'submitPvpResult', 'getPvpMatchHistory']) {
     if (typeof apiClient?.[method] !== 'function') throw new TypeError(`The PvP API client must provide ${method}.`);
   }
   if (!account) throw new TypeError('An Entra account is required for PvP.');
@@ -214,10 +238,44 @@ export function createPvpClient({
     return { ok:false, reason:response?.code ?? `match-result-${response?.status ?? 'failed'}` };
   }
 
+  async function getMatchHistory(page = 1) {
+    if (!Number.isSafeInteger(page) || page < 1 || page > MAX_PVP_HISTORY_PAGE) {
+      return { ok:false, reason:'invalid-history-page' };
+    }
+    if (!isOnline()) return { ok:false, reason:'network-unavailable' };
+    let response;
+    try {
+      response = await apiClient.getPvpMatchHistory(account, page);
+    } catch (error) {
+      return {
+        ok:false,
+        reason:error?.name === 'CloudSaveAuthenticationError' ? 'authentication-required' : 'network-unavailable',
+      };
+    }
+    if (response?.status === 401 || response?.status === 403) return { ok:false, reason:'authentication-required' };
+    if (response?.status >= 500) return { ok:false, reason:'network-unavailable' };
+    if (response?.status !== 200) return { ok:false, reason:response?.code ?? `match-history-${response?.status ?? 'failed'}` };
+    if (response.page !== page || response.pageSize !== PVP_HISTORY_PAGE_SIZE ||
+        typeof response.hasPrevious !== 'boolean' || typeof response.hasNext !== 'boolean' ||
+        !Array.isArray(response.items) || response.items.length > PVP_HISTORY_PAGE_SIZE) {
+      return { ok:false, reason:'invalid-history-response' };
+    }
+    const items = response.items.map(historyItemFrom);
+    if (items.some((item) => item === null)) return { ok:false, reason:'invalid-history-response' };
+    return {
+      ok:true,
+      page,
+      pageSize:PVP_HISTORY_PAGE_SIZE,
+      hasPrevious:response.hasPrevious,
+      hasNext:response.hasNext,
+      items,
+    };
+  }
+
   async function retryAuthentication() {
     try { return await reauthenticate(); }
     catch { return { ok:false }; }
   }
 
-  return { publishCurrentSnapshot, onCloudSaveSynced, findMatch, submitMatch, retryAuthentication };
+  return { publishCurrentSnapshot, onCloudSaveSynced, findMatch, submitMatch, getMatchHistory, retryAuthentication };
 }

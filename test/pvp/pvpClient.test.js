@@ -39,6 +39,10 @@ function makeClient(overrides = {}) {
       return overrides.submit ? overrides.submit(matchId, body, calls) : { status:200, outcome:'win', rated:true,
         playerRatingBefore:1000, playerRatingAfter:1016, opponentRatingAfter:984, remainingHpPercent:0.7 };
     },
+    async getPvpMatchHistory(_account, page) {
+      calls.push(['history', page]);
+      return overrides.history ? overrides.history(page, calls) : { status:200, page, pageSize:10, hasPrevious:page > 1, hasNext:false, items:[] };
+    },
   };
   const client = createPvpClient({
     apiClient,
@@ -162,4 +166,60 @@ test('snapshot publication is serialized so concurrent identical requests publis
 
   assert.ok(results.every((result) => result.ok));
   assert.equal(harness.calls.filter(([name]) => name === 'publish').length, 1);
+});
+
+test('match history validates the requested page and returns only the safe summary DTO', async () => {
+  const match = {
+    matchId:'22222222-2222-4222-8222-222222222222',
+    completedAtUtc:'2026-10-24T10:00:00.000Z',
+    opponentDisplayName:'Opponent',
+    outcome:'win',
+    rated:true,
+    ratingBefore:1000,
+    ratingAfter:1016,
+    opponentRatingAfter:984,
+    inputJson:'must not be copied',
+    playerSnapshotJson:'must not be copied',
+  };
+  const harness = makeClient({ history:async (page) => ({
+    status:200, page, pageSize:10, hasPrevious:true, hasNext:true, items:[match],
+  }) });
+
+  const result = await harness.client.getMatchHistory(2);
+  assert.deepEqual(result, {
+    ok:true,
+    page:2,
+    pageSize:10,
+    hasPrevious:true,
+    hasNext:true,
+    items:[{
+      matchId:match.matchId,
+      completedAtUtc:match.completedAtUtc,
+      opponentDisplayName:'Opponent',
+      outcome:'win',
+      rated:true,
+      ratingBefore:1000,
+      ratingAfter:1016,
+      opponentRatingAfter:984,
+    }],
+  });
+  assert.deepEqual(harness.calls.at(-1), ['history', 2]);
+  assert.deepEqual(await harness.client.getMatchHistory(0), { ok:false, reason:'invalid-history-page' });
+});
+
+test('match history maps authentication and network failures and rejects malformed pages', async (t) => {
+  for (const [name, overrides, expected] of [
+    ['authentication status', { history:async () => ({ status:403 }) }, 'authentication-required'],
+    ['server failure', { history:async () => ({ status:503 }) }, 'network-unavailable'],
+    ['network exception', { history:async () => { throw new TypeError('offline'); } }, 'network-unavailable'],
+    ['wrong page', { history:async () => ({ status:200, page:2, pageSize:10, hasPrevious:true, hasNext:false, items:[] }) }, 'invalid-history-response'],
+    ['invalid item', { history:async (page) => ({ status:200, page, pageSize:10, hasPrevious:false, hasNext:false, items:[{ outcome:'invalid' }] }) }, 'invalid-history-response'],
+  ]) {
+    await t.test(name, async () => {
+      const harness = makeClient(overrides);
+      assert.deepEqual(await harness.client.getMatchHistory(), { ok:false, reason:expected });
+    });
+  }
+  const offline = makeClient({ online:false });
+  assert.deepEqual(await offline.client.getMatchHistory(), { ok:false, reason:'network-unavailable' });
 });

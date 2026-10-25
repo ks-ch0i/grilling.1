@@ -4,6 +4,7 @@ import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayer
 import { allocateStatPoint, getStatResetCost, resetStatPoints, stageId } from '../domain/progression.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
 import { createKeyboardNavigation } from '../ui/keyboardNavigation.js';
+import { formatPvpHistoryRow, isCurrentPvpHistoryRequest } from '../ui/pvpHistory.js';
 import {
   clampInventoryScrollRow,
   getDragScrollRow,
@@ -50,6 +51,10 @@ export class TownScene extends Phaser.Scene {
     this.pvpClient = data.pvpClient;
     this.rankingClient = data.rankingClient;
     this.pvpSearching = false;
+    this.historyPage = 1;
+    this.historyRequestId = 0;
+    this.pvpHistoryOverlay = null;
+    this.pvpHistoryState = null;
     this.selectedStageId = data.unlockedStageId ?? stageId(
       this.gameState.progression.chapter,
       this.gameState.progression.currentStage,
@@ -108,7 +113,15 @@ export class TownScene extends Phaser.Scene {
     this.input.on('pointerup', this.inventoryInputHandlers.pointerup);
     this.input.on('pointerupoutside', this.inventoryInputHandlers.pointerupoutside);
     this.refresh();
-    this.onlineHandler = () => this.refresh();
+    this.onlineHandler = () => {
+      if (this.pvpHistoryOverlay) {
+        if (this.pvpHistoryState?.kind === 'error' && typeof navigator !== 'undefined' && navigator.onLine !== false) {
+          void this.loadPvpHistoryPage(this.historyPage);
+        }
+        return;
+      }
+      this.refresh();
+    };
     if (typeof window !== 'undefined') window.addEventListener('online', this.onlineHandler);
     if (typeof window !== 'undefined') window.addEventListener('offline', this.onlineHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -120,6 +133,9 @@ export class TownScene extends Phaser.Scene {
       this.keyboardNavigation?.destroy();
       this.keyboardNavigation = null;
       this.pvpSearchTimer?.remove(false);
+      this.historyRequestId += 1;
+      this.pvpHistoryOverlay?.destroy(true);
+      this.pvpHistoryOverlay = null;
     });
   }
 
@@ -379,16 +395,114 @@ export class TownScene extends Phaser.Scene {
     if (!options.includes(this.selectedStageId)) this.selectedStageId = options.at(-1);
     const selectedIndex = options.indexOf(this.selectedStageId);
     const isReplay = this.gameState.progression.clearedStageIds.includes(this.selectedStageId);
-    createButton(this,{x:32,y:630,width:188,height:58,label:'◀ 이전',enabled:options.length>1,onClick:()=>{
+    createButton(this,{x:32,y:630,width:150,height:58,label:'◀ 이전',enabled:options.length>1,onClick:()=>{
       this.selectedStageId=options[(selectedIndex-1+options.length)%options.length];this.refresh();
     }});
-    this.add.text(230, 635, (isReplay?'반복 · XP '+Math.round(this.replayXpMultiplier*100)+'%':'신규 도전')+'\n'+stageName(this.selectedStageId), { fontFamily:'sans-serif',fontSize:'14px',color:'#f4e6bf',lineSpacing:3 });
-    createButton(this,{x:560,y:630,width:190,height:58,label:'다음 ▶',enabled:options.length>1,onClick:()=>{
+    this.add.text(190, 635, (isReplay?'반복 · XP '+Math.round(this.replayXpMultiplier*100)+'%':'신규 도전')+'\n'+stageName(this.selectedStageId), { fontFamily:'sans-serif',fontSize:'14px',color:'#f4e6bf',lineSpacing:3,wordWrap:{width:245} });
+    createButton(this,{x:445,y:630,width:150,height:58,label:'다음 ▶',enabled:options.length>1,onClick:()=>{
       this.selectedStageId=options[(selectedIndex+1)%options.length];this.refresh();
     }});
-    createButton(this,{x:770,y:630,width:220,height:58,label:'전투 출발',onClick:()=>this.startBattle(this.selectedStageId)});
+    createButton(this,{x:610,y:630,width:190,height:58,label:'전투 출발',onClick:()=>this.startBattle(this.selectedStageId)});
+    createButton(this,{x:815,y:630,width:180,height:58,label:'PvP 기록',enabled:!this.pvpSearching && Boolean(this.pvpClient),onClick:()=>this.openPvpHistory()});
     const online = typeof navigator === 'undefined' || navigator.onLine !== false;
     createButton(this,{x:1010,y:630,width:238,height:58,label:this.pvpSearching?'상대 찾는 중...':'비동기 PvP',enabled:!this.pvpSearching && online && Boolean(this.pvpClient),onClick:()=>this.startPvp()});
+  }
+
+  async openPvpHistory() {
+    if (this.transitioning || this.pvpSearching || !this.pvpClient || this.pvpHistoryOverlay) return;
+    this.historyPage = 1;
+    this.pvpHistoryState = { kind:'loading', page:1 };
+    this.refresh();
+    this.keyboardNavigation?.reset();
+    await this.loadPvpHistoryPage(1);
+  }
+
+  async loadPvpHistoryPage(page) {
+    const requestId = ++this.historyRequestId;
+    this.historyPage = page;
+    this.pvpHistoryState = { kind:'loading', page };
+    this.renderPvpHistory();
+    let result;
+    try {
+      result = await this.pvpClient?.getMatchHistory(page);
+    } catch {
+      result = { ok:false, reason:'network-unavailable' };
+    }
+    if (!isCurrentPvpHistoryRequest(requestId, this.historyRequestId, Boolean(this.pvpHistoryOverlay))) return;
+    this.pvpHistoryState = result?.ok
+      ? { kind:'ready', ...result }
+      : { kind:'error', page, reason:result?.reason ?? 'network-unavailable' };
+    this.renderPvpHistory();
+  }
+
+  closePvpHistory() {
+    this.historyRequestId += 1;
+    this.pvpHistoryState = null;
+    this.pvpHistoryOverlay?.destroy(true);
+    this.pvpHistoryOverlay = null;
+    this.refresh();
+  }
+
+  renderPvpHistory() {
+    this.keyboardNavigation?.reset();
+    this.pvpHistoryOverlay?.destroy(true);
+    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(400);
+    this.pvpHistoryOverlay = overlay;
+    const backdrop = this.add.rectangle(640, 360, 1280, 720, 0x05080c, 0.78).setInteractive();
+    backdrop.on('pointerdown', () => {});
+    overlay.add(backdrop);
+    overlay.add(this.add.rectangle(640, 360, 1000, 580, 0x111a24, 1).setStrokeStyle(2, 0xd8ba77));
+    overlay.add(this.add.text(640, 98, 'PvP 경기 기록', { fontFamily:'sans-serif', fontSize:'25px', color:'#f4e6bf' }).setOrigin(0.5));
+    const closeButton = createButton(this, {
+      x:1040, y:78, width:72, height:40, label:'닫기',
+      onClick:() => this.closePvpHistory(),
+    });
+    overlay.add(closeButton);
+
+    const state = this.pvpHistoryState ?? { kind:'loading', page:this.historyPage };
+    if (state.kind === 'loading') {
+      overlay.add(this.add.text(640, 350, '경기 기록을 불러오는 중...', { fontFamily:'sans-serif', fontSize:'17px', color:'#cad4df' }).setOrigin(0.5));
+      return;
+    }
+    if (state.kind === 'error') {
+      const message = state.reason === 'authentication-required'
+        ? '회사 계정 인증을 확인한 뒤 다시 시도해 주세요.'
+        : '네트워크 연결을 확인한 뒤 다시 시도해 주세요.';
+      overlay.add(this.add.text(640, 330, message, { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df', align:'center', wordWrap:{ width:650 } }).setOrigin(0.5));
+      const retryButton = createButton(this, {
+        x:565, y:408, width:150, height:48, label:'다시 시도',
+        onClick:() => { void this.loadPvpHistoryPage(state.page); },
+      });
+      overlay.add(retryButton);
+      return;
+    }
+    if (state.items.length === 0) {
+      overlay.add(this.add.text(640, 350, '아직 완료된 PvP 경기 기록이 없습니다.', { fontFamily:'sans-serif', fontSize:'17px', color:'#cad4df' }).setOrigin(0.5));
+    } else {
+      overlay.add(this.add.text(200, 145, '날짜', { fontFamily:'sans-serif', fontSize:'13px', color:'#9eacba' }));
+      overlay.add(this.add.text(435, 145, '상대', { fontFamily:'sans-serif', fontSize:'13px', color:'#9eacba' }));
+      overlay.add(this.add.text(740, 145, '결과', { fontFamily:'sans-serif', fontSize:'13px', color:'#9eacba' }));
+      overlay.add(this.add.text(880, 145, '내 레이팅 변동', { fontFamily:'sans-serif', fontSize:'13px', color:'#9eacba' }));
+      state.items.forEach((item, index) => {
+        const row = formatPvpHistoryRow(item);
+        const y = 178 + index * 36;
+        overlay.add(this.add.rectangle(640, y, 930, 32, index % 2 === 0 ? 0x1a2531 : 0x16212c, 1));
+        overlay.add(this.add.text(200, y, row.completedAt, { fontFamily:'sans-serif', fontSize:'13px', color:'#cad4df' }).setOrigin(0, 0.5));
+        overlay.add(this.add.text(435, y, row.opponent, { fontFamily:'sans-serif', fontSize:'14px', color:'#f4e6bf', wordWrap:{ width:270 } }).setOrigin(0, 0.5));
+        overlay.add(this.add.text(740, y, row.outcome, { fontFamily:'sans-serif', fontSize:'14px', color:item.outcome === 'win' ? '#83d694' : item.outcome === 'loss' ? '#ff8d86' : '#d7c5ff' }).setOrigin(0, 0.5));
+        overlay.add(this.add.text(880, y, row.rating, { fontFamily:'sans-serif', fontSize:'14px', color:item.rated ? '#cad4df' : '#9eacba' }).setOrigin(0, 0.5));
+      });
+    }
+    const previousButton = createButton(this, {
+      x:465, y:574, width:145, height:46, label:'◀ 이전', enabled:state.hasPrevious,
+      onClick:() => { void this.loadPvpHistoryPage(state.page - 1); },
+    });
+    const nextButton = createButton(this, {
+      x:670, y:574, width:145, height:46, label:'다음 ▶', enabled:state.hasNext,
+      onClick:() => { void this.loadPvpHistoryPage(state.page + 1); },
+    });
+    overlay.add([previousButton, nextButton]);
+    overlay.add(this.add.text(640, 597, `${state.page} 페이지`, { fontFamily:'sans-serif', fontSize:'13px', color:'#cad4df' }).setOrigin(0.5));
   }
 
   showPvpNotice({ title, message, actions = [] }) {
