@@ -1,6 +1,6 @@
 # Task: T09 저장 데이터 무결성 평가
 
-## Status: pending
+## Status: done
 
 ## Goal
 게임 저장과 PvP·랭킹 입력의 신뢰 경계를 코드 근거로 정리하고, 오프라인 진행·기존 계정 저장을 보존하는 서버 검증/권위형 전환안을 제안한다. 이 Task는 분석 문서만 만들고 저장 API나 DB를 수정하지 않는다.
@@ -56,12 +56,12 @@
   5. Ask the user to select the model and fields before creating a separate implementation plan.
 
 ## Acceptance Criteria
-- [ ] Each saved field and online competitive payload has a documented writer, validator, source and trust level.
-- [ ] Compare-and-swap conflict handling is not confused with gameplay anti-cheat validation.
-- [ ] Offline saves, v1→v2 migration, account isolation, local recovery copies and revision conflicts are called out as migration constraints.
-- [ ] At least the three described authority models are compared with API/data/migration consequences.
-- [ ] No code, schema, user save, Azure resource or deployed service is changed.
-- [ ] A concrete user decision is requested before implementing an authority migration.
+- [x] Each saved field and online competitive payload has a documented writer, validator, source and trust level.
+- [x] Compare-and-swap conflict handling is not confused with gameplay anti-cheat validation.
+- [x] Offline saves, v1→v2 migration, account isolation, local recovery copies and revision conflicts are called out as migration constraints.
+- [x] At least the three described authority models are compared with API/data/migration consequences.
+- [x] No code, schema, user save, Azure resource or deployed service is changed.
+- [x] A concrete user decision is requested before implementing an authority migration.
 
 ## Validation
 - Static audit against the listed source files and existing decision documents.
@@ -81,6 +81,6 @@ Task: T09-save-integrity-assessment
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과
 - commit: pending
