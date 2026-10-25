@@ -61,7 +61,7 @@ body {
     display: none;
   }
 }
-body:not(.is-authenticated) #game { display: none; }
+body:not(.is-authenticated) #game { visibility: hidden; }
 #save-warning {
   display: none;
   position: fixed;

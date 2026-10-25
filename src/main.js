@@ -12,6 +12,49 @@ import {
   signInInteractively,
 } from './auth/msalClient.js';
 
+const ENTRA_AUTH = { initializeAuth, selectAccount, signInInteractively, getApiAccessToken };
+const LOCAL_GUEST_ACCOUNT = Object.freeze({
+  tenantId:'local-development',
+  localAccountId:'local-guest',
+  idTokenClaims:{ oid:'local-guest' },
+  username:'로컬 게스트',
+});
+
+function createLocalDevelopmentAuth() {
+  const signedIn = () => ({ status:'signed-in', account:LOCAL_GUEST_ACCOUNT });
+  return {
+    initializeAuth:async () => signedIn(),
+    selectAccount:() => signedIn(),
+    signInInteractively:async () => signedIn(),
+    getApiAccessToken:async () => '',
+  };
+}
+
+function createLocalDevelopmentApiClient() {
+  return {
+    // The save coordinator uses these responses to initialize and retain a local-only profile.
+    async getCurrent() { return { status:404, code:'save-not-found' }; },
+    async putCurrent() { return { status:503, code:'local-development-only' }; },
+  };
+}
+
+function createLocalDevelopmentRankingClient() {
+  const snapshot = { stage:null, pvp:null, myRanks:null, connection:'offline', rankNotice:null };
+  const listeners = new Set();
+  const getSnapshot = () => ({ ...snapshot });
+  return {
+    connect:async () => false,
+    getSnapshot,
+    subscribe(listener) {
+      if (typeof listener !== 'function') throw new TypeError('A ranking observer must be a function.');
+      listeners.add(listener);
+      try { listener(getSnapshot()); } catch { /* Local observers cannot interrupt game startup. */ }
+      return () => listeners.delete(listener);
+    },
+    async dispose() { listeners.clear(); },
+  };
+}
+
 function showSaveWarning(message = '저장할 수 없습니다') {
   let notice = document.querySelector('#save-warning');
   if (!notice) {
@@ -122,16 +165,18 @@ function syncMessage(result) {
   }
 }
 
-export async function startApplication({
-  auth = { initializeAuth, selectAccount, signInInteractively, getApiAccessToken },
-  createGameInstance = createGame,
-} = {}) {
+export async function startApplication({ auth, createGameInstance = createGame } = {}) {
+  const localDevelopment = import.meta.env?.DEV === true;
+  auth ??= localDevelopment ? createLocalDevelopmentAuth() : ENTRA_AUTH;
   setupOrientationMessage();
   showAuthGate();
-  const apiClient = createCloudSaveClient({ getAccessToken: auth.getApiAccessToken });
+  const apiClient = localDevelopment
+    ? createLocalDevelopmentApiClient()
+    : createCloudSaveClient({ getAccessToken: auth.getApiAccessToken });
   const coordinator = createAccountSaveCoordinator({
     api: apiClient,
     initialStateFactory: createInitialState,
+    isGuestAccount:() => localDevelopment,
     onConflict: () => syncMessage({ error: 'save-conflict' }),
   });
   let game = null;
@@ -162,13 +207,13 @@ export async function startApplication({
           showSaveWarning();
           return saved;
         }
-        if (coordinator.getMode() === 'verified-online') {
+        if (!localDevelopment && coordinator.getMode() === 'verified-online') {
           void coordinator.syncPendingSave().then(syncMessage).catch(() => syncMessage({ error: 'cloud-save-unavailable' }));
         }
         return saved;
       };
-      coordinator.attachOnlineSync(syncMessage);
-      const rankedRunClient = createRankedRunClient({
+      if (!localDevelopment) coordinator.attachOnlineSync(syncMessage);
+      const rankedRunClient = localDevelopment ? null : createRankedRunClient({
         apiClient,
         account,
         getSaveRevision: coordinator.getSaveRevision,
@@ -180,7 +225,7 @@ export async function startApplication({
         applyVerifiedState: (envelope) => coordinator.applyVerifiedState(envelope, account),
         isOnline: () => window.navigator?.onLine !== false,
       });
-      const pvpClient = createPvpClient({
+      const pvpClient = localDevelopment ? null : createPvpClient({
         apiClient,
         account,
         getSaveRevision: coordinator.getSaveRevision,
@@ -191,32 +236,42 @@ export async function startApplication({
         isOnline: () => window.navigator?.onLine !== false,
         reauthenticate: auth.signInInteractively,
       });
-      coordinator.setCloudSaveCallback(pvpClient.onCloudSaveSynced);
-      const rankingClient = createRankingClient({
+      if (pvpClient) coordinator.setCloudSaveCallback(pvpClient.onCloudSaveSynced);
+      const rankingClient = localDevelopment ? createLocalDevelopmentRankingClient() : createRankingClient({
         apiClient,
         account,
         getAccessToken:auth.getApiAccessToken,
       });
       try {
         game = await createGameInstance({
-          gameState:loaded.state, saveState, account, apiClient,
-          applyProfileAction:coordinator.applyProfileAction,
-          getSaveMode:coordinator.getMode,
-          hasUnverifiedShadow:coordinator.hasUnverifiedShadow,
-          selectLocalShadow:coordinator.selectLocalShadow,
-          recoverLegacySave:coordinator.recoverLegacySave,
-          rankedRunClient, pvpClient, rankingClient,
+          gameState: loaded.state,
+          saveState,
+          account,
+          apiClient,
+          applyProfileAction: coordinator.applyProfileAction,
+          getSaveMode: coordinator.getMode,
+          hasUnverifiedShadow: coordinator.hasUnverifiedShadow,
+          selectLocalShadow: coordinator.selectLocalShadow,
+          recoverLegacySave: coordinator.recoverLegacySave,
+          rankedRunClient,
+          pvpClient,
+          rankingClient,
         });
-      } catch {
+      } catch (error) {
+        if (localDevelopment) console.error('Local game startup failed.', error);
         try { await rankingClient.dispose(); } catch { /* The failed runtime has no active ranking session to keep. */ }
-        setAuthMessage('게임 런타임을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.', { retry: true });
+        const detail = localDevelopment && error instanceof Error ? ` (${error.message})` : '';
+        setAuthMessage(`게임 런타임을 불러오지 못했습니다.${detail}`, { retry: true });
         return;
       }
-      rankingClient.connect();
+      if (!localDevelopment) rankingClient.connect();
       hideAuthGate();
+      window.requestAnimationFrame(() => game?.scale?.refresh?.());
       if (loaded.savedLocally === false) showSaveWarning('이 기기의 저장 공간을 사용할 수 없습니다. 이 브라우저를 닫으면 진행이 저장되지 않을 수 있습니다.');
       if (loaded.legacyOwnerSaved === false) showSaveWarning('기존 저장 소유자를 기록하지 못했습니다. 다른 계정으로 전환하지 말고 저장 공간을 확인해 주세요.');
-      if (loaded.recoveredLocal) {
+      if (localDevelopment) {
+        showAccountStatus('로컬 게스트 모드 · 저장은 이 브라우저에만 보관되며 랭킹과 PvP는 사용할 수 없습니다.');
+      } else if (loaded.recoveredLocal) {
         showAccountStatus('클라우드 저장을 적용했습니다. 이전 로컬 저장은 이 계정의 복구 저장에 보관했습니다.');
         showSaveWarning('클라우드 저장이 달라 이전 로컬 저장을 복구용으로 보관했습니다.');
       } else if (loaded.hasUnverifiedShadow) {
