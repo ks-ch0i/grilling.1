@@ -74,7 +74,7 @@ function validTicket(ticket, chapter, stage, now) {
   if (!ticket || typeof ticket !== 'object' || typeof ticket.runId !== 'string' || !ticket.runId ||
       ticket.chapter !== chapter || ticket.stage !== stage ||
       !Number.isInteger(ticket.seed) || ticket.seed < 1 || ticket.seed > 0xffffffff ||
-      ticket.simulatorVersion !== 2 || ticket.balanceVersion !== 2 ||
+      ticket.simulatorVersion !== 3 || ticket.balanceVersion !== 2 ||
       typeof ticket.issuedAtUtc !== 'string' || typeof ticket.expiresAtUtc !== 'string' ||
       !ticket.playerSnapshot || typeof ticket.playerSnapshot !== 'object') return false;
   const expiresAt = Date.parse(ticket.expiresAtUtc);

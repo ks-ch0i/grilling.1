@@ -87,7 +87,7 @@ function validateDropTicket(ticket) {
       !Number.isSafeInteger(ticket.seed) || ticket.seed < 1 || ticket.seed > 0xffffffff ||
       !Number.isSafeInteger(ticket.chapter) || ticket.chapter < 1 ||
       !Number.isSafeInteger(ticket.stage) || ticket.stage < 1 || ticket.stage > 10 ||
-      ticket.balanceVersion !== 2 || ticket.simulatorVersion !== 2) {
+      ticket.balanceVersion !== 2 || ticket.simulatorVersion !== 3) {
     rewardError('invalid-stage', 'The stage ticket is outside the current reward rules.');
   }
 }

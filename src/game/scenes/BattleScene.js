@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BALANCE, RARITY_COLOR } from '../data/balance.js';
+import { BALANCE, RARITY_COLOR, STAGE_ENEMY_MOVE_SPEEDS } from '../data/balance.js';
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
 import { completeStage, createGoldRoom, getStageEnemyStats, getStageGoldRequirement, grantGold, grantXp, resetInvalidGoldBalance, resolveLevelUp, retryStage } from '../domain/progression.js';
@@ -7,12 +7,14 @@ import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulatio
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
 import { KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../ui/knightAnimations.js';
+import { ENEMY_ANIMATIONS, ENEMY_SPRITE_SHEETS, enemyAnimationKey, selectStageEnemyType } from '../ui/enemyAnimations.js';
+import { WholeBodyWalk, WALK_CHARACTERS } from '../ui/WholeBodyWalk.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const WORLD_WIDTH = 11200;
 const FLOOR_Y = 560;
 const PLAYER_WIDTH = 64;
-const ENEMY_WIDTH = 70;
+const ENEMY_WIDTH = 128;
 
 export class BattleScene extends Phaser.Scene {
   constructor() {
@@ -22,6 +24,7 @@ export class BattleScene extends Phaser.Scene {
     this.enemies = [];
     this.combatPaused = false;
     this.finished = false;
+    this.stageFinishScheduled = false;
   }
 
   init(data = {}) {
@@ -67,16 +70,23 @@ export class BattleScene extends Phaser.Scene {
     this.finished = false;
     this.combatPaused = false;
     this.gameOverOverlayShown = false;
+    this.stageFinishScheduled = false;
   }
 
   create() {
     this.initializeRankedRun();
     this.createKnightAnimations();
+    this.createEnemyAnimations();
     this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     this.drawWorld();
     this.createPlayer();
     this.spawnStage();
+    this.locomotionUpdateHandler = (_time,delta) => this.updateLocomotion(delta);
+    this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.locomotionUpdateHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.events.off(Phaser.Scenes.Events.POST_UPDATE, this.locomotionUpdateHandler);
+    });
     this.cameras.main.startFollow(this.player.view, false, 1, 0);
     this.cameras.main.setDeadzone(1280 * 0.45, 720);
     this.cursors = this.input.keyboard.addKeys({ left:'A', right:'D' });
@@ -160,28 +170,35 @@ export class BattleScene extends Phaser.Scene {
       moveSpeed:rankedPlayer.moveSpeed,
     } : derivePlayerStats(this.gameState);
     const x = rankedPlayer?.x ?? 120;
-    const view = this.add.sprite(x, FLOOR_Y, 'knight', 0)
-      .setOrigin(0.5, 1)
-      .setDisplaySize(128, 160)
-      .setDepth(10);
+    const view = this.add.container(x, FLOOR_Y).setDepth(10);
+    const spriteScale = WALK_CHARACTERS.knight.height / this.cache.json.get('knight-actions-meta').contentHeight;
+    const sprite = this.add.sprite(0, 0, 'knight', 0)
+      .setOrigin(0.5, 244/256)
+      .setScale(spriteScale)
+      .setVisible(false);
+    view.add(sprite);
+    const walkRig = new WholeBodyWalk(this, view, 'knight');
     this.player = {
       x,
       currentHp: rankedPlayer?.currentHp ?? this.gameState.player.currentHp,
       maxHp: stats.maxHp,
       stats,
       view,
+      sprite,
+      spriteScale,
+      walkRig,
       facingDirection:1,
       visualMoving:false,
       visualAction:null,
       pendingVisualAction:null,
     };
     this.playerAnimationCompleteHandler = (animation) => this.handleKnightAnimationComplete(animation);
-    this.player.view.on(Phaser.Animations.Events.ANIMATION_COMPLETE, this.playerAnimationCompleteHandler);
+    this.player.sprite.on(Phaser.Animations.Events.ANIMATION_COMPLETE, this.playerAnimationCompleteHandler);
     this.updatePlayerVisual(0);
   }
 
   createKnightAnimations() {
-    if (!this.textures.exists('knight') || !this.textures.get('knight').has('19')) {
+    if (!this.textures.exists('knight') || !this.textures.get('knight').has('5')) {
       throw new Error('Required knight sprite sheet is missing or malformed.');
     }
     for (const [name, definition] of Object.entries(KNIGHT_ANIMATIONS)) {
@@ -196,10 +213,41 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  createEnemyAnimations() {
+    for (const [type, spriteSheet] of Object.entries(ENEMY_SPRITE_SHEETS)) {
+      if (!this.textures.exists(spriteSheet.key)) {
+        throw new Error(`Required enemy sprite sheet is missing or malformed: ${spriteSheet.key}`);
+      }
+      const texture = this.textures.get(spriteSheet.key);
+      if (texture.getFrameNames().length !== 4 || !texture.has('3')) {
+        throw new Error(`Required enemy sprite sheet is missing or malformed: ${spriteSheet.key}`);
+      }
+      for (const [name, definition] of Object.entries(ENEMY_ANIMATIONS)) {
+        const key = enemyAnimationKey(type, name);
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames:this.anims.generateFrameNumbers(spriteSheet.key, { start:definition.start, end:definition.end }),
+          frameRate:definition.frameRate,
+          repeat:definition.repeat,
+        });
+      }
+    }
+  }
+
   playKnightAnimation(name) {
     const key = `knight-${name}`;
-    const sprite = this.player?.view;
+    const sprite = this.player?.sprite;
+    if (sprite && (name === 'run' || name === 'idle')) {
+      sprite.anims.stop();
+      sprite.setVisible(false);
+      this.player.walkRig.setVisible(true);
+      return true;
+    }
     if (!sprite?.anims || !this.anims.exists(key)) return false;
+    this.player.walkRig.setVisible(false);
+    sprite.setVisible(true);
+    sprite.setScale(this.player.spriteScale);
     if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key);
     return true;
   }
@@ -216,7 +264,8 @@ export class BattleScene extends Phaser.Scene {
     if (!this.player?.view) return;
     this.player.facingDirection = selectKnightFacing(direction, this.player.facingDirection);
     this.player.visualMoving = direction !== 0;
-    this.player.view.setFlipX(this.player.facingDirection < 0);
+    this.player.sprite.setFlipX(this.player.facingDirection > 0);
+    this.player.walkRig.setFacing(this.player.facingDirection);
     this.refreshKnightAnimation();
   }
 
@@ -250,6 +299,19 @@ export class BattleScene extends Phaser.Scene {
     else this.refreshKnightAnimation();
   }
 
+  updateLocomotion(delta) {
+    const seconds = Math.min(0.1,Math.max(0,delta/1000));
+    const freeze = this.combatPaused || this.finished;
+    if (this.player) {
+      this.player.walkRig.follow(this.player.x,this.player.visualMoving && !this.player.visualAction,
+        this.player.facingDirection,seconds,freeze);
+    }
+    for (const enemy of this.enemies) {
+      enemy.walkRig.follow(enemy.x,enemy.active && enemy.visualMoving && !enemy.visualAction,
+        this.player.x > enemy.x ? 1 : -1,seconds,freeze);
+    }
+  }
+
   spawnStage() {
     if (this.rankedRunState) {
       const enemies = this.rankedRunState.enemies;
@@ -276,30 +338,34 @@ export class BattleScene extends Phaser.Scene {
 
   createEnemy(x, isBoss, index = 0, simulatedEnemy = null) {
     const stats = simulatedEnemy ?? getStageEnemyStats(this.chapter, this.stage, isBoss);
-    const scale = isBoss ? 1.65 : 1;
-    const width = ENEMY_WIDTH * scale;
+    const type = simulatedEnemy?.type ?? selectStageEnemyType(isBoss, Math.max(0, index - 1));
+    const spriteSheet = ENEMY_SPRITE_SHEETS[type];
+    if (!spriteSheet || !this.textures.exists(spriteSheet.key)) throw new Error(`Missing enemy sprite sheet for ${type}.`);
+    const spriteScale = WALK_CHARACTERS[type].height / this.cache.json.get(`${spriteSheet.key}-meta`).contentHeight;
+    const width = ENEMY_WIDTH * (isBoss ? 1.65 : 1);
     const container = this.add.container(x, FLOOR_Y);
-    const bodyColor = isBoss ? 0x71394a : 0x8e5947;
-    container.add([
-      this.add.ellipse(0, -25 * scale, 55 * scale, 62 * scale, bodyColor),
-      this.add.rectangle(-7 * scale, -61 * scale, 39 * scale, 24 * scale, isBoss ? 0xa8684f : 0xba805c),
-      this.add.rectangle(-16 * scale, -4 * scale, 12 * scale, 32 * scale, 0x392c2d),
-      this.add.rectangle(14 * scale, -4 * scale, 12 * scale, 32 * scale, 0x392c2d),
-      this.add.triangle(22 * scale, -61 * scale, 0, 17 * scale, 13 * scale, 0, 19 * scale, 19 * scale, 0xb6a58b),
-    ]);
+    const sprite = this.add.sprite(0, 0, spriteSheet.key, 0).setOrigin(0.5, 244/256).setScale(spriteScale);
+    container.add(sprite);
+    sprite.setVisible(false);
+    const walkRig = new WholeBodyWalk(this, container, type);
     const barWidth = isBoss ? 150 : 86;
-    const barY = -103 * scale;
-    container.add(this.add.rectangle(0, barY, barWidth, 9, 0x1b1b1b));
+    const barY = -WALK_CHARACTERS[type].height - 12;
+    const healthBack = this.add.rectangle(0, barY, barWidth, 9, 0x1b1b1b);
+    container.add(healthBack);
     const fill = this.add.rectangle(-barWidth / 2, barY, barWidth, 7, isBoss ? 0xe15052 : 0xd86d51).setOrigin(0, 0.5);
     container.add(fill);
     if (isBoss) {
-      const label = this.add.text(0, -145, '보스', { fontFamily:'sans-serif', fontSize:'22px', color:'#ffcf45', stroke:'#202020', strokeThickness:3 }).setOrigin(0.5);
+      const label = this.add.text(0, barY - 26, '보스', { fontFamily:'sans-serif', fontSize:'22px', color:'#ffcf45', stroke:'#202020', strokeThickness:3 }).setOrigin(0.5);
       container.add(label);
     }
-    this.enemies.push({
+    container.setDepth(10);
+    const enemy = {
       id: simulatedEnemy?.id ?? (isBoss ? 'boss' : 'enemy-' + index),
+      type,
+      spriteScale,
       x,
       width,
+      moveSpeed:simulatedEnemy?.moveSpeed ?? STAGE_ENEMY_MOVE_SPEEDS[type],
       currentHp: simulatedEnemy?.currentHp ?? stats.maxHp,
       maxHp: stats.maxHp,
       attack: stats.attack,
@@ -307,9 +373,73 @@ export class BattleScene extends Phaser.Scene {
       isBoss,
       active: simulatedEnemy?.active ?? true,
       view: container,
+      sprite,
+      walkRig,
+      visualMoving:false,
+      visualAction:null,
+      defeatCompleteCallback:null,
+      healthBack,
       healthFill: fill,
       healthBarWidth: barWidth,
-    });
+    };
+    sprite.on(Phaser.Animations.Events.ANIMATION_COMPLETE, (animation) => this.handleEnemyAnimationComplete(enemy, animation));
+    this.enemies.push(enemy);
+    this.updateEnemyMovementVisual(enemy, false, this.player?.x ?? x);
+  }
+
+  handleEnemyAnimationComplete(enemy, animation) {
+    const action = animation?.key?.replace(`${ENEMY_SPRITE_SHEETS[enemy.type]?.key}-`, '');
+    if (action === 'hit' && enemy.visualAction === 'hit' && enemy.active) {
+      enemy.visualAction = null;
+      this.updateEnemyMovementVisual(enemy, enemy.visualMoving, this.player?.x ?? enemy.x);
+      return;
+    }
+    if (action === 'defeat' && enemy.visualAction === 'defeat') {
+      enemy.view.setVisible(false);
+      enemy.visualAction = null;
+      const onComplete = enemy.defeatCompleteCallback;
+      enemy.defeatCompleteCallback = null;
+      onComplete?.();
+    }
+  }
+
+  playEnemyAction(enemy, action) {
+    if (!enemy?.sprite || !['hit', 'defeat'].includes(action)) return false;
+    const key = enemyAnimationKey(enemy.type, action);
+    if (!key || !this.anims.exists(key)) return false;
+    if (action === 'hit' && (!enemy.active || enemy.visualAction === 'defeat')) return false;
+    if (enemy.visualAction === action && enemy.sprite.anims.isPlaying) return true;
+    enemy.visualAction = action;
+    enemy.walkRig.setVisible(false);
+    enemy.sprite.setVisible(true);
+    enemy.sprite.setScale(enemy.spriteScale);
+    enemy.sprite.play(key);
+    return true;
+  }
+
+  updateEnemyMovementVisual(enemy, moving, playerX) {
+    if (!enemy?.sprite) return;
+    enemy.sprite.setFlipX(playerX > enemy.x);
+    enemy.visualMoving = moving;
+    enemy.walkRig.setFacing(playerX > enemy.x ? 1 : -1);
+    if (!enemy.active || enemy.visualAction === 'hit' || enemy.visualAction === 'defeat') return;
+    enemy.sprite.anims.stop();
+    enemy.sprite.setVisible(false);
+    enemy.walkRig.setVisible(true);
+  }
+
+  updateLocalEnemyMovement(delta) {
+    const elapsedSeconds = Math.min(Math.max(0, delta), 250) / 1000;
+    for (const enemy of this.enemies) {
+      if (!enemy.active) continue;
+      const difference = this.player.x - enemy.x;
+      const contactDistance = (PLAYER_WIDTH + enemy.width) / 2;
+      const remainingDistance = Math.abs(difference) - contactDistance;
+      const travelDistance = Math.min(Math.max(0, remainingDistance), enemy.moveSpeed * elapsedSeconds);
+      enemy.x += Math.sign(difference) * travelDistance;
+      enemy.view.x = enemy.x;
+      this.updateEnemyMovementVisual(enemy, travelDistance > 0, this.player.x);
+    }
   }
 
   createHud() {
@@ -384,6 +514,7 @@ export class BattleScene extends Phaser.Scene {
     this.player.x = Phaser.Math.Clamp(this.player.x + direction * this.player.stats.moveSpeed * (delta / 1000), 45, WORLD_WIDTH - 45);
     this.player.view.x = this.player.x;
     this.updatePlayerVisual(direction);
+    this.updateLocalEnemyMovement(delta);
     this.handleContacts();
     if (this.finished) return;
     this.collectDrops();
@@ -470,6 +601,10 @@ export class BattleScene extends Phaser.Scene {
     for (const simulatedEnemy of state.enemies) {
       const enemy = this.enemies.find((candidate) => candidate.id === simulatedEnemy.id);
       if (!enemy) continue;
+      const previousX = enemy.x;
+      enemy.x = simulatedEnemy.x;
+      enemy.view.x = simulatedEnemy.x;
+      this.updateEnemyMovementVisual(enemy, Math.abs(simulatedEnemy.x - previousX) > 1e-9, state.player.x);
       enemy.currentHp = simulatedEnemy.currentHp;
       enemy.healthFill.setScale(Math.max(0, simulatedEnemy.currentHp / simulatedEnemy.maxHp), 1);
     }
@@ -478,6 +613,7 @@ export class BattleScene extends Phaser.Scene {
         const target = this.enemies.find((enemy) => enemy.id === event.targetId);
         this.playKnightAction('contact');
         if (event.playerDamage > 0 && event.playerHp > 0) this.playKnightAction('hit');
+        if (target && event.enemyDamage > 0) this.playEnemyAction(target, 'hit');
         if (event.critical) {
           this.player.view.setAlpha(0.6);
           this.time.delayedCall(110, () => this.player?.view?.setAlpha(1));
@@ -494,7 +630,8 @@ export class BattleScene extends Phaser.Scene {
         const boss = state.enemies.find((enemy) => enemy.id === 'boss');
         if (boss && !this.enemies.some((enemy) => enemy.id === 'boss')) this.createEnemy(event.x, true, 0, boss);
       } else if (event.type === 'stageClear') {
-        this.finishStage();
+        const finalEnemyId = [...events].reverse().find((candidate) => candidate.type === 'enemyDefeated')?.targetId;
+        this.finishStageAfterEnemyDefeat(this.enemies.find((enemy) => enemy.id === finalEnemyId));
       } else if (event.type === 'playerDeath') {
         this.showGameOver();
       }
@@ -540,6 +677,7 @@ export class BattleScene extends Phaser.Scene {
         this.time.delayedCall(110, () => this.player?.view?.setAlpha(1));
       }
       this.showDamageText(enemy.x, FLOOR_Y - 115, result.enemyDamage, result.critical, 0xffd36e);
+      if (result.enemyDamage > 0) this.playEnemyAction(enemy, 'hit');
       if (result.enemyDefeated) this.defeatEnemy(enemy, { playerDied:this.player.currentHp <= 0 });
       if (this.goldRewardFailureShown) return;
       if (this.player.currentHp <= 0) {
@@ -568,6 +706,27 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets:label, y:y-44, alpha:0, duration:620, onComplete:()=>label.destroy() });
   }
 
+  finishStageAfterEnemyDefeat(enemy) {
+    if (this.finished || this.stageFinishScheduled) return;
+    this.stageFinishScheduled = true;
+    this.combatPaused = true;
+    let completed = false;
+    const finish = () => {
+      if (completed) return;
+      completed = true;
+      if (enemy) enemy.defeatCompleteCallback = null;
+      if (this.finished) return;
+      this.stageFinishScheduled = false;
+      this.finishStage();
+    };
+    if (enemy?.visualAction === 'defeat' && enemy.sprite?.anims?.isPlaying) {
+      enemy.defeatCompleteCallback = finish;
+      this.time.delayedCall(1100, finish);
+    } else {
+      this.time.delayedCall(0, finish);
+    }
+  }
+
   defeatEnemy(enemy, { ranked = false, playerDied = false } = {}) {
     if (!enemy?.active) return;
     const goldReward = grantGold(this.gameState, enemy.isBoss ? BALANCE.goldRewards.boss : BALANCE.goldRewards.normalEnemy);
@@ -576,7 +735,9 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     enemy.active = false;
-    enemy.view.setVisible(false);
+    enemy.healthBack.setVisible(false);
+    enemy.healthFill.setVisible(false);
+    if (!this.playEnemyAction(enemy, 'defeat')) enemy.view.setVisible(false);
     this.normalDefeated += enemy.isBoss ? 0 : 1;
     this.gameState = goldReward.state;
     if (!enemy.isBoss) {
@@ -585,13 +746,15 @@ export class BattleScene extends Phaser.Scene {
     }
     if (enemy.isBoss) {
       if (!playerDied) this.dropGear(enemy.x, true);
-      if (!ranked && !playerDied) this.finishStage();
+      if (!playerDied && (!ranked || this.rankedRunState?.outcome === 'clear')) {
+        this.finishStageAfterEnemyDefeat(enemy);
+      }
       return;
     }
     if (!playerDied && Math.random() < BALANCE.normalDropChance) this.dropGear(enemy.x, false);
     if (!ranked && !playerDied && this.normalDefeated >= this.normalEnemyCount) {
       if (this.hasBoss) this.createEnemy(10500, true);
-      else this.finishStage();
+      else this.finishStageAfterEnemyDefeat(enemy);
     }
     this.saveState(this.gameState);
   }

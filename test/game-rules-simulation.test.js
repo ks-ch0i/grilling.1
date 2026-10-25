@@ -48,7 +48,7 @@ const stageTicket = (overrides = {}) => ({
   seed: 123456789,
   chapter: 1,
   stage: 1,
-  simulatorVersion: 2,
+  simulatorVersion: 3,
   balanceVersion: 2,
   issuedAtUtc: '2026-10-21T00:00:00.000Z',
   ...overrides,
@@ -183,7 +183,7 @@ test('a stage replay produces the same clear result for the same ticket and inpu
   assert.deepEqual(summary, {
     valid: true,
     outcome: 'clear',
-    elapsedTicks: 2351,
+    elapsedTicks: 1627,
     playerHp: 10000,
     rejectReason: null,
   });
@@ -358,7 +358,9 @@ test('ranked snapshots require valid stat-point counters and allocation arrays h
 
 test('stage inputs cannot claim a clear before all enemies are defeated', async () => {
   const { replayRankedRun } = await loadRules();
-  const result = replayRankedRun(stageTicket(), player(), [{ tick: 0, kind: 'move', value: 0 }]);
+  // Chasing enemies can reach an idle player. The first kill triggers a level-up;
+  // without an allocation the remaining enemies cannot be claimed as defeated.
+  const result = replayRankedRun(stageTicket(), player({ xp: 99 }), [{ tick: 0, kind: 'move', value: 0 }]);
   assert.equal(result.outcome, 'incomplete');
   assert.notEqual(result.outcome, 'clear');
 });

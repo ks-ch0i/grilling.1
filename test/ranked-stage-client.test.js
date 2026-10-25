@@ -37,7 +37,7 @@ function ticketFor(state, overrides = {}) {
     chapter: 1,
     stage: 1,
     seed: 123456,
-    simulatorVersion: 2,
+    simulatorVersion: 3,
     balanceVersion: 2,
     issuedAtUtc: '2026-10-21T00:00:00.000Z',
     expiresAtUtc: '2026-10-21T00:30:00.000Z',

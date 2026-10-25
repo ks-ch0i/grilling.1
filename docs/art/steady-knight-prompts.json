@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-26",
+  "method": "Built-in image_gen",
+  "request": "Keep the mounted knight's upper body fixed during walking; retain horse locomotion and cape flutter.",
+  "assets": [
+    "public/assets/walk/knight.png",
+    "public/assets/walk/knight.json",
+    "public/assets/walk/knight-rider.png"
+  ],
+  "prompts": [
+    {
+      "name": "steadyKnightMount",
+      "prompt": "EDIT the reference four-frame 2x2 cartoon mounted-knight sheet into a HORSE-AND-CAPE layer. Remove ONLY the entire HUMAN RIDER from every cell: helmet, torso, human arms/hands/legs/boots and lance. Replace their occupied regions with transparent space or the correct small exposed saddle surface as appropriate. Preserve the HORSE, its exact four existing different leg poses, head/body/mane/tail/reins, silver barding and blue saddle cloth, all colors, exact scale and position and ground baseline. IMPORTANT preserve the flowing BLUE SHOULDER CAPE in its current position in all four cells, even though its human owner is temporarily absent: it is a back layer behind a rider sprite to be added by the game. Leave the cape floating at the same original shoulder height and keep its four subtle different flutter shapes. Do not move or resize horse or cape to fill removed rider area. Keep original full 2x2 canvas dimensions and margins so this layer aligns with the original rider. Whole horse with cape in every cell; no added figures, no numbers or grid. Preserve approved simple outlined cartoon art. Fully transparent background, no fog or shadows."
+    },
+    {
+      "name": "steadyKnightRider",
+      "prompt": "Extract ONE isolated HUMAN RIDER sprite from the TOP-RIGHT frame of this reference. This will be a STATIC riding layer over the animated horse. Show the same silver-armored knight with gold trim and blue tunic, sitting in exactly the top-right calm mounted pose, facing LEFT, hands holding the same lance diagonally up-left, same helmet angle, chest plate, relaxed shoulders, arm bends, hips, bent armored legs and boots. Include the WHOLE knight, both hands and entire lance from spearhead to butt. Remove the HORSE, saddle, reins, barding and saddle cloth completely. Also REMOVE the BLUE CAPE, since it is on a separate animated back layer. Preserve the knight's exact approved clean outlined 2-tone cartoon style and proportions; do not redesign or add any character. One single seated rider, no duplicates, no animation sheet, no chair or seat drawn, no ground, no shadow, no text. Generous transparent margins around the complete rider and lance. Fully transparent alpha background."
+    }
+  ]
+}

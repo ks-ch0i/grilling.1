@@ -1,11 +1,11 @@
-import { BALANCE, getStageEnemyStats } from './balance.js';
+import { BALANCE, getStageEnemyStats, NORMAL_ENEMY_TYPES, STAGE_ENEMY_MOVE_SPEEDS } from './balance.js';
 import { resolveContact } from './combat.js';
 import { resolveStageDrops, xpRequiredForLevel } from './rewards.js';
 
 const TICKS_PER_SECOND = 60;
 const WORLD_WIDTH = 11200;
 const PLAYER_WIDTH = 64;
-const NORMAL_ENEMY_WIDTH = 70;
+const NORMAL_ENEMY_WIDTH = 128;
 const BOSS_WIDTH = NORMAL_ENEMY_WIDTH * 1.65;
 const PLAYER_START_X = 120;
 const PLAYER_MIN_X = 45;
@@ -30,7 +30,7 @@ function assertTicket(ticket) {
   if (!Number.isInteger(ticket.stage) || ticket.stage < 1 || ticket.stage > 10) {
     throw new RangeError('stage must be an integer from 1 to 10.');
   }
-  if (ticket.simulatorVersion !== 2) throw new RangeError('unsupported simulatorVersion.');
+  if (ticket.simulatorVersion !== 3) throw new RangeError('unsupported simulatorVersion.');
   if (ticket.balanceVersion !== 2) throw new RangeError('unsupported balanceVersion.');
   if (typeof ticket.issuedAtUtc !== 'string' || !ticket.issuedAtUtc) throw new TypeError('issuedAtUtc must be a non-empty string.');
 }
@@ -74,11 +74,14 @@ function assertCombatSnapshot(snapshot, name = 'player') {
   }
 }
 
-function createEnemy(id, x, isBoss, chapter, stage) {
+function createEnemy(id, x, isBoss, chapter, stage, index = 0) {
   const stats = getStageEnemyStats(chapter, stage, isBoss);
+  const type = isBoss ? 'warlord' : NORMAL_ENEMY_TYPES[index % NORMAL_ENEMY_TYPES.length];
   return {
     id,
     x,
+    type,
+    moveSpeed: STAGE_ENEMY_MOVE_SPEEDS[type],
     width: isBoss ? BOSS_WIDTH : NORMAL_ENEMY_WIDTH,
     maxHp: stats.maxHp,
     currentHp: stats.maxHp,
@@ -96,7 +99,7 @@ export function createRankedRun(ticket, playerSnapshot) {
   const enemyCount = BALANCE.normalEnemyCount.min +
     Math.floor(countRandom.value * (BALANCE.normalEnemyCount.max - BALANCE.normalEnemyCount.min + 1));
   const enemies = Array.from({ length: enemyCount }, (_, index) =>
-    createEnemy(`enemy-${index + 1}`, 700 + index * 950, false, ticket.chapter, ticket.stage));
+    createEnemy(`enemy-${index + 1}`, 700 + index * 950, false, ticket.chapter, ticket.stage, index));
   return {
     mode: 'stage',
     ticket: { ...ticket },
@@ -202,6 +205,17 @@ function validateTickInputs(inputForTick, tick) {
 
 function updatePlayerAfterContact(player, result) {
   return { ...player, currentHp: result.playerHp };
+}
+
+function moveEnemyTowardPlayer(enemy, playerX) {
+  if (!enemy.active) return false;
+  const distance = playerX - enemy.x;
+  const contactDistance = (PLAYER_WIDTH + enemy.width) / 2;
+  const remainingDistance = Math.abs(distance) - contactDistance;
+  if (remainingDistance <= 0) return false;
+  const travelDistance = Math.min(remainingDistance, enemy.moveSpeed / TICKS_PER_SECOND);
+  enemy.x += Math.sign(distance) * travelDistance;
+  return travelDistance > 0;
 }
 
 function applyStageContact(state, enemies, contactPairs, player, events, randomState) {
@@ -334,6 +348,7 @@ export function stepRankedRun(state, inputForTick = []) {
     PLAYER_MIN_X,
     PLAYER_MAX_X,
   );
+  for (const enemy of next.enemies) moveEnemyTowardPlayer(enemy, next.player.x);
   const contacts = applyStageContact(
     next,
     next.enemies,
@@ -396,18 +411,7 @@ function stageResult(state, playerPath) {
 
 function canContinueStage(state) {
   if (state.player.pendingLevelUps > 0) return false;
-  const direction = state.movementDirection;
-  for (const enemy of state.enemies) {
-    if (!enemy.active) continue;
-    const halfWidth = (PLAYER_WIDTH + enemy.width) / 2;
-    const isReachableAhead = direction > 0
-      ? enemy.x >= state.player.x - halfWidth
-      : direction < 0
-        ? enemy.x <= state.player.x + halfWidth
-        : Math.abs(state.player.x - enemy.x) <= halfWidth && !state.contactPairs.includes(enemy.id);
-    if (isReachableAhead) return true;
-  }
-  return false;
+  return state.enemies.some((enemy) => enemy.active);
 }
 
 export function replayRankedRun(ticket, playerSnapshot, inputs) {

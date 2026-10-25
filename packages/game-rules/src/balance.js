@@ -43,6 +43,8 @@ export const BALANCE = freezeRecord({
  }),
  effectValues:freezeRecord({bonusDamage:freezeRecord({common:0.05,uncommon:0.08,rare:0.12,unique:0.18,legendary:0.25}),lifeSteal:freezeRecord({common:0,uncommon:0,rare:0.01,unique:0.03,legendary:0.05}),damageReduction:freezeRecord({common:0.02,uncommon:0.03,rare:0.05,unique:0.08,legendary:0.12}),thorns:freezeRecord({common:0.03,uncommon:0.05,rare:0.08,unique:0.12,legendary:0.18})}), gearRollRange:freezeRecord({min:0.75,max:1.25}),
 });
+export const NORMAL_ENEMY_TYPES = Object.freeze(['goblin', 'boar', 'brute']);
+export const STAGE_ENEMY_MOVE_SPEEDS = freezeRecord({ goblin:108, boar:88, brute:72, warlord:60 });
 export function getStageDropWeights(stage) {
  const clampedStage=Math.min(10,Math.max(1,stage));
  const progress=(clampedStage-1)/9;

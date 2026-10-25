@@ -36,7 +36,7 @@ function ticket(currentProfile, overrides = {}) {
   return {
     runId: '11111111-1111-4111-8111-111111111111',
     seed: 123456789,
-    simulatorVersion: 2,
+    simulatorVersion: 3,
     balanceVersion: 2,
     chapter: 1,
     stage: 1,
@@ -296,7 +296,7 @@ test('invalid replay/profile, ungenerated ordinals and numeric overflow use type
 test('replay output exposes kill, drop-pickup and validated level-up events only for terminal runs', () => {
   const ticketData = {
     runId: 'replay-events', seed: 123456789, chapter: 1, stage: 1,
-    simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T00:00:00.000Z',
+    simulatorVersion: 3, balanceVersion: 2, issuedAtUtc: '2026-10-21T00:00:00.000Z',
   };
   const terminal = replayRankedRun(ticketData, {
     maxHp: 10000, currentHp: 10000, attack: 1000, defense: 1000,
@@ -307,7 +307,7 @@ test('replay output exposes kill, drop-pickup and validated level-up events only
   const incomplete = replayRankedRun(ticketData, {
     maxHp: 10000, currentHp: 10000, attack: 1000, defense: 1000,
     critChance: 0, critMultiplier: 2, moveSpeed: 200, effects: [],
-    level: 1, xp: 0, xpToNext: 100, pendingLevelUps: 0,
+    level: 1, xp: 99, xpToNext: 100, pendingLevelUps: 0,
     availableStatPoints: 0, spentStatPoints: 0, replayXpMultiplier: 1,
   }, [{ tick: 0, kind: 'move', value: 0 }]);
 

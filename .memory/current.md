@@ -10,6 +10,7 @@
 [T08 gameplay reward integration — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/T08-gameplay-reward-integration.md)
 
 ## Status
+- 2026-10-26 추가 작업 완료: 로컬 게스트 실행·게임 화면 크기 초기화 수정, 일반/랭킹 적 추격과 v3 재현 규칙, 일반 적 3종·보스·기사의 승인된 2D 애니메이션 반영. 기사는 걷는 동안 상체 한 자세를 유지하며 말과 망토만 움직인다. 최종 클라이언트 204 tests, API 148 tests, production build 및 브라우저 전투·미리보기 검증 통과.
 - P03-T08 complete: provisional Battle results stay in the unverified shadow until server verification; profile actions use revision-bound stable IDs and protect displaced equipment. Client suite: 191 passed; API suite: 148 passed; build passed.
 - P03-T07 complete: account-scoped verified backups and unverified shadows are separated; guest/offline recovery is explicit, reconnect is read-only, and ranked ticket fallback uses the local shadow. Focused tests: 81 passed; root suite: 186 passed; Vite build passed.
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.

@@ -30,7 +30,7 @@ function seedIssuedTicket(repository, { snapshot = strongSnapshot, stage = 1, ex
     Chapter: 1,
     Stage: stage,
     Seed: 123456,
-    SimulatorVersion: 2,
+    SimulatorVersion: 3,
     BalanceVersion: 2,
     PlayerSnapshotJson: JSON.stringify(snapshot),
     IssuedAtUtc: ISSUED_AT,
@@ -50,7 +50,7 @@ test('submitStageResult replays clear input, records only server elapsed time an
     clock: () => new Date('2026-10-21T02:02:00.000Z'),
   });
   const { inputs, replay } = makeClearInputs({
-    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3,
     balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   });
   const { submitStageResult } = await loadStageRunService();
@@ -82,7 +82,7 @@ test('a top-board publish failure does not suppress the player rank event', asyn
     publishPlayerRankChanged:async (event) => playerEvents.push(event),
   });
   const { inputs } = makeClearInputs({
-    runId:RUN_ID, seed:123456, chapter:1, stage:1, simulatorVersion:2,
+    runId:RUN_ID, seed:123456, chapter:1, stage:1, simulatorVersion:3,
     balanceVersion:2, issuedAtUtc:ISSUED_AT.toISOString(),
   });
   const { submitStageResult } = await loadStageRunService();
@@ -98,7 +98,9 @@ test('a top-board publish failure does not suppress the player rank event', asyn
 test('submitStageResult rejects non-clear, too-fast, expired, foreign and changed-payload replays', async () => {
   const { submitStageResult } = await loadStageRunService();
   const incompleteRepo = createStageRepository();
-  seedIssuedTicket(incompleteRepo);
+  // Chasing enemies reach an idle player; require a level-up after the first
+  // kill so an empty log remains incomplete rather than passively clearing.
+  seedIssuedTicket(incompleteRepo, { snapshot:{ ...strongSnapshot, xp:99 } });
   const incomplete = await submitStageResult({}, identityA, RUN_ID, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), createStageDependencies(incompleteRepo));
   assert.equal(incomplete.status, 422);
   assert.equal(incomplete.code, 'run-not-cleared');
@@ -107,7 +109,7 @@ test('submitStageResult rejects non-clear, too-fast, expired, foreign and change
   const tooFastRepo = createStageRepository();
   seedIssuedTicket(tooFastRepo);
   const clearTrace = makeClearInputs({
-    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3,
     balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   });
   const tooFast = await submitStageResult(
@@ -132,7 +134,7 @@ test('identical completed results are idempotent and different payload reuse con
   const repository = createStageRepository();
   seedIssuedTicket(repository);
   const { inputs } = makeClearInputs({
-    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3,
     balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   });
   const dependencies = createStageDependencies(repository, { clock: () => new Date('2026-10-21T02:02:00.000Z') });
@@ -165,7 +167,7 @@ test('a valid death receives replayed kill rewards without clear rewards, stage 
   } });
   const ticket = {
     runId: RUN_ID, seed: 123456, chapter: 1, stage: 1,
-    simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
+    simulatorVersion: 3, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   };
   const { inputs, replay } = makeDeathInputs(ticket, repository.tickets.get(RUN_ID).PlayerSnapshotJson
     ? JSON.parse(repository.tickets.get(RUN_ID).PlayerSnapshotJson)
@@ -192,7 +194,7 @@ test('a valid death receives replayed kill rewards without clear rewards, stage 
 
 test('invalid and incomplete replays are terminally recorded without reward or revision changes', async () => {
   const repository = createStageRepository();
-  seedIssuedTicket(repository);
+  seedIssuedTicket(repository, { snapshot:{ ...strongSnapshot, xp:99 } });
   const service = await loadStageRunService();
   const result = await service.submitStageResult(
     {}, identityA, RUN_ID, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), createStageDependencies(repository),
@@ -219,7 +221,7 @@ test('completion applies its reward delta to the latest locked canonical profile
   latest.SaveJson = JSON.stringify(latestState);
   latest.RewardProfile.Gold = 50;
   const { inputs } = makeClearInputs({
-    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3,
     balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   });
   const result = await (await loadStageRunService()).submitStageResult(
@@ -236,7 +238,7 @@ test('completion applies its reward delta to the latest locked canonical profile
 
 test('reward overflow and every transactional write failure leave the run, profile and save unchanged', async () => {
   const { inputs } = makeClearInputs({
-    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3,
     balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   });
   const overflow = createStageRepository();
@@ -271,7 +273,7 @@ test('concurrent duplicate submissions grant one reward and the retry reads late
   const repository = createStageRepository();
   seedIssuedTicket(repository);
   const { inputs } = makeClearInputs({
-    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3,
     balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
   });
   const dependencies = createStageDependencies(repository);
@@ -308,7 +310,7 @@ test('personal best changes only for farther progress or a faster time on the sa
   });
   const dependencies = createStageDependencies(repository);
   const { submitStageResult } = await loadStageRunService();
-  const trace1 = makeClearInputs({ runId: firstTicket, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString() });
+  const trace1 = makeClearInputs({ runId: firstTicket, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString() });
   const first = await submitStageResult({}, identityA, firstTicket, { inputs: trace1.inputs }, new Date('2026-10-21T02:02:00.000Z'), dependencies);
 
   const profileAfterFirst = repository.saves.get(PLAYER_ID).RewardProfile;
@@ -321,7 +323,7 @@ test('personal best changes only for farther progress or a faster time on the sa
     replayXpMultiplier: 0.3,
   };
   repository.tickets.get(ticket2).PlayerSnapshotJson = JSON.stringify(snapshotAfterFirst);
-  const trace2 = makeClearInputs({ runId: ticket2, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:01:00.000Z' }, snapshotAfterFirst);
+  const trace2 = makeClearInputs({ runId: ticket2, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 3, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:01:00.000Z' }, snapshotAfterFirst);
   const slower = await submitStageResult({}, identityA, ticket2, { inputs: trace2.inputs }, new Date('2026-10-21T02:04:00.000Z'), dependencies);
 
   const profileAfterSecond = repository.saves.get(PLAYER_ID).RewardProfile;
@@ -334,7 +336,7 @@ test('personal best changes only for farther progress or a faster time on the sa
     replayXpMultiplier: 1,
   };
   repository.tickets.get(ticket3).PlayerSnapshotJson = JSON.stringify(snapshotAfterSecond);
-  const trace3 = makeClearInputs({ runId: ticket3, seed: 123456, chapter: 1, stage: 2, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:02:00.000Z' }, snapshotAfterSecond);
+  const trace3 = makeClearInputs({ runId: ticket3, seed: 123456, chapter: 1, stage: 2, simulatorVersion: 3, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:02:00.000Z' }, snapshotAfterSecond);
   const farther = await submitStageResult({}, identityA, ticket3, { inputs: trace3.inputs }, new Date('2026-10-21T02:05:00.000Z'), dependencies);
 
   assert.equal(first.bestChanged, true);
@@ -360,12 +362,12 @@ test('validateStageInputs accepts zero to two stat keys and rejects legacy or in
   }
 });
 
-test('an issued v1 ticket is expired and rejected without changing the existing best', async () => {
+test('an issued v2 ticket is expired and rejected without changing the existing best', async () => {
   const repository = createStageRepository();
   seedIssuedTicket(repository);
   const ticket = repository.tickets.get(RUN_ID);
-  ticket.SimulatorVersion = 1;
-  ticket.BalanceVersion = 1;
+  ticket.SimulatorVersion = 2;
+  ticket.BalanceVersion = 2;
   const previousBest = {
     PlayerId: PLAYER_ID,
     Chapter: 1,
