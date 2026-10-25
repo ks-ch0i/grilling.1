@@ -1,6 +1,6 @@
 # Task: T05 PvP 최근 경기 API
 
-## Status: pending
+## Status: done
 
 ## Goal
 인증한 플레이어가 자신의 완료된 PvP 경기 요약을 최신순 10개씩 페이지 조회할 수 있도록 Azure Functions API와 SQL repository를 추가한다. 대전 중 입력 로그와 상대 snapshot은 응답에 노출하지 않는다.
@@ -76,15 +76,17 @@
 - SnapshotJson과 InputJson은 응답 JSON에서 찾을 수 없어야 한다.
 
 ## Acceptance Criteria
-- [ ] 인증 사용자는 자기 계정과 연결된 completed match만 조회한다.
-- [ ] Player1/Player2 모두 자기 관점의 승패와 rating delta를 받는다.
-- [ ] 요청당 요약은 최대 10개이며 페이지 메타데이터가 정확하다.
-- [ ] API 응답에는 입력 로그, 스냅샷, seed, 상대 계정 식별자가 없다.
-- [ ] 기존 match submission과 leaderboard endpoint 응답은 바뀌지 않는다.
+- [x] 인증 사용자는 자기 계정과 연결된 completed match만 조회한다.
+- [x] Player1/Player2 모두 자기 관점의 승패와 rating delta를 받는다.
+- [x] 요청당 요약은 최대 10개이며 페이지 메타데이터가 정확하다.
+- [x] API 응답에는 입력 로그, 스냅샷, seed, 상대 계정 식별자가 없다.
+- [x] 기존 match submission과 leaderboard endpoint 응답은 바뀌지 않는다.
 
 ## Validation
-- npm --prefix api test — 전체 Functions API 테스트 통과.
-- npm --prefix api run check — Function entry syntax 검사 통과.
+- `npm.cmd --prefix api test` — 98 tests passed.
+- `npm.cmd --prefix api run check` — Function entry syntax 검사 통과.
+- focused repository/service/function/schema tests — 22 tests passed.
+- `git diff --check` 통과.
 
 ## Commit Message
 ~~~text
@@ -99,6 +101,6 @@ Task: T05-pvp-history-api
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- commit: `b3eb24b`
