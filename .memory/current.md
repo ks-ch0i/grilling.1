@@ -7,7 +7,7 @@
 [P03 전투 시각 요소](./phases/2026-10-25-knight-run-follow-up-backlog/P03-combat-visuals/phase.md)
 
 ## Active Task
-[T08 생성 기사 애니메이션 시범](./phases/2026-10-25-knight-run-follow-up-backlog/P03-combat-visuals/T08-generated-knight-animations.md)
+[T08 애니메이션 기사 스프라이트](./phases/2026-10-25-knight-run-follow-up-backlog/P03-combat-visuals/T08-animated-knight-sprite.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.

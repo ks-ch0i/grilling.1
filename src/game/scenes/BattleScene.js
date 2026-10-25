@@ -1,21 +1,18 @@
 import Phaser from 'phaser';
-import { BALANCE, GEAR_SLOT, RARITY_COLOR } from '../data/balance.js';
+import { BALANCE, RARITY_COLOR } from '../data/balance.js';
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
 import { completeStage, createGoldRoom, getStageEnemyStats, getStageGoldRequirement, grantGold, grantXp, resetInvalidGoldBalance, resolveLevelUp, retryStage } from '../domain/progression.js';
 import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulation';
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
+import { KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../ui/knightAnimations.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const WORLD_WIDTH = 11200;
 const FLOOR_Y = 560;
 const PLAYER_WIDTH = 64;
 const ENEMY_WIDTH = 70;
-
-function rarityTint(item, fallback) {
-  return item ? RARITY_COLOR[item.rarity] : fallback;
-}
 
 export class BattleScene extends Phaser.Scene {
   constructor() {
@@ -60,10 +57,12 @@ export class BattleScene extends Phaser.Scene {
     this.enemies = [];
     this.finished = false;
     this.combatPaused = false;
+    this.gameOverOverlayShown = false;
   }
 
   create() {
     this.initializeRankedRun();
+    this.createKnightAnimations();
     this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     this.drawWorld();
@@ -152,37 +151,94 @@ export class BattleScene extends Phaser.Scene {
       moveSpeed:rankedPlayer.moveSpeed,
     } : derivePlayerStats(this.gameState);
     const x = rankedPlayer?.x ?? 120;
+    const view = this.add.sprite(x, FLOOR_Y, 'knight', 0)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(128, 160)
+      .setDepth(10);
     this.player = {
       x,
       currentHp: rankedPlayer?.currentHp ?? this.gameState.player.currentHp,
       maxHp: stats.maxHp,
       stats,
-      view: this.add.container(x, FLOOR_Y),
+      view,
+      facingDirection:1,
+      visualMoving:false,
+      visualAction:null,
+      pendingVisualAction:null,
     };
-    const horse = this.gameState.equipment[GEAR_SLOT.HORSE];
-    const armor = this.gameState.equipment[GEAR_SLOT.ARMOR];
-    const helmet = this.gameState.equipment[GEAR_SLOT.HELMET];
-    const gloves = this.gameState.equipment[GEAR_SLOT.GLOVES];
-    const boots = this.gameState.equipment[GEAR_SLOT.BOOTS];
-    const spear = this.gameState.equipment[GEAR_SLOT.SPEAR];
-    this.player.view.add([
-      this.add.ellipse(-5, -17, 82, 38, rarityTint(horse, 0x634a37)),
-      this.add.ellipse(31, -28, 30, 25, rarityTint(horse, 0x785740)),
-      this.add.rectangle(-24, -2, 8, 27, 0x302d2d),
-      this.add.rectangle(7, -2, 8, 27, 0x302d2d),
-      this.add.rectangle(25, -2, 8, 27, 0x302d2d),
-      this.add.rectangle(-1, -67, 31, 48, rarityTint(armor, 0x728495)),
-      this.add.rectangle(-2, -91, 25, 21, rarityTint(helmet, 0xc4ad7b)),
-      this.add.rectangle(-18, -47, 10, 23, rarityTint(gloves, 0xb9c5ce)),
-      this.add.rectangle(18, -47, 10, 23, rarityTint(gloves, 0xb9c5ce)),
-      this.add.rectangle(-16, -9, 13, 9, rarityTint(boots, 0x7b634b)),
-      this.add.rectangle(13, -9, 13, 9, rarityTint(boots, 0x7b634b)),
-      this.add.rectangle(41, -66, 6, 91, rarityTint(spear, 0xd4c9ad)).setAngle(58),
-      this.add.triangle(78, -101, 0, 22, 18, 0, 18, 30, rarityTint(spear, 0xe8e0cc)).setAngle(30),
-      this.add.ellipse(1, -117, 27, 25, rarityTint(helmet, 0xc4ad7b)),
-      this.add.rectangle(11, -111, 21, 5, 0x18212a),
-    ]);
-    this.player.view.setDepth(10);
+    this.playerAnimationCompleteHandler = (animation) => this.handleKnightAnimationComplete(animation);
+    this.player.view.on(Phaser.Animations.Events.ANIMATION_COMPLETE, this.playerAnimationCompleteHandler);
+    this.updatePlayerVisual(0);
+  }
+
+  createKnightAnimations() {
+    if (!this.textures.exists('knight') || !this.textures.get('knight').has('19')) {
+      throw new Error('Required knight sprite sheet is missing or malformed.');
+    }
+    for (const [name, definition] of Object.entries(KNIGHT_ANIMATIONS)) {
+      const key = `knight-${name}`;
+      if (this.anims.exists(key)) continue;
+      this.anims.create({
+        key,
+        frames:this.anims.generateFrameNumbers('knight', { start:definition.start, end:definition.end }),
+        frameRate:definition.frameRate,
+        repeat:definition.repeat,
+      });
+    }
+  }
+
+  playKnightAnimation(name) {
+    const key = `knight-${name}`;
+    const sprite = this.player?.view;
+    if (!sprite?.anims || !this.anims.exists(key)) return false;
+    if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key);
+    return true;
+  }
+
+  refreshKnightAnimation() {
+    if (!this.player) return;
+    this.playKnightAnimation(selectKnightAnimation({
+      moving:this.player.visualMoving,
+      action:this.player.visualAction,
+    }));
+  }
+
+  updatePlayerVisual(direction) {
+    if (!this.player?.view) return;
+    this.player.facingDirection = selectKnightFacing(direction, this.player.facingDirection);
+    this.player.visualMoving = direction !== 0;
+    this.player.view.setFlipX(this.player.facingDirection < 0);
+    this.refreshKnightAnimation();
+  }
+
+  playKnightAction(action) {
+    if (!this.player || !['contact', 'hit', 'defeat'].includes(action)) return false;
+    const current = this.player.visualAction;
+    if (action === 'defeat') {
+      this.player.visualAction = 'defeat';
+      this.player.pendingVisualAction = null;
+      return this.playKnightAnimation('defeat');
+    }
+    if (current === 'defeat') return false;
+    if (action === 'hit' && current === 'contact') {
+      this.player.pendingVisualAction = 'hit';
+      return true;
+    }
+    if (current === 'hit' && action === 'contact') return false;
+    if (current === action) return true;
+    this.player.visualAction = action;
+    this.player.pendingVisualAction = null;
+    return this.playKnightAnimation(action);
+  }
+
+  handleKnightAnimationComplete(animation) {
+    const action = animation?.key?.replace(/^knight-/, '');
+    if (!['contact', 'hit'].includes(action) || this.player?.visualAction !== action) return;
+    const pending = this.player.pendingVisualAction;
+    this.player.visualAction = null;
+    this.player.pendingVisualAction = null;
+    if (pending) this.playKnightAction(pending);
+    else this.refreshKnightAnimation();
   }
 
   spawnStage() {
@@ -318,6 +374,7 @@ export class BattleScene extends Phaser.Scene {
     const direction = this.touchDirection || (left === right ? 0 : left ? -1 : 1);
     this.player.x = Phaser.Math.Clamp(this.player.x + direction * this.player.stats.moveSpeed * (delta / 1000), 45, WORLD_WIDTH - 45);
     this.player.view.x = this.player.x;
+    this.updatePlayerVisual(direction);
     this.handleContacts();
     if (this.finished) return;
     this.collectDrops();
@@ -395,6 +452,7 @@ export class BattleScene extends Phaser.Scene {
       moveSpeed:state.player.moveSpeed,
     };
     this.player.view.x = this.player.x;
+    this.updatePlayerVisual(state.movementDirection);
     this.gameState = {
       ...this.gameState,
       player:{ ...this.gameState.player, currentHp:this.player.currentHp },
@@ -409,6 +467,8 @@ export class BattleScene extends Phaser.Scene {
     for (const event of events) {
       if (event.type === 'contact') {
         const target = this.enemies.find((enemy) => enemy.id === event.targetId);
+        this.playKnightAction('contact');
+        if (event.playerDamage > 0 && event.playerHp > 0) this.playKnightAction('hit');
         if (event.critical) {
           this.player.view.setAlpha(0.6);
           this.time.delayedCall(110, () => this.player?.view?.setAlpha(1));
@@ -461,6 +521,8 @@ export class BattleScene extends Phaser.Scene {
       });
       enemy.currentHp = result.enemyHp;
       this.player.currentHp = result.playerHp;
+      this.playKnightAction('contact');
+      if (result.playerDamage > 0 && result.playerHp > 0) this.playKnightAction('hit');
       this.gameState = { ...this.gameState, player:{ ...this.gameState.player, currentHp:this.player.currentHp } };
       this.saveState(this.gameState);
       enemy.healthFill.setScale(Math.max(0, enemy.currentHp / enemy.maxHp), 1);
@@ -851,14 +913,26 @@ export class BattleScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished=true;
     this.combatPaused=true;
-    const overlay=this.add.container(0,0).setScrollFactor(0).setDepth(250);
-    overlay.add(this.add.rectangle(640,360,1280,720,0x080c11,0.8));
-    overlay.add(this.add.rectangle(640,345,520,260,0x2b2225).setStrokeStyle(2,0xb65e62));
-    overlay.add(this.add.text(640,255,'쓰러졌습니다',{fontFamily:'sans-serif',fontSize:'29px',color:'#ffb6ad'}).setOrigin(0.5));
-    overlay.add(this.add.text(640,300,'이번 도전의 장비와 재료는 입장 시점으로 돌아갑니다.',{fontFamily:'sans-serif',fontSize:'15px',color:'#e2d0cd'}).setOrigin(0.5));
-    createButton(this,{x:480,y:365,width:320,height:58,label:'다시 시작',onClick:()=>{
-      void this.restartStageAfterDeath();
-    }}).setDepth(251);
+    const showOverlay = () => {
+      if (this.gameOverOverlayShown) return;
+      this.gameOverOverlayShown = true;
+      const overlay=this.add.container(0,0).setScrollFactor(0).setDepth(250);
+      overlay.add(this.add.rectangle(640,360,1280,720,0x080c11,0.8));
+      overlay.add(this.add.rectangle(640,345,520,260,0x2b2225).setStrokeStyle(2,0xb65e62));
+      overlay.add(this.add.text(640,255,'쓰러졌습니다',{fontFamily:'sans-serif',fontSize:'29px',color:'#ffb6ad'}).setOrigin(0.5));
+      overlay.add(this.add.text(640,300,'이번 도전의 장비와 재료는 입장 시점으로 돌아갑니다.',{fontFamily:'sans-serif',fontSize:'15px',color:'#e2d0cd'}).setOrigin(0.5));
+      createButton(this,{x:480,y:365,width:320,height:58,label:'다시 시작',onClick:()=>{
+        void this.restartStageAfterDeath();
+      }}).setDepth(251);
+    };
+    const sprite = this.player?.view;
+    if (sprite && this.anims.exists('knight-defeat')) {
+      sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'knight-defeat', showOverlay);
+      this.playKnightAction('defeat');
+      this.time.delayedCall(900, showOverlay);
+      return;
+    }
+    showOverlay();
   }
 
   async restartStageAfterDeath() {
