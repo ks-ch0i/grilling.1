@@ -1,5 +1,3 @@
-import Phaser from 'phaser';
-import { createGameConfig } from './game/config.js';
 import { createInitialState } from './game/domain/stateFactory.js';
 import { createAccountSaveCoordinator } from './game/domain/accountSaveCoordinator.js';
 import { createRankedRunClient } from './game/domain/rankedRunClient.js';
@@ -13,7 +11,6 @@ import {
   selectAccount,
   signInInteractively,
 } from './auth/msalClient.js';
-import './styles.css';
 
 function showSaveWarning(message = '저장할 수 없습니다') {
   let notice = document.querySelector('#save-warning');
@@ -36,11 +33,13 @@ function showAccountStatus(message = '') {
   notice.hidden = !message;
 }
 
-export function createGame({ gameState, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient }) {
+export async function createGame({ gameState, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient }) {
   const container = document.querySelector('#game');
   if (!container) throw new Error('Game container "#game" was not found.');
   if (!gameState || typeof saveState !== 'function') throw new TypeError('An authenticated account save is required before creating the game.');
 
+  const { default: Phaser } = await import('phaser');
+  const { createGameConfig } = await import('./game/config.js');
   const config = createGameConfig(container);
   config.callbacks = {
     ...config.callbacks,
@@ -192,7 +191,13 @@ export async function startApplication({
         account,
         getAccessToken:auth.getApiAccessToken,
       });
-      game = createGameInstance({ gameState: loaded.state, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient });
+      try {
+        game = await createGameInstance({ gameState: loaded.state, saveState, account, apiClient, rankedRunClient, pvpClient, rankingClient });
+      } catch {
+        try { await rankingClient.dispose(); } catch { /* The failed runtime has no active ranking session to keep. */ }
+        setAuthMessage('게임 런타임을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.', { retry: true });
+        return;
+      }
       rankingClient.connect();
       hideAuthGate();
       if (loaded.savedLocally === false) showSaveWarning('이 기기의 저장 공간을 사용할 수 없습니다. 이 브라우저를 닫으면 진행이 저장되지 않을 수 있습니다.');

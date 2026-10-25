@@ -4,10 +4,10 @@
 [마창기사 UX·PvP 기록 및 안정성 개선](./plans/2026-10-25-knight-run-follow-up-backlog.md)
 
 ## Active Phase
-[P01 품질 자동화와 가로 화면 조작](./phases/2026-10-25-knight-run-follow-up-backlog/P01-quality-and-controls/phase.md)
+[P02 PvP 경기 이력과 상세 데이터 보관](./phases/2026-10-25-knight-run-follow-up-backlog/P02-pvp-history-and-retention/phase.md)
 
 ## Active Task
-[T04 초기 Phaser 로드 분리](./phases/2026-10-25-knight-run-follow-up-backlog/P01-quality-and-controls/T04-defer-game-runtime.md)
+[T05 PvP 최근 경기 이력 페이지 API](./phases/2026-10-25-knight-run-follow-up-backlog/P02-pvp-history-and-retention/T05-pvp-history-api.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -15,6 +15,7 @@
 - P01-T01 테스트 자동화 완료: 루트 게임 테스트 128개, API 테스트 88개, Vite 빌드 및 workflow YAML 구문 검증 통과.
 - P01-T02 보관함 터치 스크롤 완료: 8개 focused interaction tests, 전체 루트 테스트 136개, Vite build 통과. 브라우저 수동 확인은 로컬 브라우저 surface를 사용할 수 없어 미실행.
 - P01-T03 마을 키보드 탐색 완료: 5개 focused tests, 전체 루트 테스트 141개, Vite build 통과. 브라우저 수동 확인은 사용 가능한 브라우저 surface가 없어 미실행.
+- P01 품질과 조작 완료: 4/4 task. P01-T04 전체 루트 테스트 144개, startup tests 3개, production build 통과. 브라우저 network panel 수동 확인은 브라우저 surface 부재로 미실행.
 
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
@@ -22,4 +23,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-T04 청사진을 읽고 인증 완료 후 Phaser runtime dynamic import를 분리한다.
+T05 청사진을 읽고 인증된 사용자의 최근 PvP 경기 이력 페이지 API를 추가한다.
