@@ -104,4 +104,5 @@ Task: T08-animated-knight-sprite
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과
+- commit: `adf9c9d`
 - commit: pending

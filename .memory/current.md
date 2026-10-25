@@ -4,10 +4,10 @@
 [마창기사 UX·PvP 기록 및 안정성 개선](./plans/2026-10-25-knight-run-follow-up-backlog.md)
 
 ## Active Phase
-[P03 전투 시각 요소](./phases/2026-10-25-knight-run-follow-up-backlog/P03-combat-visuals/phase.md)
+[P04 저장 데이터 무결성](./phases/2026-10-25-knight-run-follow-up-backlog/P04-save-integrity/phase.md)
 
 ## Active Task
-[T08 애니메이션 기사 스프라이트](./phases/2026-10-25-knight-run-follow-up-backlog/P03-combat-visuals/T08-animated-knight-sprite.md)
+[T09 저장 데이터 신뢰 경계 평가](./phases/2026-10-25-knight-run-follow-up-backlog/P04-save-integrity/T09-save-integrity-assessment.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -19,6 +19,7 @@
 - P02-T05 인증된 PvP 경기 이력 API 완료: API 전체 테스트 98개, focused tests 22개, Function entry check 통과. Commit `b3eb24b`.
 - P02-T06 마을 PvP 경기 기록 overlay 완료: 루트 테스트 157개, focused tests 23개, Vite build 통과. 브라우저 surface 부재로 수동 QA는 미실행. Commit `e0e88e0`.
 - P02-T07 PvP 데이터 보관 구조·선택지 결정안 완료: schema/repository/service 정적 대조. 운영 데이터 변경이나 cleanup은 수행하지 않음. Commit `71b7193`.
+- P03-T08 생성 기사 스프라이트 적용 완료: 20-frame transparent sheet, manifest, normal/ranked visuals. 루트 161 tests와 build 통과. Browser manual QA는 미실행. Commit `adf9c9d`.
 
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
@@ -26,4 +27,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-T08 청사진을 읽고 투명 배경 기사 애니메이션 시범 asset을 생성해 전투 화면에 연결한다.
+T09 청사진을 읽고 클라이언트 저장 데이터의 신뢰 경계와 서버 권위형 전환 선택지를 읽기 전용으로 평가한다. 저장 데이터는 변경하지 않는다.
