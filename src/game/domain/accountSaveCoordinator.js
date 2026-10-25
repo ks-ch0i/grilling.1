@@ -203,6 +203,10 @@ export function createAccountSaveCoordinator({
     const cloudState = envelope?.state;
     const revision = validRevision(envelope?.revision);
     if (!cloudState || !revision || !isValidGameState(cloudState)) return { ok: false, error: 'invalid-cloud-save' };
+    const previousRevision = getSaveRevision();
+    if (activeState && previousRevision && revision < previousRevision) {
+      return { ok: true, state: activeState, revision: previousRevision, savedLocally: true, recoveredLocal: false, stale: true };
+    }
     let recoveredLocal = false;
     for (const entry of backup) {
       const state = entry && Object.hasOwn(entry, 'state') ? entry.state : entry;
@@ -424,6 +428,20 @@ export function createAccountSaveCoordinator({
     return saveLocally(state, { pending: true });
   }
 
+  function installVerifiedState(account, envelope) {
+    if (!activeAccount || !activeIdentity || !envelope) return { ok: false, error: 'account-not-ready' };
+    let identity;
+    try {
+      identity = accountIdentity(account);
+    } catch {
+      return { ok: false, error: 'stale-account-operation' };
+    }
+    if (!isOwner(activeIdentity, identity)) return { ok: false, error: 'stale-account-operation' };
+    const installed = installCloudState(envelope);
+    if (installed.ok) notifyCloudSaveSynced(installed.state, installed.revision);
+    return installed;
+  }
+
   async function applyProfileAction(action, { actionId } = {}) {
     if (typeof api.applyProfileAction !== 'function') return { ok: false, error: 'profile-actions-unavailable' };
     if (!activeAccount || !activeState) return { ok: false, error: 'account-not-ready' };
@@ -496,6 +514,7 @@ export function createAccountSaveCoordinator({
     refreshAccountSave,
     saveLocal,
     applyProfileAction,
+    installVerifiedState,
     syncPendingSave,
     attachOnlineSync,
     setCloudSaveCallback,

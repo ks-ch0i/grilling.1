@@ -11,6 +11,7 @@ const pvpHistoryMigrationPath = path.join(apiRoot, 'migrations', '003-pvp-histor
 const pvpPayloadMigrationPath = path.join(apiRoot, 'migrations', '004-pvp-payload-retention.sql');
 const rewardProfileMigrationPath = path.join(apiRoot, 'migrations', '005-authoritative-reward-profile.sql');
 const profileActionMigrationPath = path.join(apiRoot, 'migrations', '006-profile-action-ledger.sql');
+const stageRewardMigrationPath = path.join(apiRoot, 'migrations', '007-stage-result-reward-persistence.sql');
 
 test('initial schema defines account, save, stage, snapshot and PvP contracts', () => {
   assert.ok(existsSync(migrationPath), 'the initial SQL migration must exist');
@@ -94,4 +95,17 @@ test('profile action migration adds an idempotent player/action ledger and schem
   assert.match(sql, /PRIMARY KEY \(PlayerId, ActionId\)/i);
   assert.match(sql, /IF NOT EXISTS \(SELECT 1 FROM dbo\.SchemaVersions WHERE Version = 6\)/i);
   assert.match(sql, /VALUES \(6, N'profile-action-ledger'\)/i);
+});
+
+test('stage reward migration adds replay receipts and permits historical terminal rows', () => {
+  assert.ok(existsSync(stageRewardMigrationPath), 'the stage reward persistence migration must exist');
+  const sql = readFileSync(stageRewardMigrationPath, 'utf8');
+  assert.match(sql, /ALTER TABLE dbo\.StageRunTickets ADD InputJson nvarchar\(max\) NULL/i);
+  assert.match(sql, /ALTER TABLE dbo\.StageRunTickets ADD Outcome nvarchar\(16\) NULL/i);
+  assert.match(sql, /ALTER TABLE dbo\.StageRunTickets ADD RewardJson nvarchar\(max\) NULL/i);
+  assert.match(sql, /CHECK \(Outcome IS NULL OR Outcome IN \(N'clear', N'death', N'invalid', N'incomplete'\)\)/i);
+  assert.match(sql, /RewardJson IS NULL OR ISJSON\(RewardJson\) = 1/i);
+  assert.match(sql, /IF NOT EXISTS \(SELECT 1 FROM dbo\.SchemaVersions WHERE Version = 7\)/i);
+  assert.match(sql, /VALUES \(7, N'stage-result-reward-persistence'\)/i);
+  assert.doesNotMatch(sql, /DELETE\s+FROM\s+dbo\.StageRunTickets|DROP\s+COLUMN/i);
 });

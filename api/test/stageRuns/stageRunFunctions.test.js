@@ -34,7 +34,16 @@ async function createHandlers(overrides = {}) {
       startStageRun: async (_pool, user, body) => { calls.start.push({ user, body }); return { status: 201, ticket: { runId: RUN_ID } }; },
       submitStageResult: async (_pool, user, runId, body, receivedAtUtc) => {
         calls.submit.push({ user, runId, body, receivedAtUtc });
-        return { status: 200, outcome: 'clear', clearTimeMs: 120000, verified: true };
+        return {
+          status: 200,
+          outcome: 'clear',
+          clearTimeMs: 120000,
+          bestChanged: true,
+          verified: true,
+          revision: 8,
+          state: { schemaVersion: 2, gold: 25, progression: { unlockedStage: 2 } },
+          rewards: { outcome: 'clear', xpGranted: 50, goldGranted: 25, drops: [] },
+        };
       },
       getStageTopFive: async () => { calls.top.push(true); return [{ rank: 1, chapter: 1, stage: 1, clearTimeMs: 120000, displayName: 'Player A' }]; },
     },
@@ -63,7 +72,12 @@ test('result endpoint forwards only the input log and server receive time', asyn
     body: JSON.stringify({ inputs: [{ tick: 0, kind: 'move', value: 1 }] }),
   }), { params: { runId: RUN_ID } });
   assert.equal(response.status, 200);
-  assert.deepEqual(parseBody(response), { outcome: 'clear', clearTimeMs: 120000, verified: true });
+  assert.deepEqual(parseBody(response), {
+    outcome: 'clear', clearTimeMs: 120000, bestChanged: true, verified: true,
+    revision: 8,
+    state: { schemaVersion: 2, gold: 25, progression: { unlockedStage: 2 } },
+    rewards: { outcome: 'clear', xpGranted: 50, goldGranted: 25, drops: [] },
+  });
   assert.equal(handlers.calls.submit[0].runId, RUN_ID);
   assert.deepEqual(handlers.calls.submit[0].body, { inputs: [{ tick: 0, kind: 'move', value: 1 }] });
   assert.equal(handlers.calls.submit[0].receivedAtUtc.toISOString(), '2026-10-21T02:01:00.000Z');

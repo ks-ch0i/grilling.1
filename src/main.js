@@ -174,6 +174,7 @@ export async function startApplication({
         syncPendingSave: coordinator.syncPendingSave,
         refreshAccountSave: coordinator.refreshAccountSave,
         saveState,
+        installVerifiedState: (envelope) => coordinator.installVerifiedState(account, envelope),
         isOnline: () => window.navigator?.onLine !== false,
       });
       const pvpClient = createPvpClient({

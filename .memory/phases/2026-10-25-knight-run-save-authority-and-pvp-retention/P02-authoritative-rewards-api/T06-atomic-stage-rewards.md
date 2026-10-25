@@ -1,6 +1,6 @@
 # Task: T06 검증 스테이지 보상 원자 지급
 
-## Status: pending
+## Status: done
 
 ## Goal
 검증된 clear/death replay에 대해 보상 계산, stage ticket terminal 전이, leaderboard 갱신, reward profile과 merged CloudSave 변경을 하나의 transaction으로 처리한다. 동일 RunId/input 재시도는 저장된 결과를 반환하고 보상을 중복 지급하지 않는다.
@@ -60,10 +60,10 @@
 - A CloudSave client write during the battle does not cause old client data to replace the latest profile; reward delta applies to the locked current canonical profile.
 
 ## Acceptance Criteria
-- [ ] Server computes and transactionally applies rewards only after valid replay.
-- [ ] Clear and death reward semantics match the shared resolver contract.
-- [ ] Run result and profile grant are idempotent under retries and concurrent submissions; retries do not return stale profile state or increment revision again.
-- [ ] Public response includes merged state/revision needed by the client to install canonical progress.
+- [x] Server computes and transactionally applies rewards only after valid replay.
+- [x] Clear and death reward semantics match the shared resolver contract.
+- [x] Run result and profile grant are idempotent under retries and concurrent submissions; retries do not return stale profile state or increment revision again.
+- [x] Public response includes merged state/revision needed by the client to install canonical progress.
 
 ## Validation
 - `node --test test/stageRuns/submitStageResult.test.js test/stageRuns/startStageRun.test.js test/stageRuns/stageRunFunctions.test.js` (workdir: `api`) — focused stage tests pass
@@ -83,6 +83,6 @@ Task: T06-atomic-stage-rewards
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
+- [x] 구현 완료
+- [x] 검증 통과: focused API 32, ranked client/coordinator 45, API suite 147, root suite 180; API check와 Vite build 통과
 - commit: pending

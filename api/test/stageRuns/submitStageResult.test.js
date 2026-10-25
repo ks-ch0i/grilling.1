@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  createStageDependencies, createStageRepository, identityA, ISSUED_AT, makeClearInputs,
+  createStageDependencies, createStageRepository, identityA, ISSUED_AT, makeClearInputs, makeDeathInputs,
   PLAYER_ID, RUN_ID, strongSnapshot,
 } from '../../test-support/stageRuns.js';
 
@@ -39,6 +39,7 @@ function seedIssuedTicket(repository, { snapshot = strongSnapshot, stage = 1, ex
     CompletedAtUtc: null,
     InputJson: null,
     Outcome: null,
+    RewardJson: null,
   });
 }
 
@@ -60,7 +61,14 @@ test('submitStageResult replays clear input, records only server elapsed time an
   assert.equal(result.outcome, 'clear');
   assert.equal(result.clearTimeMs, 120000);
   assert.equal(result.bestChanged, true);
+  assert.equal(result.verified, true);
+  assert.equal(result.revision, 8);
+  assert.equal(result.state.progression.unlockedStage, 2);
+  assert.equal(result.state.progression.clearedStageIds.includes('1-1'), true);
+  assert.equal(result.rewards.outcome, 'clear');
+  assert.ok(result.rewards.goldGranted > 0);
   assert.equal(repository.bests.get(PLAYER_ID).RunId, RUN_ID);
+  assert.equal(JSON.parse(repository.saves.get(PLAYER_ID).RewardProfile.ClearedStageIdsJson).includes('1-1'), true);
   assert.equal(repository.calls.published.length, 1);
   assert.equal(repository.calls.published[0].chapter, 1);
 });
@@ -136,10 +144,149 @@ test('identical completed results are idempotent and different payload reuse con
   assert.equal(first.status, 200);
   assert.equal(retry.status, 200);
   assert.equal(retry.clearTimeMs, first.clearTimeMs);
-  assert.equal(repository.calls.completeRun.length, 1);
+  assert.equal(retry.revision, first.revision);
+  assert.deepEqual(retry.rewards, first.rewards);
+  assert.deepEqual(retry.state, first.state);
+  assert.equal(repository.saves.get(PLAYER_ID).Revision, 8);
+  assert.equal(repository.calls.completeRun.length, 2);
   assert.equal(repository.calls.published.length, 1);
   assert.equal(changed.status, 409);
   assert.equal(changed.code, 'run-already-completed');
+});
+
+test('a valid death receives replayed kill rewards without clear rewards, stage unlocks or a best', async () => {
+  const repository = createStageRepository();
+  seedIssuedTicket(repository, { snapshot: {
+    ...strongSnapshot,
+    maxHp: 1,
+    currentHp: 1,
+    attack: 1000,
+    defense: 0,
+  } });
+  const ticket = {
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1,
+    simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
+  };
+  const { inputs, replay } = makeDeathInputs(ticket, repository.tickets.get(RUN_ID).PlayerSnapshotJson
+    ? JSON.parse(repository.tickets.get(RUN_ID).PlayerSnapshotJson)
+    : undefined);
+  assert.equal(replay.outcome, 'death');
+  const result = await (await loadStageRunService()).submitStageResult(
+    {}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), createStageDependencies(repository),
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.verified, true);
+  assert.equal(result.outcome, 'death');
+  assert.equal(result.clearTimeMs, null);
+  assert.equal(result.bestChanged, false);
+  assert.equal(result.rewards.outcome, 'death');
+  assert.ok(result.rewards.goldGranted > 0);
+  assert.equal(result.state.progression.unlockedStage, 1);
+  assert.deepEqual(result.state.progression.clearedStageIds, []);
+  assert.equal(repository.tickets.get(RUN_ID).Status, 'completed');
+  assert.equal(repository.tickets.get(RUN_ID).RewardJson !== null, true);
+  assert.equal(repository.bests.size, 0);
+  assert.equal(repository.calls.published.length, 0);
+});
+
+test('invalid and incomplete replays are terminally recorded without reward or revision changes', async () => {
+  const repository = createStageRepository();
+  seedIssuedTicket(repository);
+  const service = await loadStageRunService();
+  const result = await service.submitStageResult(
+    {}, identityA, RUN_ID, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), createStageDependencies(repository),
+  );
+
+  assert.equal(result.status, 422);
+  assert.equal(result.outcome, 'incomplete');
+  assert.equal(repository.tickets.get(RUN_ID).Status, 'rejected');
+  assert.equal(repository.tickets.get(RUN_ID).RewardJson, null);
+  assert.equal(repository.saves.get(PLAYER_ID).Revision, 7);
+  assert.equal(repository.bests.size, 0);
+});
+
+test('completion applies its reward delta to the latest locked canonical profile and save revision', async () => {
+  const repository = createStageRepository();
+  seedIssuedTicket(repository);
+  const latest = repository.saves.get(PLAYER_ID);
+  const latestState = JSON.parse(latest.SaveJson);
+  latestState.player.currentHp = 12;
+  latestState.player.baseStats.attack = 777;
+  latestState.progression.unlockedChapter = 99;
+  latestState.gold = 999999;
+  latest.Revision = 12;
+  latest.SaveJson = JSON.stringify(latestState);
+  latest.RewardProfile.Gold = 50;
+  const { inputs } = makeClearInputs({
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
+  });
+  const result = await (await loadStageRunService()).submitStageResult(
+    {}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), createStageDependencies(repository),
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.revision, 13);
+  assert.equal(result.state.player.currentHp, 12);
+  assert.equal(result.state.player.baseStats.attack, 777);
+  assert.equal(result.state.gold, 50 + result.rewards.goldGranted);
+  assert.notEqual(result.state.progression.unlockedChapter, 99);
+});
+
+test('reward overflow and every transactional write failure leave the run, profile and save unchanged', async () => {
+  const { inputs } = makeClearInputs({
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
+  });
+  const overflow = createStageRepository();
+  seedIssuedTicket(overflow);
+  overflow.saves.get(PLAYER_ID).RewardProfile.Gold = Number.MAX_SAFE_INTEGER;
+  const overflowResult = await (await loadStageRunService()).submitStageResult(
+    {}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), createStageDependencies(overflow),
+  );
+  assert.deepEqual(overflowResult, { status: 422, code: 'reward-overflow' });
+  assert.equal(overflow.saves.get(PLAYER_ID).Revision, 7);
+  assert.equal(overflow.tickets.get(RUN_ID).Status, 'issued');
+
+  for (const failure of ['profile', 'cloudSave', 'ticket', 'stageBest']) {
+    const repository = createStageRepository();
+    seedIssuedTicket(repository);
+    repository.failAt = failure;
+    await assert.rejects(
+      () => (async () => (await loadStageRunService()).submitStageResult(
+        {}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), createStageDependencies(repository),
+      ))(),
+      /write failed/,
+    );
+    assert.equal(repository.saves.get(PLAYER_ID).Revision, 7, `${failure} rollback keeps CloudSave revision`);
+    assert.equal(Number(repository.saves.get(PLAYER_ID).RewardProfile.Gold), 0, `${failure} rollback keeps profile`);
+    assert.equal(repository.tickets.get(RUN_ID).Status, 'issued', `${failure} rollback keeps ticket issued`);
+    assert.equal(repository.tickets.get(RUN_ID).RewardJson, null, `${failure} rollback clears reward receipt`);
+    assert.equal(repository.bests.size, 0, `${failure} rollback keeps StageBests`);
+  }
+});
+
+test('concurrent duplicate submissions grant one reward and the retry reads latest state', async () => {
+  const repository = createStageRepository();
+  seedIssuedTicket(repository);
+  const { inputs } = makeClearInputs({
+    runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2,
+    balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString(),
+  });
+  const dependencies = createStageDependencies(repository);
+  const service = await loadStageRunService();
+  const results = await Promise.all([
+    service.submitStageResult({}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), dependencies),
+    service.submitStageResult({}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:03:00.000Z'), dependencies),
+  ]);
+
+  assert.deepEqual(results.map((result) => result.status), [200, 200]);
+  assert.equal(results[0].revision, 8);
+  assert.equal(results[1].revision, 8);
+  assert.deepEqual(results[0].rewards, results[1].rewards);
+  assert.equal(repository.saves.get(PLAYER_ID).Revision, 8);
+  assert.equal(repository.calls.published.length, 1);
 });
 
 test('personal best changes only for farther progress or a faster time on the same stage', async () => {
@@ -162,11 +309,32 @@ test('personal best changes only for farther progress or a faster time on the sa
   const dependencies = createStageDependencies(repository);
   const { submitStageResult } = await loadStageRunService();
   const trace1 = makeClearInputs({ runId: firstTicket, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString() });
-  const trace2 = makeClearInputs({ runId: ticket2, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:01:00.000Z' });
-  const trace3 = makeClearInputs({ runId: ticket3, seed: 123456, chapter: 1, stage: 2, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:02:00.000Z' });
-
   const first = await submitStageResult({}, identityA, firstTicket, { inputs: trace1.inputs }, new Date('2026-10-21T02:02:00.000Z'), dependencies);
+
+  const profileAfterFirst = repository.saves.get(PLAYER_ID).RewardProfile;
+  const snapshotAfterFirst = {
+    ...strongSnapshot,
+    level: profileAfterFirst.Level,
+    xp: profileAfterFirst.Xp,
+    xpToNext: profileAfterFirst.XpToNext,
+    pendingLevelUps: profileAfterFirst.PendingLevelUps,
+    replayXpMultiplier: 0.3,
+  };
+  repository.tickets.get(ticket2).PlayerSnapshotJson = JSON.stringify(snapshotAfterFirst);
+  const trace2 = makeClearInputs({ runId: ticket2, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:01:00.000Z' }, snapshotAfterFirst);
   const slower = await submitStageResult({}, identityA, ticket2, { inputs: trace2.inputs }, new Date('2026-10-21T02:04:00.000Z'), dependencies);
+
+  const profileAfterSecond = repository.saves.get(PLAYER_ID).RewardProfile;
+  const snapshotAfterSecond = {
+    ...strongSnapshot,
+    level: profileAfterSecond.Level,
+    xp: profileAfterSecond.Xp,
+    xpToNext: profileAfterSecond.XpToNext,
+    pendingLevelUps: profileAfterSecond.PendingLevelUps,
+    replayXpMultiplier: 1,
+  };
+  repository.tickets.get(ticket3).PlayerSnapshotJson = JSON.stringify(snapshotAfterSecond);
+  const trace3 = makeClearInputs({ runId: ticket3, seed: 123456, chapter: 1, stage: 2, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: '2026-10-21T02:02:00.000Z' }, snapshotAfterSecond);
   const farther = await submitStageResult({}, identityA, ticket3, { inputs: trace3.inputs }, new Date('2026-10-21T02:05:00.000Z'), dependencies);
 
   assert.equal(first.bestChanged, true);

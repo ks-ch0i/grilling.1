@@ -276,15 +276,28 @@ test('fixed step accumulator runs at most five 60 Hz catch-up ticks and drops ex
 
 test('rank submission is skipped after disconnect and only verified success yields server time', async () => {
   const state = gameState();
+  const verifiedState = gameState({ gold:23 });
   let online = true;
   const calls = [];
+  const installs = [];
   const client = createRankedRunClient({
     apiClient: {
       startStageRun: async () => ({ status: 201, ticket: ticketFor(state) }),
-      submitStageResult: async (...args) => { calls.push(args); return { status: 200, outcome: 'clear', verified: true, clearTimeMs: 61000 }; },
+      submitStageResult: async (...args) => {
+        calls.push(args);
+        return {
+          status:200, outcome:'clear', verified:true, clearTimeMs:61000, revision:9,
+          state:verifiedState,
+          rewards:{ outcome:'clear', xpGranted:20, goldGranted:23, drops:[] },
+        };
+      },
     },
     account: {}, getSaveRevision: () => 8, getCurrentState: () => state, getMode: () => 'online',
     syncPendingSave: async () => ({ ok: true }), isOnline: () => online,
+    installVerifiedState: async (envelope) => {
+      installs.push(envelope);
+      return { ok:true, ...envelope };
+    },
     now: () => new Date('2026-10-21T00:01:00.000Z'),
   });
   const prepared = await client.prepareStage({ chapter: 1, stage: 1, gameState: state });
@@ -293,9 +306,35 @@ test('rank submission is skipped after disconnect and only verified success yiel
   assert.equal(calls.length, 0);
   online = true;
   assert.deepEqual(await client.submitResult(prepared.ticket, []), {
-    verified: true, clearTimeMs: 61000, outcome: 'clear',
+    verified:true, clearTimeMs:61000, outcome:'clear', revision:9, state:verifiedState,
+    rewards:{ outcome:'clear', xpGranted:20, goldGranted:23, drops:[] }, terminal:true,
   });
   assert.equal(calls.length, 1);
+  assert.deepEqual(installs, [{ revision:9, state:verifiedState }]);
+});
+
+test('verified death installs the canonical reward state without claiming a clear time', async () => {
+  const before = gameState();
+  const state = gameState({ gold:17 });
+  const installs = [];
+  const client = createRankedRunClient({
+    apiClient: {
+      submitStageResult:async () => ({
+        status:200, verified:true, outcome:'death', clearTimeMs:null, revision:4, state,
+        rewards:{ outcome:'death', xpGranted:12, goldGranted:17, drops:[] },
+      }),
+    },
+    account:{}, isOnline:() => true,
+    installVerifiedState:async (envelope) => { installs.push(envelope); return { ok:true, ...envelope }; },
+  });
+
+  const result = await client.submitResult(ticketFor(before), [{ tick:0, kind:'move', value:1 }]);
+
+  assert.deepEqual(result, {
+    verified:true, outcome:'death', clearTimeMs:null, revision:4, state,
+    rewards:{ outcome:'death', xpGranted:12, goldGranted:17, drops:[] }, terminal:true,
+  });
+  assert.deepEqual(installs, [{ revision:4, state }]);
 });
 
 test('409, 410, and 422 result responses never claim a ranked clear', async (t) => {
@@ -311,7 +350,9 @@ test('409, 410, and 422 result responses never claim a ranked clear', async (t) 
         getSaveRevision: () => 1, getCurrentState: () => state, getMode: () => 'online',
         syncPendingSave: async () => ({ ok: true }), isOnline: () => true,
       });
-      assert.deepEqual(await client.submitResult(ticketFor(state), []), { verified: false, code: response.code });
+      assert.deepEqual(await client.submitResult(ticketFor(state), []), {
+        verified:false, code:response.code, terminal:true,
+      });
     });
   }
 });

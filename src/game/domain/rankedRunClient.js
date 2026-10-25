@@ -90,6 +90,7 @@ export function createRankedRunClient({
   syncPendingSave = async () => ({ ok: false, error: 'save-sync-unavailable' }),
   refreshAccountSave = async () => ({ status: 'error', code: 'account-refresh-unavailable' }),
   saveState = () => ({ ok: true }),
+  installVerifiedState = () => ({ ok: true }),
   isOnline = () => globalThis.navigator?.onLine !== false,
   now = () => new Date(),
 } = {}) {
@@ -191,11 +192,34 @@ export function createRankedRunClient({
       if (terminalStageResponse(result)) {
         if (pendingTicket?.runId === ticket.runId) pendingTicket = null;
       }
-      if (result?.status === 200 && result.verified === true && result.outcome === 'clear' &&
-          Number.isSafeInteger(result.clearTimeMs) && result.clearTimeMs > 0) {
-        return { verified: true, outcome: 'clear', clearTimeMs: result.clearTimeMs };
+      if (result?.status === 200 && result.verified === true &&
+          (result.outcome === 'clear' || result.outcome === 'death')) {
+        const validClearTime = result.outcome === 'clear'
+          ? Number.isSafeInteger(result.clearTimeMs) && result.clearTimeMs > 0
+          : result.clearTimeMs === null;
+        if (!validClearTime || !Number.isSafeInteger(result.revision) || result.revision < 1 ||
+            !result.state || typeof result.state !== 'object') {
+          return { verified: false, code: 'verified-state-missing', terminal: true };
+        }
+        const installed = await installVerifiedState({ revision: result.revision, state: result.state });
+        if (installed?.ok === false) {
+          return { verified: false, code: installed.error ?? 'verified-state-install-failed', terminal: true };
+        }
+        return {
+          verified: true,
+          outcome: result.outcome,
+          clearTimeMs: result.clearTimeMs,
+          revision: installed?.revision ?? result.revision,
+          state: installed?.state ?? result.state,
+          rewards: result.rewards,
+          terminal: true,
+        };
       }
-      return { verified: false, code: result?.code ?? `result-${result?.status ?? 'failed'}` };
+      return {
+        verified: false,
+        code: result?.code ?? `result-${result?.status ?? 'failed'}`,
+        ...(terminalStageResponse(result) ? { terminal: true } : {}),
+      };
     } catch (error) {
       return {
         verified: false,

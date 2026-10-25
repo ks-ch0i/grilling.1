@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { replayRankedRun } from '@knight-run/game-rules/simulation';
+import { resolveStageRewards, StageRewardError } from '@knight-run/game-rules/rewards';
 import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as defaultStageRepository from '../repositories/stageRankingRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
@@ -62,25 +63,96 @@ function conflictForStoredResult(row, inputJson, issuedAtUtc) {
   if (row.Status === 'rejected') return { status: 422, code: 'run-not-cleared', outcome: row.Outcome };
   if (row.Status !== 'completed') return { status: 409, code: 'run-not-available' };
   const clearTimeMs = asDate(row.CompletedAtUtc).getTime() - issuedAtUtc.getTime();
-  return { status: 200, outcome: row.Outcome, clearTimeMs, bestChanged: false, verified: row.Outcome === 'clear' };
+  return {
+    status: 200,
+    outcome: row.Outcome,
+    clearTimeMs: row.Outcome === 'clear' ? clearTimeMs : null,
+    bestChanged: false,
+    verified: row.Outcome === 'clear' || row.Outcome === 'death',
+  };
 }
 
-function resultFromCompletion(write, inputJson, clearTimeMs) {
+function resultFromCompletion(write, inputJson, issuedAtUtc) {
   if (write.kind === 'not-found') return { status: 404, code: 'run-not-found' };
   if (write.kind === 'expired') return { status: 410, code: 'run-expired' };
   if (write.kind === 'completed' || write.kind === 'rejected') {
     const row = write.row;
     if (row.InputJson !== inputJson) return { status: 409, code: 'run-already-completed' };
     if (row.Status === 'rejected') return { status: 422, code: 'run-not-cleared', outcome: row.Outcome };
+    const clearTimeMs = row.Outcome === 'clear'
+      ? asDate(row.CompletedAtUtc).getTime() - issuedAtUtc.getTime()
+      : null;
+    if (write.rewardSummary && write.state && Number.isSafeInteger(write.revision)) {
+      return {
+        status: 200,
+        outcome: row.Outcome,
+        clearTimeMs,
+        bestChanged: Boolean(write.bestChanged),
+        verified: true,
+        revision: write.revision,
+        state: write.state,
+        rewards: write.rewardSummary,
+      };
+    }
     return {
       status: 200,
       outcome: row.Outcome,
       clearTimeMs,
       bestChanged: Boolean(write.bestChanged),
-      verified: row.Outcome === 'clear',
+      verified: row.Outcome === 'clear' || row.Outcome === 'death',
     };
   }
   return { status: 409, code: 'run-not-available' };
+}
+
+function rewardProfileForResolver(profile) {
+  return {
+    level: profile.level,
+    xp: profile.xp,
+    xpToNext: profile.xpToNext,
+    pendingLevelUps: profile.pendingLevelUps,
+    gold: profile.gold,
+    materials: profile.materials,
+    inventory: profile.inventory,
+    progression: {
+      chapter: profile.chapter,
+      currentStage: profile.currentStage,
+      unlockedChapter: profile.unlockedChapter,
+      unlockedStage: profile.unlockedStage,
+      clearedStageIds: profile.clearedStageIds,
+    },
+  };
+}
+
+function profileWithRewardPatch(profile, patch) {
+  return {
+    ...profile,
+    level: patch.level,
+    xp: patch.xp,
+    xpToNext: patch.xpToNext,
+    pendingLevelUps: patch.pendingLevelUps,
+    gold: patch.gold,
+    inventory: patch.inventory,
+    chapter: patch.progression.chapter,
+    currentStage: patch.progression.currentStage,
+    unlockedChapter: patch.progression.unlockedChapter,
+    unlockedStage: patch.progression.unlockedStage,
+    clearedStageIds: patch.progression.clearedStageIds,
+  };
+}
+
+function ticketForRewardResolution(row) {
+  return {
+    runId: row.RunId,
+    chapter: Number(row.Chapter),
+    stage: Number(row.Stage),
+    seed: Number(row.Seed),
+    simulatorVersion: Number(row.SimulatorVersion),
+    balanceVersion: Number(row.BalanceVersion),
+    playerSnapshot: typeof row.PlayerSnapshotJson === 'string'
+      ? JSON.parse(row.PlayerSnapshotJson)
+      : row.PlayerSnapshotJson,
+  };
 }
 
 export async function startStageRun(pool, identity, body, dependencies) {
@@ -161,7 +233,21 @@ export async function submitStageResult(pool, identity, runId, body, receivedAtU
   const issuedAtUtc = asDate(row.IssuedAtUtc);
 
   if (row.Status === 'completed' || row.Status === 'rejected') {
-    return conflictForStoredResult(row, inputJson, issuedAtUtc);
+    if (row.InputJson !== inputJson) return { status: 409, code: 'run-already-completed' };
+    if (row.Status === 'rejected' || !row.RewardJson) {
+      return conflictForStoredResult(row, inputJson, issuedAtUtc);
+    }
+    const write = await deps.withTransaction(pool, (transaction) => deps.repository.completeRun(transaction, {
+      playerId,
+      runId,
+      inputJson,
+      outcome: row.Outcome,
+      completedAtUtc: receivedAt,
+      chapter: Number(row.Chapter),
+      stage: Number(row.Stage),
+      clearTimeMs: null,
+    }));
+    return resultFromCompletion(write, inputJson, issuedAtUtc);
   }
   if (row.Status === 'expired') return { status: 410, code: 'run-expired' };
   if (row.Status !== 'issued') return { status: 409, code: 'run-not-available' };
@@ -187,59 +273,70 @@ export async function submitStageResult(pool, identity, runId, body, receivedAtU
     ? JSON.parse(row.PlayerSnapshotJson)
     : row.PlayerSnapshotJson;
   const replay = replayRankedRun(ticket, playerSnapshot, submitted.inputs);
-  if (!replay.valid || replay.outcome !== 'clear') {
-    const write = await deps.withTransaction(pool, (transaction) => deps.repository.completeRun(transaction, {
-      playerId,
-      runId,
-      inputJson,
-      outcome: replay.outcome ?? 'invalid',
-      completedAtUtc: receivedAt,
-      chapter: ticket.chapter,
-      stage: ticket.stage,
-      clearTimeMs: 0,
-    }));
-    if (write.kind === 'completed' || write.kind === 'rejected') {
-      if (write.row?.InputJson !== inputJson) return { status: 409, code: 'run-already-completed' };
-    }
-    if (write.kind === 'expired') return { status: 410, code: 'run-expired' };
-    return { status: 422, code: 'run-not-cleared', outcome: replay.outcome };
-  }
-
-  const clearTimeMs = receivedAt.getTime() - issuedAtUtc.getTime();
+  const validTerminal = replay.valid && (replay.outcome === 'clear' || replay.outcome === 'death');
+  const rejectedOutcome = replay.outcome === 'incomplete' ? 'incomplete' : 'invalid';
+  const elapsedMs = receivedAt.getTime() - issuedAtUtc.getTime();
   const replayDurationMs = replay.elapsedTicks * 1000 / 60;
-  if (clearTimeMs <= 0 || replayDurationMs > clearTimeMs) {
+  if (validTerminal && (elapsedMs <= 0 || replayDurationMs > elapsedMs)) {
     return { status: 422, code: 'run-too-fast' };
   }
 
-  const write = await deps.withTransaction(pool, (transaction) => deps.repository.completeRun(transaction, {
-    playerId,
-    runId,
-    inputJson,
-    outcome: 'clear',
-    completedAtUtc: receivedAt,
-    chapter: ticket.chapter,
-    stage: ticket.stage,
-    clearTimeMs,
-  }));
+  const outcome = validTerminal ? replay.outcome : rejectedOutcome;
+  let write;
+  try {
+    write = await deps.withTransaction(pool, (transaction) => deps.repository.completeRun(transaction, {
+      playerId,
+      runId,
+      inputJson,
+      outcome,
+      completedAtUtc: receivedAt,
+      chapter: ticket.chapter,
+      stage: ticket.stage,
+      clearTimeMs: outcome === 'clear' ? elapsedMs : null,
+      resolveRewards: validTerminal
+        ? ({ ticket: lockedTicket, profile }) => {
+          const resolved = resolveStageRewards({
+            ticket: lockedTicket,
+            replay,
+            profile: rewardProfileForResolver(profile),
+          });
+          return {
+            profile: profileWithRewardPatch(profile, resolved.profilePatch),
+            rewardSummary: {
+              outcome: resolved.outcome,
+              xpGranted: resolved.xpGranted,
+              goldGranted: resolved.goldGranted,
+              drops: resolved.drops,
+            },
+          };
+        }
+        : undefined,
+    }));
+  } catch (error) {
+    if (error instanceof StageRewardError && error.code === 'reward-overflow') {
+      return { status: 422, code: 'reward-overflow' };
+    }
+    throw error;
+  }
   if (write.kind !== 'completed') {
     if (write.kind === 'expired') return { status: 410, code: 'run-expired' };
     if (write.kind === 'completed' || write.kind === 'rejected') {
-      return conflictForStoredResult(write.row, inputJson, issuedAtUtc);
+      return resultFromCompletion(write, inputJson, issuedAtUtc);
     }
     if (write.kind === 'not-found') return { status: 404, code: 'run-not-found' };
     return { status: 409, code: 'run-not-available' };
   }
-  if (typeof write.bestChanged !== 'boolean') {
-    return conflictForStoredResult(write.row, inputJson, issuedAtUtc);
+  if (write.row?.InputJson !== inputJson) {
+    return { status: 409, code: 'run-already-completed' };
   }
 
-  if (write.bestChanged) {
+  if (outcome === 'clear' && write.bestChanged) {
     try {
       await deps.publishRankingChanged({
         board: 'stage',
         chapter: ticket.chapter,
         stage: ticket.stage,
-        clearTimeMs,
+        clearTimeMs: elapsedMs,
         topFive: (write.topFive ?? []).map((entry, index) => ({
           displayName: entry.DisplayName ?? entry.displayName ?? null,
           chapter: Number(entry.Chapter ?? entry.chapter),
@@ -258,7 +355,7 @@ export async function submitStageResult(pool, identity, runId, body, receivedAtU
       // Ranking polling remains authoritative if the personal event transport is unavailable.
     }
   }
-  return resultFromCompletion(write, inputJson, clearTimeMs);
+  return resultFromCompletion(write, inputJson, issuedAtUtc);
 }
 
 export async function getStageTopFive(pool, dependencies) {

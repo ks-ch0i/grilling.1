@@ -370,6 +370,40 @@ test('the active cloud save revision is exposed for stage ticket requests', asyn
   assert.equal(coordinator.getMode(), 'online');
 });
 
+test('verified stage results install only for the active account and ignore older revisions', async () => {
+  const { createAccountSaveCoordinator, accountSaveKey, accountSyncKey } = await loadCoordinator();
+  const initial = newState();
+  const storage = createStorage();
+  const api = makeApi({
+    getCurrent:async() => ({ status:200, envelope:envelope(initial, 5) }),
+    putCurrent:async() => assert.fail('verified stage result installation must not issue a save write'),
+  });
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState });
+  await coordinator.loadAccountSave(accountA);
+
+  const rewarded = structuredClone(initial);
+  rewarded.gold = 45;
+  const installed = coordinator.installVerifiedState(accountA, envelope(rewarded, 6));
+  assert.equal(installed.ok, true);
+  assert.equal(coordinator.getSaveRevision(), 6);
+  assert.equal(coordinator.getCurrentState().gold, 45);
+  assert.equal(JSON.parse(storage.getItem(accountSaveKey(accountA))).gold, 45);
+  assert.deepEqual(JSON.parse(storage.getItem(accountSyncKey(accountA))), { revision:6, pending:false });
+
+  const stale = structuredClone(initial);
+  stale.gold = 900;
+  const staleResult = coordinator.installVerifiedState(accountA, envelope(stale, 5));
+  assert.equal(staleResult.ok, true);
+  assert.equal(staleResult.stale, true);
+  assert.equal(coordinator.getCurrentState().gold, 45);
+  assert.equal(coordinator.getSaveRevision(), 6);
+
+  const otherAccount = coordinator.installVerifiedState(accountB, envelope(stale, 7));
+  assert.deepEqual(otherAccount, { ok:false, error:'stale-account-operation' });
+  assert.equal(coordinator.getCurrentState().gold, 45);
+  assert.equal(api.calls.put.length, 0);
+});
+
 test('cloud save callback only publishes a state after the matching revision is synced', async () => {
   const { createAccountSaveCoordinator } = await loadCoordinator();
   const initial = newState();

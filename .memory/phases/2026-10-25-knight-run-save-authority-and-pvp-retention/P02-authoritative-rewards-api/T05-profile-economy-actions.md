@@ -77,4 +77,4 @@ Task: T05-profile-economy-actions
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과: API 141, root 178; API check와 Vite build 통과
-- commit: pending
+- commit: c06d1ab

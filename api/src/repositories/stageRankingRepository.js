@@ -1,8 +1,12 @@
 import sql from 'mssql';
+import * as cloudSaveRepository from './cloudSaveRepository.js';
+import * as playerProfileRepository from './playerProfileRepository.js';
+import { parseCloudSave } from '../domain/cloudSave.js';
+import { mergeRewardProfile, parseRewardProfile } from '../domain/playerProfile.js';
 
 const TICKET_COLUMNS = `RunId, PlayerId, Chapter, Stage, Seed, SimulatorVersion,
   BalanceVersion, PlayerSnapshotJson, IssuedAtUtc, ExpiresAtUtc, Status,
-  CompletedAtUtc, InputJson, Outcome`;
+  CompletedAtUtc, InputJson, Outcome, RewardJson`;
 const TICKET_OUTPUT_COLUMNS = TICKET_COLUMNS.split(',').map((column) => `inserted.${column.trim()}`).join(', ');
 
 function queryTicket(request, lock = false) {
@@ -109,6 +113,41 @@ async function selectTopFive(request) {
   return result.recordset ?? [];
 }
 
+function ticketForRewardResolution(row) {
+  return {
+    runId: row.RunId,
+    chapter: Number(row.Chapter),
+    stage: Number(row.Stage),
+    seed: Number(row.Seed),
+    simulatorVersion: Number(row.SimulatorVersion),
+    balanceVersion: Number(row.BalanceVersion),
+    playerSnapshot: typeof row.PlayerSnapshotJson === 'string'
+      ? JSON.parse(row.PlayerSnapshotJson)
+      : row.PlayerSnapshotJson,
+  };
+}
+
+async function readCurrentSave(transaction, playerId) {
+  const saveRow = await cloudSaveRepository.getSaveForUpdate(transaction, playerId);
+  if (!saveRow) throw new Error('Stage reward CloudSave row is missing.');
+  const profileRow = await playerProfileRepository.getRewardProfileByPlayerId(
+    transaction, playerId, { lock: true },
+  );
+  const profile = parseRewardProfile(profileRow);
+  return { profile, envelope: parseCloudSave(saveRow, profile) };
+}
+
+function rewardSummaryFrom(value) {
+  const summary = typeof value === 'string' ? JSON.parse(value) : value;
+  if (!summary || !['clear', 'death'].includes(summary.outcome) ||
+      !Number.isSafeInteger(summary.xpGranted) || summary.xpGranted < 0 ||
+      !Number.isSafeInteger(summary.goldGranted) || summary.goldGranted < 0 ||
+      !Array.isArray(summary.drops)) {
+    throw new TypeError('Stored stage reward summary is invalid.');
+  }
+  return summary;
+}
+
 export async function completeRun(transaction, input) {
   const playerLock = await new sql.Request(transaction)
     .input('PlayerId', sql.UniqueIdentifier, input.playerId)
@@ -120,10 +159,51 @@ export async function completeRun(transaction, input) {
     .input('PlayerId', sql.UniqueIdentifier, input.playerId), true);
   const existing = ticketResult.recordset?.[0];
   if (!existing) return { kind: 'not-found' };
-  if (existing.Status !== 'issued') return { kind: existing.Status, row: existing };
+  if (existing.Status !== 'issued') {
+    if (existing.RewardJson && existing.InputJson === input.inputJson && existing.Status === 'completed') {
+      const current = await readCurrentSave(transaction, input.playerId);
+      return {
+        kind: 'completed',
+        row: existing,
+        bestChanged: false,
+        revision: current.envelope.revision,
+        state: current.envelope.state,
+        rewardSummary: rewardSummaryFrom(existing.RewardJson),
+      };
+    }
+    return { kind: existing.Status, row: existing };
+  }
   if (new Date(existing.ExpiresAtUtc).getTime() <= input.completedAtUtc.getTime()) {
     await expireTicket(transaction, input.playerId, input.runId);
     return { kind: 'expired', row: { ...existing, Status: 'expired' } };
+  }
+
+  const current = await readCurrentSave(transaction, input.playerId);
+  let rewardApplication = null;
+  let updatedEnvelope = null;
+  if (input.outcome === 'clear' || input.outcome === 'death') {
+    if (typeof input.resolveRewards !== 'function') {
+      throw new TypeError('A validated stage reward resolver is required for terminal runs.');
+    }
+    rewardApplication = input.resolveRewards({
+      ticket: ticketForRewardResolution(existing),
+      profile: current.profile,
+      state: current.envelope.state,
+    });
+    if (!rewardApplication?.profile || !rewardApplication.rewardSummary) {
+      throw new TypeError('Stage reward resolver returned an invalid profile patch.');
+    }
+    const nextState = mergeRewardProfile(current.envelope.state, rewardApplication.profile);
+    const saved = await cloudSaveRepository.compareAndSwap(transaction, {
+      playerId: input.playerId,
+      schemaVersion: 2,
+      saveJson: JSON.stringify(nextState),
+      updatedAtUtc: input.completedAtUtc,
+      expectedRevision: current.envelope.revision,
+      rewardProfile: rewardApplication.profile,
+    });
+    if (!saved) throw new Error('Stage reward CloudSave compare-and-swap failed while locked.');
+    updatedEnvelope = parseCloudSave(saved, rewardApplication.profile);
   }
 
   const update = await new sql.Request(transaction)
@@ -131,11 +211,13 @@ export async function completeRun(transaction, input) {
     .input('PlayerId', sql.UniqueIdentifier, input.playerId)
     .input('InputJson', sql.NVarChar(sql.MAX), input.inputJson)
     .input('Outcome', sql.NVarChar(16), input.outcome)
-    .input('Status', sql.NVarChar(16), input.outcome === 'clear' ? 'completed' : 'rejected')
+    .input('Status', sql.NVarChar(16), input.outcome === 'clear' || input.outcome === 'death' ? 'completed' : 'rejected')
     .input('CompletedAtUtc', sql.DateTime2, input.completedAtUtc)
+    .input('RewardJson', sql.NVarChar(sql.MAX), rewardApplication ? JSON.stringify(rewardApplication.rewardSummary) : null)
     .query(`
       UPDATE dbo.StageRunTickets
-      SET InputJson = @InputJson, Outcome = @Outcome, Status = @Status, CompletedAtUtc = @CompletedAtUtc
+      SET InputJson = @InputJson, Outcome = @Outcome, Status = @Status,
+          CompletedAtUtc = @CompletedAtUtc, RewardJson = @RewardJson
       OUTPUT ${TICKET_OUTPUT_COLUMNS}
       WHERE RunId = @RunId AND PlayerId = @PlayerId AND Status = N'issued';
     `);
@@ -192,7 +274,17 @@ export async function completeRun(transaction, input) {
   }
 
   const topFive = bestChanged ? await selectTopFive(new sql.Request(transaction)) : [];
-  return { kind: 'completed', row: completedRow, bestChanged, topFive };
+  return {
+    kind: input.outcome === 'invalid' || input.outcome === 'incomplete' ? 'rejected' : 'completed',
+    row: completedRow,
+    bestChanged,
+    topFive,
+    ...(rewardApplication ? {
+      revision: updatedEnvelope.revision,
+      state: updatedEnvelope.state,
+      rewardSummary: rewardSummaryFrom(rewardApplication.rewardSummary),
+    } : {}),
+  };
 }
 
 export async function getTopFive(pool) {

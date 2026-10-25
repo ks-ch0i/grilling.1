@@ -51,6 +51,9 @@ export class BattleScene extends Phaser.Scene {
     this.rankedAccumulator = createFixedStepAccumulator();
     this.rankedQueuedInputs = [];
     this.rankedDiagnostics = { discardedCatchUpSteps: 0 };
+    this.rankedResultPromise = null;
+    this.rankedResultTerminal = false;
+    this.gameOverRankText = null;
     this.normalDefeated = 0;
     this.contactPairs = new Set();
     this.groundDrops = [];
@@ -814,41 +817,69 @@ export class BattleScene extends Phaser.Scene {
   }
 
   submitRankedClear() {
-    if (!this.rankedTicket || !this.rankedRunClient || this.rankedRunState?.outcome !== 'clear') return;
+    this.rankedResultPromise = this.submitRankedResult('clear');
+    return this.rankedResultPromise;
+  }
+
+  submitRankedDeath() {
+    this.rankedResultPromise = this.submitRankedResult('death');
+    return this.rankedResultPromise;
+  }
+
+  async submitRankedResult(outcome) {
+    if (!this.rankedTicket || !this.rankedRunClient || this.rankedRunState?.outcome !== outcome) {
+      return { verified:false, code:'no-terminal-stage-result' };
+    }
     if (this.rankedRecorder.getError()) this.markRankedUnavailable(this.rankedRecorder.getError());
     if (!this.rankedEligible) {
       this.rankResultMessage = this.rankedReason === 'network-unavailable'
-        ? '연결이 끊겨 진행만 저장했습니다. 랭킹에는 반영되지 않습니다.'
+        ? '연결이 끊겨 진행만 저장했습니다. 랭킹과 PvP는 사용할 수 없습니다.'
         : '이 플레이는 온라인 검증 조건을 충족하지 않아 랭킹에 반영되지 않습니다.';
       this.updateRankedStatus('랭킹 미적용');
-      return;
+      this.updateRankedResultText();
+      return { verified:false, code:this.rankedReason };
     }
 
     this.rankResultMessage = '서버에서 입력 기록을 확인하고 있습니다...';
     this.updateRankedStatus('랭킹 검증 중');
-    void this.rankedRunClient.submitResult(this.rankedTicket, this.rankedRecorder.getInputs()).then((result) => {
-      if (result.verified) {
+    this.updateRankedResultText();
+    let result;
+    try {
+      result = await this.rankedRunClient.submitResult(this.rankedTicket, this.rankedRecorder.getInputs());
+    } catch {
+      result = { verified:false, code:'network-unavailable' };
+    }
+    this.rankedResultTerminal = result.terminal === true;
+    if (result.verified) {
+      this.gameState = result.state;
+      if (outcome === 'clear') {
         this.rankResultMessage = '서버 검증 완료 · 기록 ' + (result.clearTimeMs / 1000).toFixed(2) + '초';
         this.updateRankedStatus('서버 검증 완료');
       } else {
-        this.markRankedUnavailable(result.code);
-        const message = result.code === 'run-expired'
-          ? '랭킹 티켓 유효 시간이 지나 진행만 저장했습니다.'
-          : result.code === 'authentication-required'
-            ? '인증이 만료되어 진행만 저장했습니다. 다시 로그인해 주세요.'
+        this.rankResultMessage = '서버 검증 완료 · 처치 보상이 저장되었습니다.';
+        this.updateRankedStatus('처치 보상 저장 완료');
+      }
+      this.updateHud();
+    } else {
+      this.markRankedUnavailable(result.code ?? 'network-unavailable');
+      const message = result.code === 'run-expired'
+        ? '랭킹 도전 유효 시간이 지나 진행만 저장했습니다.'
+        : result.code === 'authentication-required'
+          ? '인증이 만료되어 진행만 저장했습니다. 다시 로그인해 주세요.'
           : result.code === 'run-not-cleared' || result.code === 'run-too-fast'
             ? '서버 재생 검증을 통과하지 못해 랭킹에 반영되지 않았습니다.'
             : result.code?.startsWith('run-') || result.code?.startsWith('unsupported-')
-              ? '랭킹 티켓 상태를 확인할 수 없어 진행만 저장했습니다.'
+              ? '랭킹 도전 상태를 확인할 수 없어 진행만 저장했습니다.'
               : '연결 상태를 확인할 수 없어 진행만 저장했습니다.';
-        this.rankResultMessage = message;
-      }
-      if (this.rankResultText?.active) this.rankResultText.setText(this.rankResultMessage);
-    }).catch(() => {
-      this.markRankedUnavailable('network-unavailable');
-      this.rankResultMessage = '연결 상태를 확인할 수 없어 진행만 저장했습니다.';
-      if (this.rankResultText?.active) this.rankResultText.setText(this.rankResultMessage);
-    });
+      this.rankResultMessage = message;
+    }
+    this.updateRankedResultText();
+    return result;
+  }
+
+  updateRankedResultText() {
+    if (this.rankResultText?.active) this.rankResultText.setText(this.rankResultMessage);
+    if (this.gameOverRankText?.active) this.gameOverRankText.setText(this.rankResultMessage);
   }
 
   showStageClear(nextChapter,nextStage) {
@@ -861,9 +892,11 @@ export class BattleScene extends Phaser.Scene {
       fontFamily:'sans-serif',fontSize:'14px',color:'#b9d8c5',
     }).setOrigin(0.5);
     overlay.add(this.rankResultText);
-    createButton(this,{x:355,y:350,width:230,height:58,label:'마을로',onClick:()=>{
+    createButton(this,{x:355,y:350,width:230,height:58,label:'마을로',onClick:async()=>{
       if(this.transitioning)return;
       this.transitioning=true;
+      const result = await this.rankedResultPromise;
+      if (result?.verified) this.gameState = result.state;
       this.scene.start('TownScene',{
         gameState:this.gameState,
         saveState:this.saveState,
@@ -881,7 +914,9 @@ export class BattleScene extends Phaser.Scene {
   async startNextStage(chapter, stage) {
     if (this.transitioning) return;
     this.transitioning = true;
-    this.saveState(this.gameState);
+    const result = await this.rankedResultPromise;
+    if (result?.verified) this.gameState = result.state;
+    else this.saveState(this.gameState);
     let ranked = { ranked:false, reason:'ranking-unavailable' };
     if (this.rankedRunClient) {
       try {
@@ -913,12 +948,17 @@ export class BattleScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished=true;
     this.combatPaused=true;
+    this.submitRankedDeath();
     const showOverlay = () => {
       if (this.gameOverOverlayShown) return;
       this.gameOverOverlayShown = true;
       const overlay=this.add.container(0,0).setScrollFactor(0).setDepth(250);
       overlay.add(this.add.rectangle(640,360,1280,720,0x080c11,0.8));
       overlay.add(this.add.rectangle(640,345,520,260,0x2b2225).setStrokeStyle(2,0xb65e62));
+      this.gameOverRankText = this.add.text(640, 330, this.rankResultMessage ?? this.unrankedResultMessage(), {
+        fontFamily:'sans-serif', fontSize:'13px', color:'#b9d8c5',
+      }).setOrigin(0.5);
+      overlay.add(this.gameOverRankText);
       overlay.add(this.add.text(640,255,'쓰러졌습니다',{fontFamily:'sans-serif',fontSize:'29px',color:'#ffb6ad'}).setOrigin(0.5));
       overlay.add(this.add.text(640,300,'이번 도전의 장비와 재료는 입장 시점으로 돌아갑니다.',{fontFamily:'sans-serif',fontSize:'15px',color:'#e2d0cd'}).setOrigin(0.5));
       createButton(this,{x:480,y:365,width:320,height:58,label:'다시 시작',onClick:()=>{
@@ -938,22 +978,29 @@ export class BattleScene extends Phaser.Scene {
   async restartStageAfterDeath() {
     if (this.transitioning) return;
     this.transitioning = true;
-    const result = retryStage(this.stageSnapshot, this.gameState);
-    this.saveState(result.state);
+    const terminalResult = await this.rankedResultPromise;
+    if (terminalResult?.verified) this.gameState = terminalResult.state;
+    const retry = retryStage(this.stageSnapshot, this.gameState).state;
+    if (terminalResult?.verified) {
+      retry.inventory = this.gameState.inventory;
+      retry.materials = this.gameState.materials;
+      retry.progression = this.gameState.progression;
+    }
+    this.saveState(retry);
     let ranked = { ranked:false, reason:this.rankedReason };
     if (this.rankedRunClient) {
       try {
-        if (this.rankedTicket) await this.rankedRunClient.abandonRun(this.rankedTicket);
+        if (this.rankedTicket && !this.rankedResultTerminal) await this.rankedRunClient.abandonRun(this.rankedTicket);
         ranked = await this.rankedRunClient.prepareStage({
           chapter:this.chapter,
           stage:this.stage,
-          gameState:result.state,
+          gameState:retry,
         });
       } catch {
         ranked = { ranked:false, reason:'ticket-request-failed' };
       }
     }
-    const gameState = ranked.gameState ?? result.state;
+    const gameState = ranked.gameState ?? retry;
     const stageSnapshot = typeof structuredClone === 'function'
       ? structuredClone(gameState)
       : JSON.parse(JSON.stringify(gameState));
