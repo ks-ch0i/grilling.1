@@ -71,4 +71,4 @@ Task: T01-test-automation
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과
-- commit: recorded after task commit
+- commit: 6c0ca26

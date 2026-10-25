@@ -3,6 +3,13 @@ import { BALANCE, GEAR_SLOT, RARITY_COLOR, getGearUpgradeBand } from '../data/ba
 import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
 import { allocateStatPoint, getStatResetCost, resetStatPoints, stageId } from '../domain/progression.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
+import {
+  clampInventoryScrollRow,
+  getDragScrollRow,
+  getInventoryTapItemId,
+  hasInventoryDragExceededThreshold,
+  removeInventoryInputHandlers,
+} from '../ui/inventoryScroll.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const SLOT_LABEL = { helmet:'투구', armor:'갑옷', gloves:'장갑', boots:'신발', spear:'창', horse:'말' };
@@ -27,7 +34,9 @@ function stageName(id) {
 export class TownScene extends Phaser.Scene {
   constructor() {
     super('TownScene');
-    this.inventoryOffset = 0;
+    this.inventoryScrollRow = 0;
+    this.inventoryDrag = null;
+    this.inventoryTap = null;
     this.selectedItem = null;
   }
 
@@ -49,13 +58,53 @@ export class TownScene extends Phaser.Scene {
 
   create() {
     this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
-    this.input.on('wheel', (pointer, over, deltaX, deltaY) => {
-      if (pointer.x >= 470 && pointer.x <= 900 && pointer.y >= 190 && pointer.y <= 600) {
-        const maxOffset = Math.max(0, this.gameState.inventory.length - 10);
-        this.inventoryOffset = Math.max(0, Math.min(maxOffset, this.inventoryOffset + Math.sign(deltaY) * 2));
-        this.refresh();
-      }
-    });
+    this.inventoryInputHandlers = {
+      wheel: (pointer, over, deltaX, deltaY) => {
+        if (pointer.x >= 470 && pointer.x <= 900 && pointer.y >= 190 && pointer.y <= 600) {
+          const nextRow = clampInventoryScrollRow(
+            this.inventoryScrollRow + Math.sign(deltaY),
+            this.gameState.inventory.length,
+          );
+          if (nextRow !== this.inventoryScrollRow) {
+            this.inventoryScrollRow = nextRow;
+            this.refresh();
+          }
+        }
+      },
+      pointerdown: (pointer) => {
+        this.inventoryDrag = pointer.x >= 470 && pointer.x <= 900 && pointer.y >= 190 && pointer.y <= 600
+          ? {
+            pointerId: pointer.id,
+            startY: pointer.y,
+            startRow: this.inventoryScrollRow,
+            moved: false,
+          }
+          : null;
+      },
+      pointermove: (pointer) => {
+        const drag = this.inventoryDrag;
+        if (!drag || drag.pointerId !== pointer.id) return;
+        if (hasInventoryDragExceededThreshold(drag.startY, pointer.y)) drag.moved = true;
+        if (!drag.moved) return;
+        const nextRow = getDragScrollRow(
+          drag.startRow,
+          drag.startY,
+          pointer.y,
+          this.gameState.inventory.length,
+        );
+        if (nextRow !== this.inventoryScrollRow) {
+          this.inventoryScrollRow = nextRow;
+          this.refresh();
+        }
+      },
+      pointerup: (pointer) => this.finishInventoryPointer(pointer),
+      pointerupoutside: (pointer) => this.finishInventoryPointer(pointer),
+    };
+    this.input.on('wheel', this.inventoryInputHandlers.wheel);
+    this.input.on('pointerdown', this.inventoryInputHandlers.pointerdown);
+    this.input.on('pointermove', this.inventoryInputHandlers.pointermove);
+    this.input.on('pointerup', this.inventoryInputHandlers.pointerup);
+    this.input.on('pointerupoutside', this.inventoryInputHandlers.pointerupoutside);
     this.refresh();
     this.onlineHandler = () => this.refresh();
     if (typeof window !== 'undefined') window.addEventListener('online', this.onlineHandler);
@@ -65,8 +114,28 @@ export class TownScene extends Phaser.Scene {
         window.removeEventListener('online', this.onlineHandler);
         window.removeEventListener('offline', this.onlineHandler);
       }
+      this.removeInventoryInputListeners();
       this.pvpSearchTimer?.remove(false);
     });
+  }
+
+  finishInventoryPointer(pointer) {
+    const drag = this.inventoryDrag;
+    const tap = this.inventoryTap;
+    this.inventoryDrag = null;
+    this.inventoryTap = null;
+    const itemId = getInventoryTapItemId(drag, tap, pointer, this.gameState.inventory);
+    if (itemId === null) return;
+    this.selectedItem = { type:'inventory', id:itemId };
+    this.refresh();
+  }
+
+  removeInventoryInputListeners() {
+    if (!this.inventoryInputHandlers) return;
+    removeInventoryInputHandlers(this.input, this.inventoryInputHandlers);
+    this.inventoryInputHandlers = null;
+    this.inventoryDrag = null;
+    this.inventoryTap = null;
   }
 
   commitState(nextState) {
@@ -77,6 +146,10 @@ export class TownScene extends Phaser.Scene {
   }
 
   refresh() {
+    this.inventoryScrollRow = clampInventoryScrollRow(
+      this.inventoryScrollRow,
+      this.gameState.inventory.length,
+    );
     this.children.removeAll(true);
     this.renderTown();
   }
@@ -154,26 +227,33 @@ export class TownScene extends Phaser.Scene {
 
   renderInventory() {
     const inventory = this.gameState.inventory;
-    const viewport = { x:479, y:196, width:410, height:404 };
+    const viewport = { x:470, y:190, width:430, height:410 };
     const grid = this.add.container(0, 0);
     inventory.forEach((item, index) => {
       const column = index % 2;
-      const row = Math.floor(index / 2) - Math.floor(this.inventoryOffset / 2);
+      const row = Math.floor(index / 2) - this.inventoryScrollRow;
       const x = 478 + column * 204;
-      const y = 202 + row * 86;
-      if (y + 78 < viewport.y || y > viewport.y + viewport.height) return;
+      const y = 196 + row * 78;
+      if (row < 0 || row >= 5 || y + 74 < viewport.y || y > viewport.y + viewport.height) return;
       const card = this.add.rectangle(x + 96, y + 37, 192, 74, 0x263342);
       card.setStrokeStyle(1, 0x596a7b);
       const label = this.add.text(x + 8, y + 5, SLOT_LABEL[item.slot] + ' · ' + RARITY_LABEL[item.rarity] + ' · Lv.' + item.level, { fontFamily:'sans-serif', fontSize:'13px', color:rarityHex(item.rarity) });
       const stats = this.add.text(x + 8, y + 27, getGearStatSummary(item).map(({key,value}) => STAT_LABEL[key] + ' +' + formatStat(key,value)).join(' / '), { fontFamily:'sans-serif', fontSize:'11px', color:'#e6edf3', wordWrap:{width:176} });
       const select = this.add.rectangle(x + 96, y + 37, 192, 74, 0xffffff, 0);
-      select.setInteractive(new Phaser.Geom.Rectangle(0,0,192,74), Phaser.Geom.Rectangle.Contains).on('pointerdown', () => {
-        this.selectedItem = { type:'inventory', id:item.id };
-        this.refresh();
-      });
+      select.setInteractive(new Phaser.Geom.Rectangle(0,0,192,74), Phaser.Geom.Rectangle.Contains)
+        .on('pointerdown', (pointer) => {
+          this.inventoryTap = {
+            pointerId: pointer.id,
+            itemId: item.id,
+            left: x,
+            right: x + 192,
+            top: y,
+            bottom: y + 74,
+          };
+        });
       grid.add([card, drawRarityFrame(this,x,y,192,74,item.rarity),label,stats,select]);
     });
-    this.add.text(596, 608, inventory.length > 10 ? '마우스 휠로 보관함 스크롤' : '획득 장비는 이곳에 보관됩니다', { fontFamily:'sans-serif', fontSize:'12px', color:'#99a7b4' }).setOrigin(0, 1);
+    this.add.text(596, 608, inventory.length > 10 ? '드래그 또는 마우스 휠로 보관함 스크롤' : '획득 장비는 이곳에 보관됩니다', { fontFamily:'sans-serif', fontSize:'12px', color:'#99a7b4' }).setOrigin(0, 1);
   }
 
   renderSelectedItem() {

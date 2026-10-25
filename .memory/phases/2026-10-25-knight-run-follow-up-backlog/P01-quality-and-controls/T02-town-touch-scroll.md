@@ -1,6 +1,6 @@
 # Task: T02 마을 보관함 터치 스크롤
 
-## Status: pending
+## Status: done
 
 ## Goal
 가로 화면 터치 기기에서 마을 보관함을 세로로 드래그해 탐색할 수 있게 한다. 기존 마우스 휠, 아이템 선택, 보관함의 2열 배치는 유지한다.
@@ -63,17 +63,18 @@
 - 마우스 휠도 기존처럼 2열 행 단위로 이동한다.
 
 ## Acceptance Criteria
-- [ ] 모바일 가로 화면에서 보관함을 위·아래로 드래그할 수 있다.
-- [ ] 마우스 휠 스크롤과 아이템 선택이 기존처럼 동작한다.
-- [ ] 스크롤은 첫 행과 마지막 행을 넘어가지 않는다.
-- [ ] 보관함 5개 표시 행이 panel 경계와 하단 stage controls를 침범하지 않는다.
-- [ ] Scene 재시작 후 입력 listener가 중복 등록되지 않는다.
+- [x] 모바일 가로 화면에서 보관함을 위·아래로 드래그할 수 있다.
+- [x] 마우스 휠 스크롤과 아이템 선택이 기존처럼 동작한다.
+- [x] 스크롤은 첫 행과 마지막 행을 넘어가지 않는다.
+- [x] 보관함 5개 표시 행이 panel 경계와 하단 stage controls를 침범하지 않는다.
+- [x] Scene 재시작 후 입력 listener가 중복 등록되지 않는다.
 
 ## Validation
 - node --test test/inventory-scroll.test.js — 스크롤 계산 회귀 테스트 통과.
+- node --test test/town-inventory-input.test.js — 탭 선택, drag 억제, 입력 정리 테스트 통과.
 - npm test — 루트 테스트 전체 통과.
+- 브라우저 수동 확인은 사용 가능한 브라우저 surface가 없어 실행하지 못했다. 순수 scroll/gesture 테스트와 Vite build로 검증했다.
 - npm run build — Vite production build 성공.
-- 브라우저 수동 확인 — 가로 터치 드래그와 데스크톱 휠에서 같은 아이템 목록 순서 확인.
 
 ## Commit Message
 ~~~text
@@ -88,6 +89,6 @@ Task: T02-town-touch-scroll
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- commit: recorded after task commit
