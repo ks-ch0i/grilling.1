@@ -1,6 +1,6 @@
 # Task: T08 게임 화면 보상 결과 통합
 
-## Status: pending
+## Status: done
 
 ## Goal
 전투 완료 후 서버 확인 전에는 온라인 canonical 보상을 확정하지 않고, verified 응답이 오면 서버 state/revision으로 교체한다. profile action을 통해 아이템 이동·분해와 골드/재료 차감을 처리하며 네트워크 실패 시 unverified local shadow에 남긴다.
@@ -57,17 +57,19 @@
 - When a local shadow already exists, offer explicit “검증된 온라인 저장” and “미검증 로컬 진행” choices; preserve both copies and never merge their reward/progression fields.
 
 ## Acceptance Criteria
-- [ ] Verified stage rewards are committed only from server result state, once per run.
-- [ ] Valid clear and death submit recorded inputs; offline/guest rewards stay local and unverified.
-- [ ] Inventory/resource commands use action IDs and server revisions before local gear/stat side effects.
-- [ ] Existing local guest play still opens the town and game screens without authenticated APIs.
-- [ ] UI never labels client-owned baseStats/equipment as server-verified.
+- [x] Verified stage rewards are committed only from server result state, once per run.
+- [x] Valid clear and death submit recorded inputs; offline/guest rewards stay local and unverified.
+- [x] Inventory/resource commands use action IDs and server revisions before local gear/stat side effects.
+- [x] Existing local guest play still opens the town and game screens without authenticated APIs.
+- [x] UI never labels client-owned baseStats/equipment as server-verified.
 
 ## Validation
 - `node --test test/battle-reward-flow.test.js test/ranked-stage-client.test.js test/town-profile-actions.test.js` (workdir: repository root) — focused result/action tests pass
 - `npm test` (workdir: repository root) — full root suite passes
 - `npm run build` (workdir: repository root) — client build passes
 - API counterpart: `npm test` (workdir: `api`) — profile action and stage result tests pass
+
+Validation results: focused client/action tests 55 passed; root suite 191 passed; API suite 148 passed; Vite production build passed (existing Phaser chunk-size warning).
 
 ## Commit Message
 ```text
@@ -82,6 +84,6 @@ Task: T08-gameplay-reward-integration
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- commit: `861c617`

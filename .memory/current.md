@@ -4,12 +4,13 @@
 [마창기사 저장 권위 전환 및 PvP 상세 데이터 보관](./plans/2026-10-25-knight-run-save-authority-and-pvp-retention.md)
 
 ## Active Phase
-[P03 client save boundary](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/phase.md)
+[P03 client save boundary — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/phase.md)
 
 ## Active Task
-[T08 gameplay reward integration](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/T08-gameplay-reward-integration.md)
+[T08 gameplay reward integration — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/T08-gameplay-reward-integration.md)
 
 ## Status
+- P03-T08 complete: provisional Battle results stay in the unverified shadow until server verification; profile actions use revision-bound stable IDs and protect displaced equipment. Client suite: 191 passed; API suite: 148 passed; build passed.
 - P03-T07 complete: account-scoped verified backups and unverified shadows are separated; guest/offline recovery is explicit, reconnect is read-only, and ranked ticket fallback uses the local shadow. Focused tests: 81 passed; root suite: 186 passed; Vite build passed.
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
 - 저장 무결성과 PvP 원본 데이터 보관 Task는 읽기 전용 조사·결정안까지만 한다. 데이터 삭제나 서버 권위형 저장 변경은 별도 결정 전까지 하지 않는다.
@@ -41,4 +42,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-Read the active T08 blueprint and connect Battle/Town reward and profile action flows to verified server responses.
+No remaining tasks in this plan. Select or create the next plan when ready.

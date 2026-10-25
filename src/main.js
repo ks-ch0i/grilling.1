@@ -200,6 +200,8 @@ export async function startApplication({
       try {
         game = await createGameInstance({
           gameState:loaded.state, saveState, account, apiClient,
+          applyProfileAction:coordinator.applyProfileAction,
+          getSaveMode:coordinator.getMode,
           hasUnverifiedShadow:coordinator.hasUnverifiedShadow,
           selectLocalShadow:coordinator.selectLocalShadow,
           recoverLegacySave:coordinator.recoverLegacySave,

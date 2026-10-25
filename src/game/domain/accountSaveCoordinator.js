@@ -746,10 +746,14 @@ export function createAccountSaveCoordinator({
     if (typeof api.applyProfileAction !== 'function') return { ok: false, error: 'profile-actions-unavailable' };
     if (!activeAccount || !activeState) return { ok: false, error: 'account-not-ready' };
     if (mode !== 'verified-online') return { ok:false, error:'unverified-shadow', state:activeState };
+    const generation = activeGeneration;
+    const account = activeAccount;
+    const isCurrent = () => generation === activeGeneration && account === activeAccount;
     if (typeof actionId !== 'string') actionId = globalThis.crypto?.randomUUID?.();
     if (typeof actionId !== 'string') return { ok: false, error: 'action-id-unavailable' };
 
     const synced = await syncPendingSave();
+    if (!isCurrent()) return { ok:false, error:'stale-account-operation', actionId };
     if (!synced.ok) return { ok: false, error: synced.error, state: activeState };
     if (mode !== 'verified-online') return { ok: false, error: mode === 'guest-unverified' ? 'guest-unverified' : 'network-unavailable', state: activeState };
     const expectedSaveRevision = getSaveRevision();
@@ -757,17 +761,19 @@ export function createAccountSaveCoordinator({
 
     let response;
     try {
-      response = await api.applyProfileAction(activeAccount, {
+      response = await api.applyProfileAction(account, {
         actionId,
         expectedSaveRevision,
         action,
       });
     } catch (error) {
+      if (!isCurrent()) return { ok:false, error:'stale-account-operation', actionId };
       if (error?.name === 'CloudSaveAuthenticationError') {
         return { ok: false, error: 'authentication-required', actionId, state: activeState };
       }
       return { ok: false, error: 'network-unavailable', actionId, state: activeState };
     }
+    if (!isCurrent()) return { ok:false, error:'stale-account-operation', actionId };
 
     if (response.status === 200) {
       const installed = installCloudState({ revision: response.revision, state: response.state }, { clearPending:true });

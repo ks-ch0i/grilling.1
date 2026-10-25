@@ -627,6 +627,40 @@ test('profile actions sync pending client state, bind to the current revision, a
   assert.equal(JSON.parse(storage.getItem(verifiedSaveKey(accountA))).state.gold, 75);
 });
 
+test('a late profile action response from one account is not installed after switching accounts', async () => {
+  const { createAccountSaveCoordinator, verifiedSaveKey } = await loadCoordinator();
+  const stateA = newState();
+  const stateB = newState();
+  stateB.gold = 33;
+  const storage = createStorage();
+  const api = makeApi({
+    getCurrent:async(account) => ({ status:200, envelope:envelope(account === accountA ? stateA : stateB, 1) }),
+    putCurrent:async() => { throw new Error('unexpected profile save'); },
+  });
+  let resolveAction;
+  let notifyActionStarted;
+  const actionStarted = new Promise((resolve) => { notifyActionStarted = resolve; });
+  api.applyProfileAction = async () => {
+    notifyActionStarted();
+    return new Promise((resolve) => { resolveAction = resolve; });
+  };
+  const coordinator = createAccountSaveCoordinator({ storage, api, initialStateFactory:newState });
+  await coordinator.loadAccountSave(accountA);
+  const pendingAction = coordinator.applyProfileAction({ type:'spend-gold', amount:1 }, { actionId:'stable-action-id' });
+  await actionStarted;
+
+  await coordinator.loadAccountSave(accountB);
+  const staleActionState = newState();
+  staleActionState.gold = 999;
+  resolveAction({ status:200, revision:2, state:staleActionState });
+
+  const result = await pendingAction;
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'stale-account-operation');
+  assert.equal(coordinator.getCurrentState().gold, 33);
+  assert.equal(JSON.parse(storage.getItem(verifiedSaveKey(accountB))).state.gold, 33);
+});
+
 test('409 conflict backs up pending local state, applies cloud state and never auto-overwrites it', async () => {
   const { createAccountSaveCoordinator, accountSaveKey, verifiedSaveKey, accountSyncKey, recoveryKeyPrefix } = await loadCoordinator();
   const cloud = newState();

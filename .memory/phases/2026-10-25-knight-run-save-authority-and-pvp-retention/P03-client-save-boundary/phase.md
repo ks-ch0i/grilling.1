@@ -4,7 +4,7 @@
 | Task | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
 | T07 | `done` | 인증 계정의 verified save와 offline shadow를 분리하고 자동 승격을 차단한다. | [T07](./T07-client-save-boundary.md) |
-| T08 | `in_progress` | Battle/Town 흐름을 verified reward와 profile action 응답에 연결한다. | [T08](./T08-gameplay-reward-integration.md) |
+| T08 | `done` | Battle/Town 흐름을 verified reward와 profile action 응답에 연결한다. | [T08](./T08-gameplay-reward-integration.md) |
 
 ## Progress
-- done: 1/2 (active: T08)
+- done: 2/2 (active: none)

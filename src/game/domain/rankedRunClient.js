@@ -109,6 +109,39 @@ export function createRankedRunClient({
     return unranked(reason);
   }
 
+  async function preserveUnverifiedProgress(reason, state = getCurrentState()) {
+    const provisionalState = state ?? getCurrentState();
+    if (getMode() !== 'verified-online') {
+      try {
+        const saved = await saveState(provisionalState);
+        if (saved?.ok === false) return { ...saved, state:provisionalState };
+        return { ok:true, state:provisionalState, mode:getMode(), reason };
+      } catch {
+        return { ok:false, error:'offline-save-unavailable', state:provisionalState };
+      }
+    }
+    let selected;
+    try {
+      selected = await selectLocalShadow(reason, { preferExisting:false });
+    } catch {
+      return { ok:false, error:'local-shadow-unavailable' };
+    }
+    if (!selected?.ok || !selected.state) return { ok:false, error:selected?.error ?? 'local-shadow-unavailable' };
+    const stateToSave = provisionalState ?? selected.state;
+    try {
+      const saved = await saveState(stateToSave);
+      if (saved?.ok === false) return { ...saved, state:stateToSave };
+    } catch {
+      return { ok:false, error:'offline-save-unavailable', state:stateToSave };
+    }
+    return { ok:true, state:stateToSave, mode:getMode(), reason };
+  }
+
+  async function rejectUnverifiedResult(code, terminal = false) {
+    if (code !== 'stale-account-operation') await preserveUnverifiedProgress(code);
+    return { verified:false, code, ...(terminal ? { terminal:true } : {}) };
+  }
+
   async function syncBeforeTicket() {
     if (getMode() !== 'verified-online') {
       return { ok:false, reason:getMode() === 'guest-unverified' ? 'guest-unverified' : 'unverified-shadow' };
@@ -205,7 +238,7 @@ export function createRankedRunClient({
 
   async function submitResult(ticket, inputs) {
     if (!ticket) return { verified: false, code: 'no-stage-ticket' };
-    if (!isOnline()) return { verified: false, code: 'network-unavailable' };
+    if (!isOnline()) return rejectUnverifiedResult('network-unavailable');
     try {
       const result = await apiClient.submitStageResult(account, ticket.runId, { inputs });
       if (terminalStageResponse(result)) {
@@ -218,11 +251,11 @@ export function createRankedRunClient({
           : result.clearTimeMs === null;
         if (!validClearTime || !Number.isSafeInteger(result.revision) || result.revision < 1 ||
             !result.state || typeof result.state !== 'object') {
-          return { verified: false, code: 'verified-state-missing', terminal: true };
+          return rejectUnverifiedResult('verified-state-missing', true);
         }
         const installed = await installVerifiedEnvelope({ revision: result.revision, state: result.state });
         if (installed?.ok === false) {
-          return { verified: false, code: installed.error ?? 'verified-state-install-failed', terminal: true };
+          return rejectUnverifiedResult(installed.error ?? 'verified-state-install-failed', true);
         }
         return {
           verified: true,
@@ -234,16 +267,14 @@ export function createRankedRunClient({
           terminal: true,
         };
       }
-      return {
-        verified: false,
-        code: result?.code ?? `result-${result?.status ?? 'failed'}`,
-        ...(terminalStageResponse(result) ? { terminal: true } : {}),
-      };
+      return rejectUnverifiedResult(
+        result?.code ?? `result-${result?.status ?? 'failed'}`,
+        terminalStageResponse(result),
+      );
     } catch (error) {
-      return {
-        verified: false,
-        code: error?.name === 'CloudSaveAuthenticationError' ? 'authentication-required' : 'network-unavailable',
-      };
+      return rejectUnverifiedResult(
+        error?.name === 'CloudSaveAuthenticationError' ? 'authentication-required' : 'network-unavailable',
+      );
     }
   }
 
@@ -252,7 +283,7 @@ export function createRankedRunClient({
     return abandonTicket(ticket, inputs);
   }
 
-  return { prepareStage, submitResult, abandonRun };
+  return { prepareStage, submitResult, abandonRun, preserveUnverifiedProgress };
 }
 
 export function createRunInputRecorder({ maxEvents = MAX_RANKED_INPUT_EVENTS, maxBytes = MAX_RANKED_INPUT_BYTES } = {}) {

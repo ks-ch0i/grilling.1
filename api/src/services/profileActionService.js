@@ -59,7 +59,7 @@ function replayResponse(receiptRow, current) {
   };
 }
 
-function applyAction(profile, action, rollCritical) {
+function applyAction(profile, action, rollCritical, state) {
   const next = {
     ...profile,
     inventory: [...profile.inventory],
@@ -68,7 +68,14 @@ function applyAction(profile, action, rollCritical) {
   if (action.type === 'equip-inventory-item') {
     const index = next.inventory.findIndex((item) => item.id === action.itemId);
     if (index < 0) return { status: 404, code: 'inventory-item-not-found' };
+    const item = next.inventory[index];
+    const equipped = state.equipment?.[item.slot] ?? null;
+    if (Object.hasOwn(action, 'expectedEquippedItemId') &&
+        (equipped?.id ?? null) !== action.expectedEquippedItemId) {
+      return { status: 409, code: 'equipment-changed' };
+    }
     const [consumedItem] = next.inventory.splice(index, 1);
+    if (equipped && Object.hasOwn(action, 'expectedEquippedItemId')) next.inventory.push(equipped);
     return {
       status: 200,
       profile: next,
@@ -143,9 +150,26 @@ export async function applyProfileAction(pool, identity, body, dependencies) {
         };
       }
 
-      const applied = applyAction(current.profile, request.action, deps.rollCritical);
-      if (applied.status !== 200) return applied;
-      const state = mergeRewardProfile(current.envelope.state, applied.profile);
+      const applied = applyAction(current.profile, request.action, deps.rollCritical, current.envelope.state);
+      if (applied.status !== 200) {
+        return applied.status === 409
+          ? { ...applied, revision:current.envelope.revision, state:current.envelope.state }
+          : applied;
+      }
+      let sourceState = current.envelope.state;
+      if (request.action.type === 'equip-inventory-item' &&
+          Object.hasOwn(request.action, 'expectedEquippedItemId')) {
+        const equippedItem = applied.receipt.consumedItem;
+        sourceState = {
+          ...sourceState,
+          inventory:applied.profile.inventory,
+          equipment:{
+            ...sourceState.equipment,
+            [equippedItem.slot]:structuredClone(equippedItem),
+          },
+        };
+      }
+      const state = mergeRewardProfile(sourceState, applied.profile);
       const updatedSave = await deps.repository.compareAndSwap(transaction, {
         playerId,
         schemaVersion: 2,

@@ -26,7 +26,24 @@ function hasOnlyKeys(value, keys) {
 
 function canonicalAction(value) {
   if (!isPlainObject(value) || typeof value.type !== 'string') invalid();
-  if (value.type === 'equip-inventory-item' || value.type === 'dismantle-inventory-item') {
+  if (value.type === 'equip-inventory-item') {
+    const keys = Object.hasOwn(value, 'expectedEquippedItemId')
+      ? ['type', 'itemId', 'expectedEquippedItemId']
+      : ['type', 'itemId'];
+    if (!hasOnlyKeys(value, keys) || typeof value.itemId !== 'string' ||
+        value.itemId.length < 1 || value.itemId.length > 128 ||
+        (Object.hasOwn(value, 'expectedEquippedItemId') && value.expectedEquippedItemId !== null &&
+          (typeof value.expectedEquippedItemId !== 'string' || value.expectedEquippedItemId.length < 1 ||
+            value.expectedEquippedItemId.length > 128))) invalid();
+    return {
+      type: value.type,
+      itemId: value.itemId,
+      ...(Object.hasOwn(value, 'expectedEquippedItemId')
+        ? { expectedEquippedItemId: value.expectedEquippedItemId }
+        : {}),
+    };
+  }
+  if (value.type === 'dismantle-inventory-item') {
     if (!hasOnlyKeys(value, ['type', 'itemId']) || typeof value.itemId !== 'string' ||
         value.itemId.length < 1 || value.itemId.length > 128) invalid();
     return { type: value.type, itemId: value.itemId };

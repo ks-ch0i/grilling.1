@@ -3,6 +3,7 @@ import { BALANCE, GEAR_SLOT, RARITY_COLOR, getGearUpgradeBand } from '../data/ba
 import { createInitialState, equipGear, dismantleGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
 import { allocateStatPoint, getStatResetCost, stageId } from '../domain/progression.js';
 import { installEquippedProfileItem, previewProfileSpend, runProfileSpendPreview } from '../domain/profileActionClient.js';
+import { createProfileActionRequestExecutor } from '../domain/profileActionRequest.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
 import { createKeyboardNavigation } from '../ui/keyboardNavigation.js';
 import { formatPvpHistoryRow, isCurrentPvpHistoryRequest } from '../ui/pvpHistory.js';
@@ -51,6 +52,7 @@ export class TownScene extends Phaser.Scene {
     const bootstrap = this.game?.lancerBootstrap;
     this.applyProfileAction = bootstrap?.applyProfileAction;
     this.getSaveMode = bootstrap?.getSaveMode;
+    this.profileActionExecutor = createProfileActionRequestExecutor({ applyProfileAction:this.applyProfileAction });
     this.hasUnverifiedShadow = bootstrap?.hasUnverifiedShadow;
     this.selectLocalShadow = bootstrap?.selectLocalShadow;
     this.recoverLegacySave = bootstrap?.recoverLegacySave;
@@ -239,7 +241,7 @@ export class TownScene extends Phaser.Scene {
     this.refresh();
     let result;
     try {
-      result = await this.applyProfileAction(action);
+      result = await this.profileActionExecutor(action);
       if (result?.state) this.gameState = result.state;
       if (!result?.ok) {
         const messages = {
@@ -247,6 +249,7 @@ export class TownScene extends Phaser.Scene {
           'insufficient-materials':'서버 재료가 부족합니다. 저장을 새로고침했습니다.',
           'inventory-item-not-found':'장비를 서버 보관함에서 찾을 수 없습니다. 저장을 새로고침했습니다.',
           'save-revision-conflict':'저장 상태가 바뀌었습니다. 최신 저장을 적용했습니다.',
+          'equipment-changed':'장비 상태가 바뀌었습니다. 최신 저장을 적용했습니다. 다시 선택해 주세요.',
           'network-unavailable':'서버에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도해 주세요.',
           'authentication-required':'인증이 만료되었습니다. 다시 로그인해 주세요.',
         };
@@ -450,7 +453,11 @@ export class TownScene extends Phaser.Scene {
         if (this.hasAuthoritativeProfile()) {
           const preview = equipGear(this.gameState, item.id);
           if (!preview.ok) return;
-          const result = await this.requestProfileAction({ type:'equip-inventory-item', itemId:item.id });
+          const result = await this.requestProfileAction({
+            type:'equip-inventory-item',
+            itemId:item.id,
+            expectedEquippedItemId:oldItem?.id ?? null,
+          });
           if (result.ok && result.consumedItem) {
             const nextState = installEquippedProfileItem(result.state, result.consumedItem);
             this.selectedItem = { type:'equipment', id:result.consumedItem.id };

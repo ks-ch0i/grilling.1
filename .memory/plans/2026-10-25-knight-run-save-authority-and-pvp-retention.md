@@ -3,6 +3,8 @@
 ## Goal
 검증된 온라인 스테이지 결과만 XP·레벨·골드·재료·보상 아이템·스테이지 진행도에 반영하고, 오프라인 진행은 별도 미검증 로컬 저장으로 보존한다. PvP 경기 요약은 계속 조회할 수 있게 유지하고, 재생 입력과 전투 스냅샷은 경기 종료 후 90일이 지나면 정리한다.
 
+## Status: complete
+
 ## Confirmed Decisions
 - 저장 권위는 모델 2로 전환한다. 첫 서버 권위 필드는 XP/레벨, 골드/재료, 스테이지 보상 아이템/인벤토리, 클리어·해금 진행도다.
 - 오프라인 보상은 서버 확인 전까지 미검증 로컬 진행으로 남긴다. 로컬 게스트 세션도 같은 미검증 경계 안에 둔다.
@@ -15,9 +17,9 @@
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | PvP 요약과 90일 전투 페이로드를 분리하고 정리 timer를 추가한다. | [P01](../phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P01-pvp-retention/phase.md) |
-| P02 | `pending` | 결정적 보상 계산, 서버 프로필, 비용이 있는 프로필 명령과 원자적 스테이지 지급을 구현한다. | [P02](../phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/phase.md) |
-| P03 | `pending` | 계정별 검증 저장과 로컬 shadow를 분리하고 전투·마을 화면을 결과 계약에 연결한다. | [P03](../phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/phase.md) |
+| P01 | `done` | PvP 요약과 90일 전투 페이로드를 분리하고 정리 timer를 추가한다. | [P01](../phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P01-pvp-retention/phase.md) |
+| P02 | `done` | 결정적 보상 계산, 서버 프로필, 비용이 있는 프로필 명령과 원자적 스테이지 지급을 구현한다. | [P02](../phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/phase.md) |
+| P03 | `done` | 계정별 검증 저장과 로컬 shadow를 분리하고 전투·마을 화면을 결과 계약에 연결한다. | [P03](../phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/phase.md) |
 
 ## Ordering and Dependencies
 - P01-T01 schema/API 호환 작업이 P01-T02 cleanup timer보다 먼저다. cleanup은 새 child payload table과 요약 `Rated` 필드를 전제로 한다.

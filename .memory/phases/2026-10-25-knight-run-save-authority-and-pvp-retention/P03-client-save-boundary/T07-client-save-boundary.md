@@ -84,4 +84,4 @@ Task: T07-client-save-boundary
 - [x] 구현 완료
 - [x] 검증 통과
 - Validation: focused save/ranked/PvP/API client tests passed (81); root suite passed (186); Vite build passed.
-- commit: pending
+- commit: `1c2d612`

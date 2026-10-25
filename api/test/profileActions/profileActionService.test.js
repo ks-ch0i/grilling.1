@@ -163,23 +163,47 @@ function request(action, { id = actionId, revision = 1 } = {}) {
   return { actionId: id, expectedSaveRevision: revision, action };
 }
 
-test('equipping consumes only the canonical inventory item and returns it for client equipment state', async () => {
+test('equipping swaps the selected inventory item with the previously equipped canonical item', async () => {
   const harness = createHarness({ profile: { inventory: [] } });
   const item = makeItem(harness.state);
   const displacedItem = harness.state.equipment.helmet;
   const profile = { ...defaultRewardProfile(), inventory: [item], gold: 10 };
   harness.repository.profiles.set(harness.playerId, rowFromProfile(harness.playerId, profile));
-  const result = await harness.run(request({ type: 'equip-inventory-item', itemId: item.id }));
+  const result = await harness.run(request({
+    type: 'equip-inventory-item',
+    itemId: item.id,
+    expectedEquippedItemId:displacedItem.id,
+  }));
 
   assert.equal(result.status, 200);
   assert.equal(result.revision, 2);
   assert.equal(result.appliedRevision, 2);
   assert.deepEqual(result.consumedItem, item);
-  assert.deepEqual(result.state.inventory, []);
-  assert.deepEqual(result.state.equipment.helmet, displacedItem);
+  assert.deepEqual(result.state.inventory, [displacedItem]);
+  assert.deepEqual(result.state.equipment.helmet, item);
   assert.equal(harness.revision(), 2);
-  assert.equal(JSON.parse(harness.repository.profiles.get(harness.playerId).InventoryJson).length, 0);
-  assert.equal(harness.currentState().equipment.helmet.id, displacedItem.id);
+  assert.deepEqual(JSON.parse(harness.repository.profiles.get(harness.playerId).InventoryJson), [displacedItem]);
+  assert.equal(harness.currentState().equipment.helmet.id, item.id);
+});
+
+test('equipping rejects a stale replacement item without consuming the selected inventory gear', async () => {
+  const harness = createHarness();
+  const item = makeItem(harness.state);
+  harness.repository.profiles.set(harness.playerId, rowFromProfile(harness.playerId, {
+    ...defaultRewardProfile(), inventory:[item],
+  }));
+  const result = await harness.run(request({
+    type:'equip-inventory-item',
+    itemId:item.id,
+    expectedEquippedItemId:'stale-equipped-item',
+  }));
+
+  assert.equal(result.status, 409);
+  assert.equal(result.code, 'equipment-changed');
+  assert.equal(result.revision, 1);
+  assert.deepEqual(result.state.inventory, [item]);
+  assert.equal(harness.revision(), 1);
+  assert.deepEqual(harness.profile(), [item]);
 });
 
 for (const [rarity, expected] of Object.entries({ common: 1, uncommon: 2, rare: 4, unique: 8, legendary: 16 })) {

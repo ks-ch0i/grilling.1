@@ -14,6 +14,13 @@ test('validates and canonicalizes only the four supported profile commands', () 
     expectedSaveRevision: 7,
     action: { type: 'equip-inventory-item', itemId: 'gear-1' },
   });
+  assert.deepEqual(validateProfileAction({
+    actionId:validId,
+    expectedSaveRevision:7,
+    action:{ type:'equip-inventory-item', itemId:'gear-2', expectedEquippedItemId:null },
+  }).action, {
+    type:'equip-inventory-item', itemId:'gear-2', expectedEquippedItemId:null,
+  });
   for (const type of ['dismantle-inventory-item', 'equip-inventory-item']) {
     assert.equal(validateProfileAction({ actionId: validId, expectedSaveRevision: 1, action: { type, itemId: 'x' } }).action.type, type);
   }
@@ -34,6 +41,7 @@ test('rejects unrecognized commands, caller-supplied result fields and invalid i
     { actionId: validId, expectedSaveRevision: 1, action: { type: 'equip-inventory-item', itemId: '' } },
     { actionId: validId, expectedSaveRevision: 1, action: { type: 'equip-inventory-item', itemId: 'x'.repeat(129) } },
     { actionId: validId, expectedSaveRevision: 1, action: { type: 'equip-inventory-item', itemId: 'gear-1', inventory: [] } },
+    { actionId: validId, expectedSaveRevision: 1, action: { type: 'equip-inventory-item', itemId: 'gear-1', expectedEquippedItemId: 4 } },
   ];
   for (const body of invalidBodies) {
     assert.throws(() => validateProfileAction(body), ProfileActionValidationError);
