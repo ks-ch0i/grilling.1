@@ -4,10 +4,10 @@
 [마창기사 저장 권위 전환 및 PvP 상세 데이터 보관](./plans/2026-10-25-knight-run-save-authority-and-pvp-retention.md)
 
 ## Active Phase
-[P01 PvP 데이터 보관](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P01-pvp-retention/phase.md)
+[P02 authoritative rewards API](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/phase.md)
 
 ## Active Task
-[T02 PvP retention cleanup timer](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P01-pvp-retention/T02-pvp-retention-cleanup.md)
+[T03 deterministic stage rewards](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P02-authoritative-rewards-api/T03-deterministic-stage-rewards.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -27,10 +27,12 @@
 
 - P01-T01 complete: PvP summaries and replay payloads are separated; missing terminal payloads return 410. Focused tests: 25 passed; API suite: 104 passed.
 
+- P01-T02 complete: added daily bounded PvP payload and old pair-day cleanup. Focused cleanup tests: 12 passed; API suite: 116 passed; Function entry check passed.
+
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
 - 보류 위치: [P03 Azure 인프라 코드](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md), [T10 Azure 인프라 구성](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/T10-azure-infrastructure.md)
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-Read the active T02 blueprint and implement bounded cleanup for expired PvP payloads and UTC rated-pair rows.
+Read the active T03 blueprint and implement deterministic stage rewards from verified replay results.

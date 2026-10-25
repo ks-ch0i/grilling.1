@@ -78,4 +78,4 @@ Task: T01-pvp-payload-retention
 - [x] 구현 완료
 - [x] 검증 통과
 - Validation: focused PvP tests 25 passed; API suite 104 passed; migration contract passed.
-- commit: pending
+- commit: c4c85be
