@@ -1,6 +1,6 @@
 # Task: T03 마을 키보드 탐색
 
-## Status: pending
+## Status: done
 
 ## Goal
 마우스 없이도 TownScene의 주요 선택 항목과 동작 버튼을 키보드로 탐색하고 실행할 수 있게 한다. 포커스 위치를 화면에 표시해 현재 선택을 놓치지 않도록 한다.
@@ -53,16 +53,17 @@
   - src/game/ui/keyboardNavigation.js :: 테스트 대상; new
 
 ## Acceptance Criteria
-- [ ] TownScene에서 Tab/Shift+Tab 및 화살표 키로 활성 컨트롤과 표시된 아이템을 순환한다.
-- [ ] Enter/Space가 pointer action과 같은 결과를 내며 key repeat로 동작이 중복되지 않는다.
-- [ ] 포커스 테두리가 보이고 화면 refresh 뒤 오래된 target이 남지 않는다.
-- [ ] BattleScene의 A/D 이동과 기존 마우스·터치 조작은 바뀌지 않는다.
+- [x] TownScene에서 Tab/Shift+Tab 및 화살표 키로 활성 컨트롤과 표시된 아이템을 순환한다.
+- [x] Enter/Space가 pointer action과 같은 결과를 내며 key repeat로 동작이 중복되지 않는다.
+- [x] 포커스 테두리가 보이고 화면 refresh 뒤 오래된 target이 남지 않는다.
+- [x] BattleScene의 A/D 이동과 기존 마우스·터치 조작은 바뀌지 않는다.
 
 ## Validation
 - node --test test/keyboard-navigation.test.js — 키보드 순환 테스트 통과.
+- node --test test/keyboard-navigation.test.js — 키보드 순환, 비활성 타겟, 중복 활성화, reset/destroy 정리 통과.
 - npm test — 루트 테스트 전체 통과.
+- 브라우저 수동 확인은 사용 가능한 브라우저 surface가 없어 실행하지 못했다. 다른 Scene의 키 입력과 상호 영향이 없도록 TownScene에만 controller를 붙였고, 테스트와 Vite build로 검증했다.
 - npm run build — Vite production build 성공.
-- 브라우저 수동 확인 — TownScene 전 기능을 키보드로 선택·실행하고 BattleScene A/D 이동 확인.
 
 ## Commit Message
 ~~~text
@@ -77,6 +78,6 @@ Task: T03-town-keyboard-navigation
 ~~~
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- commit: recorded after task commit

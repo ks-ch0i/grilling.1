@@ -3,8 +3,9 @@ import { RARITY_COLOR } from '../data/balance.js';
 
 export function createButton(scene, { x, y, width, height, label, onClick, enabled = true }) {
   const container = scene.add.container(x, y).setScrollFactor(0);
+  const strokeColor = enabled ? 0x8392a2 : 0x535b64;
   const background = scene.add.rectangle(width / 2, height / 2, width, height, enabled ? 0x344355 : 0x252c35, 1);
-  background.setStrokeStyle(1, enabled ? 0x8392a2 : 0x535b64);
+  background.setStrokeStyle(1, strokeColor);
   const text = scene.add.text(width / 2, height / 2, label, {
     fontFamily: 'sans-serif',
     fontSize: '16px',
@@ -21,6 +22,14 @@ export function createButton(scene, { x, y, width, height, label, onClick, enabl
     container.on('pointerdown', onClick);
     container.on('pointerover', () => background.setFillStyle(0x455a70));
     container.on('pointerout', () => background.setFillStyle(0x344355));
+    if (scene.keyboardNavigation && typeof onClick === 'function') {
+      scene.keyboardNavigation.register(container, {
+        activate: onClick,
+        focus: () => background.setStrokeStyle(3, 0xffd166),
+        blur: () => background.setStrokeStyle(1, strokeColor),
+        enabled,
+      });
+    }
   } else {
     container.setAlpha(0.45);
   }

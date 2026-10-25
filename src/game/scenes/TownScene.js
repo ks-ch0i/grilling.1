@@ -3,6 +3,7 @@ import { BALANCE, GEAR_SLOT, RARITY_COLOR, getGearUpgradeBand } from '../data/ba
 import { createInitialState, equipGear, dismantleGear, upgradeGear, derivePlayerStats, getGearStatSummary, getGearUpgradeCost } from '../domain/gear.js';
 import { allocateStatPoint, getStatResetCost, resetStatPoints, stageId } from '../domain/progression.js';
 import { createButton, createPanel, drawRarityFrame } from '../ui/components.js';
+import { createKeyboardNavigation } from '../ui/keyboardNavigation.js';
 import {
   clampInventoryScrollRow,
   getDragScrollRow,
@@ -58,6 +59,7 @@ export class TownScene extends Phaser.Scene {
 
   create() {
     this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
+    this.keyboardNavigation = createKeyboardNavigation(this);
     this.inventoryInputHandlers = {
       wheel: (pointer, over, deltaX, deltaY) => {
         if (pointer.x >= 470 && pointer.x <= 900 && pointer.y >= 190 && pointer.y <= 600) {
@@ -115,6 +117,8 @@ export class TownScene extends Phaser.Scene {
         window.removeEventListener('offline', this.onlineHandler);
       }
       this.removeInventoryInputListeners();
+      this.keyboardNavigation?.destroy();
+      this.keyboardNavigation = null;
       this.pvpSearchTimer?.remove(false);
     });
   }
@@ -126,7 +130,18 @@ export class TownScene extends Phaser.Scene {
     this.inventoryTap = null;
     const itemId = getInventoryTapItemId(drag, tap, pointer, this.gameState.inventory);
     if (itemId === null) return;
+    this.selectInventoryItem(itemId);
+  }
+
+  selectInventoryItem(itemId) {
+    if (!this.gameState.inventory.some((item) => item.id === itemId)) return;
     this.selectedItem = { type:'inventory', id:itemId };
+    this.refresh();
+  }
+
+  selectEquipmentItem(itemId) {
+    const item = Object.values(this.gameState.equipment).find((candidate) => candidate?.id === itemId);
+    this.selectedItem = item ? { type:'equipment', id:item.id } : null;
     this.refresh();
   }
 
@@ -146,6 +161,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   refresh() {
+    this.keyboardNavigation?.reset();
     this.inventoryScrollRow = clampInventoryScrollRow(
       this.inventoryScrollRow,
       this.gameState.inventory.length,
@@ -213,14 +229,24 @@ export class TownScene extends Phaser.Scene {
       const y = 192 + index * 66;
       const card = this.add.rectangle(x + 194, y + 29, 388, 64, 0x263342);
       card.setStrokeStyle(1, 0x56687a);
+      let rarityFrame = null;
       this.add.text(x + 12, y + 7, SLOT_LABEL[slot] + ' · ' + (item ? RARITY_LABEL[item.rarity] : '비어 있음'), { fontFamily:'sans-serif', fontSize:'15px', color:item ? rarityHex(item.rarity) : '#9ba7b3' });
       if (item) {
         this.add.text(x + 12, y + 33, 'Lv.' + item.level + '  ' + getGearStatSummary(item).map(({key,value}) => STAT_LABEL[key] + ' +' + formatStat(key,value)).join('  '), { fontFamily:'sans-serif', fontSize:'12px', color:'#e6edf3' });
-        drawRarityFrame(this, x + 1, y - 2, 386, 62, item.rarity);
+        rarityFrame = drawRarityFrame(this, x + 1, y - 2, 386, 62, item.rarity);
       }
-      card.setInteractive(new Phaser.Geom.Rectangle(0,0,388,64), Phaser.Geom.Rectangle.Contains).on('pointerdown', () => {
-        this.selectedItem = item ? { type:'equipment', id:item.id } : null;
-        this.refresh();
+      const selectEquipment = () => this.selectEquipmentItem(item?.id);
+      card.setInteractive(new Phaser.Geom.Rectangle(0,0,388,64), Phaser.Geom.Rectangle.Contains).on('pointerdown', selectEquipment);
+      this.keyboardNavigation?.register(card, {
+        activate: selectEquipment,
+        focus: () => {
+          card.setStrokeStyle(3, 0xffd166);
+          rarityFrame?.setStrokeStyle(3, 0xffd166);
+        },
+        blur: () => {
+          card.setStrokeStyle(1, 0x56687a);
+          if (rarityFrame) rarityFrame.setStrokeStyle(2, RARITY_COLOR[item.rarity] ?? RARITY_COLOR.common);
+        },
       });
     });
   }
@@ -239,6 +265,7 @@ export class TownScene extends Phaser.Scene {
       card.setStrokeStyle(1, 0x596a7b);
       const label = this.add.text(x + 8, y + 5, SLOT_LABEL[item.slot] + ' · ' + RARITY_LABEL[item.rarity] + ' · Lv.' + item.level, { fontFamily:'sans-serif', fontSize:'13px', color:rarityHex(item.rarity) });
       const stats = this.add.text(x + 8, y + 27, getGearStatSummary(item).map(({key,value}) => STAT_LABEL[key] + ' +' + formatStat(key,value)).join(' / '), { fontFamily:'sans-serif', fontSize:'11px', color:'#e6edf3', wordWrap:{width:176} });
+      const rarityFrame = drawRarityFrame(this,x,y,192,74,item.rarity);
       const select = this.add.rectangle(x + 96, y + 37, 192, 74, 0xffffff, 0);
       select.setInteractive(new Phaser.Geom.Rectangle(0,0,192,74), Phaser.Geom.Rectangle.Contains)
         .on('pointerdown', (pointer) => {
@@ -251,7 +278,13 @@ export class TownScene extends Phaser.Scene {
             bottom: y + 74,
           };
         });
-      grid.add([card, drawRarityFrame(this,x,y,192,74,item.rarity),label,stats,select]);
+      const selectInventoryItem = () => this.selectInventoryItem(item.id);
+      this.keyboardNavigation?.register(select, {
+        activate: selectInventoryItem,
+        focus: () => rarityFrame.setStrokeStyle(3, 0xffd166),
+        blur: () => rarityFrame.setStrokeStyle(2, RARITY_COLOR[item.rarity] ?? RARITY_COLOR.common),
+      });
+      grid.add([card, rarityFrame,label,stats,select]);
     });
     this.add.text(596, 608, inventory.length > 10 ? '드래그 또는 마우스 휠로 보관함 스크롤' : '획득 장비는 이곳에 보관됩니다', { fontFamily:'sans-serif', fontSize:'12px', color:'#99a7b4' }).setOrigin(0, 1);
   }
@@ -360,6 +393,7 @@ export class TownScene extends Phaser.Scene {
 
   showPvpNotice({ title, message, actions = [] }) {
     this.refresh();
+    this.keyboardNavigation?.reset();
     const overlay = this.add.container(0, 0).setDepth(300);
     this.pvpOverlay = overlay;
     overlay.add(this.add.rectangle(640, 360, 540, 260, 0x090e14, 0.94).setStrokeStyle(2, 0xd8ba77));
@@ -373,6 +407,11 @@ export class TownScene extends Phaser.Scene {
       const label = this.add.text(x, 430, action.label, { fontFamily:'sans-serif', fontSize:'15px', color:'#fff3d5' }).setOrigin(0.5);
       button.setInteractive({ useHandCursor:true }).on('pointerdown', () => action.onClick());
       label.setInteractive({ useHandCursor:true }).on('pointerdown', () => action.onClick());
+      this.keyboardNavigation?.register(button, {
+        activate: action.onClick,
+        focus: () => button.setStrokeStyle(3, 0xffd166),
+        blur: () => button.setStrokeStyle(1, 0xd8ba77),
+      });
       overlay.add([button, label]);
     });
   }
@@ -386,6 +425,7 @@ export class TownScene extends Phaser.Scene {
     this.transitioning = true;
     this.pvpSearching = true;
     this.refresh();
+    this.keyboardNavigation?.reset();
     const startedAt = Date.now();
     const updateSearchText = () => {
       if (!this.pvpSearching || !this.pvpSearchLabel?.active) return;
