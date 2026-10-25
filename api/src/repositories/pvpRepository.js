@@ -6,9 +6,9 @@ function requestFor(connection) {
 }
 
 const MATCH_COLUMNS = `MatchId, Player1Id, Player2Id, Player1SnapshotRevision, Player2SnapshotRevision,
-  Player1SnapshotJson, Player2SnapshotJson, Seed, SimulatorVersion, BalanceVersion, InputJson, Outcome,
+  Seed, SimulatorVersion, BalanceVersion, Outcome,
   RatingBefore1, RatingBefore2, RatingAfter1, RatingAfter2, IssuedAtUtc, ExpiresAtUtc,
-  CompletedAtUtc, Status`;
+  CompletedAtUtc, Status, Rated`;
 const MATCH_OUTPUT_COLUMNS = MATCH_COLUMNS.split(',').map((column) => `inserted.${column.trim()}`).join(', ');
 
 export async function getPlayerSnapshot(connection, playerId, { lock = false } = {}) {
@@ -222,8 +222,6 @@ export async function createMatch(transaction, input) {
     .input('Player2Id', sql.UniqueIdentifier, input.player2Id)
     .input('Player1SnapshotRevision', sql.BigInt, input.player1SnapshotRevision)
     .input('Player2SnapshotRevision', sql.BigInt, input.player2SnapshotRevision)
-    .input('Player1SnapshotJson', sql.NVarChar(sql.MAX), player1Snapshot.SnapshotJson)
-    .input('Player2SnapshotJson', sql.NVarChar(sql.MAX), player2Snapshot.SnapshotJson)
     .input('Seed', sql.BigInt, input.seed)
     .input('SimulatorVersion', sql.Int, input.simulatorVersion)
     .input('BalanceVersion', sql.Int, input.balanceVersion)
@@ -234,15 +232,32 @@ export async function createMatch(transaction, input) {
     .query(`
       INSERT dbo.PvpMatches
         (MatchId, Player1Id, Player2Id, Player1SnapshotRevision, Player2SnapshotRevision,
-         Player1SnapshotJson, Player2SnapshotJson, Seed, SimulatorVersion, BalanceVersion,
+         Seed, SimulatorVersion, BalanceVersion,
          RatingBefore1, RatingBefore2, IssuedAtUtc, ExpiresAtUtc, Status)
       OUTPUT ${MATCH_OUTPUT_COLUMNS}
       VALUES
         (@MatchId, @Player1Id, @Player2Id, @Player1SnapshotRevision, @Player2SnapshotRevision,
-         @Player1SnapshotJson, @Player2SnapshotJson, @Seed, @SimulatorVersion, @BalanceVersion,
+         @Seed, @SimulatorVersion, @BalanceVersion,
          @RatingBefore1, @RatingBefore2, @IssuedAtUtc, @ExpiresAtUtc, N'issued');
     `);
-  return { kind: 'created', row: result.recordset?.[0] ?? null };
+  const row = result.recordset?.[0] ?? null;
+  if (!row) throw new Error('PvP match insert returned no summary row.');
+  await new sql.Request(transaction)
+    .input('MatchId', sql.UniqueIdentifier, input.matchId)
+    .input('Player1SnapshotJson', sql.NVarChar(sql.MAX), player1Snapshot.SnapshotJson)
+    .input('Player2SnapshotJson', sql.NVarChar(sql.MAX), player2Snapshot.SnapshotJson)
+    .query(`
+      INSERT dbo.PvpMatchPayloads (MatchId, Player1SnapshotJson, Player2SnapshotJson)
+      VALUES (@MatchId, @Player1SnapshotJson, @Player2SnapshotJson);
+    `);
+  return {
+    kind: 'created',
+    row: {
+      ...row,
+      Player1SnapshotJson: player1Snapshot.SnapshotJson,
+      Player2SnapshotJson: player2Snapshot.SnapshotJson,
+    },
+  };
 }
 
 async function selectMatch(connection, player1Id, matchId, { lock = false } = {}) {
@@ -251,9 +266,9 @@ async function selectMatch(connection, player1Id, matchId, { lock = false } = {}
     .input('Player1Id', sql.UniqueIdentifier, player1Id)
     .query(`
       SELECT m.${MATCH_COLUMNS.split(',').map((column) => column.trim()).join(', m.')},
-        CAST(CASE WHEN pd.MatchId IS NULL THEN 0 ELSE 1 END AS bit) AS Rated
+        payload.Player1SnapshotJson, payload.Player2SnapshotJson, payload.InputJson
       FROM dbo.PvpMatches AS m${lock ? ' WITH (UPDLOCK, HOLDLOCK)' : ''}
-      LEFT JOIN dbo.PvpRatedPairDays AS pd ON pd.MatchId = m.MatchId
+      LEFT JOIN dbo.PvpMatchPayloads AS payload ON payload.MatchId = m.MatchId
       WHERE m.MatchId = @MatchId AND m.Player1Id = @Player1Id;
     `);
   return result.recordset?.[0] ?? null;
@@ -277,13 +292,12 @@ export async function getMatchHistory(pool, playerId, { offset, limit }) {
           m.CompletedAtUtc,
           COALESCE(opponent.DisplayName, N'Adventurer') AS OpponentDisplayName,
           m.Outcome AS Outcome,
-          CAST(CASE WHEN rated.MatchId IS NULL THEN 0 ELSE 1 END AS bit) AS Rated,
+          m.Rated AS Rated,
           m.RatingBefore1 AS RatingBefore,
           m.RatingAfter1 AS RatingAfter,
           m.RatingAfter2 AS OpponentRatingAfter
         FROM dbo.PvpMatches AS m
         INNER JOIN dbo.Players AS opponent ON opponent.PlayerId = m.Player2Id
-        LEFT JOIN dbo.PvpRatedPairDays AS rated ON rated.MatchId = m.MatchId
         WHERE m.Player1Id = @PlayerId AND m.Status = N'completed'
 
         UNION ALL
@@ -293,13 +307,12 @@ export async function getMatchHistory(pool, playerId, { offset, limit }) {
           m.CompletedAtUtc,
           COALESCE(opponent.DisplayName, N'Adventurer') AS OpponentDisplayName,
           CASE m.Outcome WHEN N'win' THEN N'loss' WHEN N'loss' THEN N'win' ELSE m.Outcome END AS Outcome,
-          CAST(CASE WHEN rated.MatchId IS NULL THEN 0 ELSE 1 END AS bit) AS Rated,
+          m.Rated AS Rated,
           m.RatingBefore2 AS RatingBefore,
           m.RatingAfter2 AS RatingAfter,
           m.RatingAfter1 AS OpponentRatingAfter
         FROM dbo.PvpMatches AS m
         INNER JOIN dbo.Players AS opponent ON opponent.PlayerId = m.Player1Id
-        LEFT JOIN dbo.PvpRatedPairDays AS rated ON rated.MatchId = m.MatchId
         WHERE m.Player2Id = @PlayerId AND m.Status = N'completed'
       )
       SELECT MatchId, CompletedAtUtc, OpponentDisplayName, Outcome, Rated,
@@ -326,14 +339,25 @@ export async function rejectMatch(transaction, input) {
     await expireMatch(transaction, input.player1Id, input.matchId);
     return { kind: 'expired' };
   }
+  if (row.Player1SnapshotJson == null || row.Player2SnapshotJson == null) {
+    throw new Error('Issued PvP match has no retained snapshot payload.');
+  }
   await new sql.Request(transaction)
     .input('MatchId', sql.UniqueIdentifier, input.matchId)
     .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
     .input('InputJson', sql.NVarChar(sql.MAX), input.inputJson)
+    .query(`
+      UPDATE dbo.PvpMatchPayloads
+      SET InputJson = @InputJson
+      WHERE MatchId = @MatchId;
+    `);
+  await new sql.Request(transaction)
+    .input('MatchId', sql.UniqueIdentifier, input.matchId)
+    .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
     .input('CompletedAtUtc', sql.DateTime2, input.completedAtUtc)
     .query(`
       UPDATE dbo.PvpMatches
-      SET InputJson = @InputJson, Outcome = N'invalid', Status = N'rejected', CompletedAtUtc = @CompletedAtUtc
+      SET Outcome = N'invalid', Status = N'rejected', CompletedAtUtc = @CompletedAtUtc
       WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'issued';
     `);
   return { kind: 'rejected', row: await selectMatch(transaction, input.player1Id, input.matchId) };
@@ -348,6 +372,9 @@ export async function completeRatedMatch(transaction, input) {
   if (new Date(row.ExpiresAtUtc).getTime() <= input.completedAtUtc.getTime()) {
     await expireMatch(transaction, input.player1Id, input.matchId);
     return { kind: 'expired' };
+  }
+  if (row.Player1SnapshotJson == null || row.Player2SnapshotJson == null) {
+    throw new Error('Issued PvP match has no retained snapshot payload.');
   }
 
   const rating1 = await ensureRating(transaction, input.player1Id, input.completedAtUtc);
@@ -400,9 +427,17 @@ export async function completeRatedMatch(transaction, input) {
 
   await new sql.Request(transaction)
     .input('MatchId', sql.UniqueIdentifier, input.matchId)
-    .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
     .input('InputJson', sql.NVarChar(sql.MAX), input.inputJson)
+    .query(`
+      UPDATE dbo.PvpMatchPayloads
+      SET InputJson = @InputJson
+      WHERE MatchId = @MatchId;
+    `);
+  await new sql.Request(transaction)
+    .input('MatchId', sql.UniqueIdentifier, input.matchId)
+    .input('Player1Id', sql.UniqueIdentifier, input.player1Id)
     .input('Outcome', sql.NVarChar(16), input.outcome)
+    .input('Rated', sql.Bit, rated)
     .input('RatingBefore1', sql.Int, rating1)
     .input('RatingBefore2', sql.Int, rating2)
     .input('RatingAfter1', sql.Int, ratingAfter1)
@@ -410,7 +445,7 @@ export async function completeRatedMatch(transaction, input) {
     .input('CompletedAtUtc', sql.DateTime2, input.completedAtUtc)
     .query(`
       UPDATE dbo.PvpMatches
-      SET InputJson = @InputJson, Outcome = @Outcome,
+      SET Outcome = @Outcome, Rated = @Rated,
           RatingBefore1 = @RatingBefore1, RatingBefore2 = @RatingBefore2,
           RatingAfter1 = @RatingAfter1, RatingAfter2 = @RatingAfter2,
           CompletedAtUtc = @CompletedAtUtc, Status = N'completed'

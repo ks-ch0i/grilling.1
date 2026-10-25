@@ -8,6 +8,7 @@ const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.
 const migrationPath = path.join(apiRoot, 'migrations', '001-initial-schema.sql');
 const pvpVersionMigrationPath = path.join(apiRoot, 'migrations', '002-pvp-balance-version.sql');
 const pvpHistoryMigrationPath = path.join(apiRoot, 'migrations', '003-pvp-history-indexes.sql');
+const pvpPayloadMigrationPath = path.join(apiRoot, 'migrations', '004-pvp-payload-retention.sql');
 
 test('initial schema defines account, save, stage, snapshot and PvP contracts', () => {
   assert.ok(existsSync(migrationPath), 'the initial SQL migration must exist');
@@ -57,4 +58,15 @@ test('PvP history migration adds idempotent player-perspective completion indexe
   assert.match(sql, /IX_PvpMatches_Player2_Status_CompletedAt[\s\S]*?Player2Id,\s*Status,\s*CompletedAtUtc\s+DESC,\s*MatchId\s+DESC/i);
   assert.equal((sql.match(/SELECT 1 FROM sys\.indexes/gi) ?? []).length, 2);
   assert.match(sql, /INSERT dbo\.SchemaVersions \(Version, Name\) VALUES \(3, N'pvp-history-indexes'\)/i);
+});
+
+test('PvP payload migration preserves rated summaries and copies replay data before dropping old columns', () => {
+  assert.ok(existsSync(pvpPayloadMigrationPath), 'the PvP payload retention migration must exist');
+  const sql = readFileSync(pvpPayloadMigrationPath, 'utf8');
+  assert.match(sql, /ALTER TABLE dbo\.PvpMatches[\s\S]*?ADD Rated bit NOT NULL[\s\S]*?DEFAULT \(0\)/i);
+  assert.match(sql, /UPDATE match[\s\S]*?FROM dbo\.PvpMatches AS match[\s\S]*?JOIN dbo\.PvpRatedPairDays/i);
+  assert.match(sql, /CREATE TABLE dbo\.PvpMatchPayloads[\s\S]*?Player1SnapshotJson nvarchar\(max\) NOT NULL[\s\S]*?Player2SnapshotJson nvarchar\(max\) NOT NULL[\s\S]*?InputJson nvarchar\(max\) NULL/i);
+  assert.match(sql, /INSERT dbo\.PvpMatchPayloads[\s\S]*?FROM dbo\.PvpMatches/i);
+  assert.match(sql, /COUNT_BIG\(\*\)[\s\S]*?THROW[\s\S]*?ALTER TABLE dbo\.PvpMatches DROP COLUMN Player1SnapshotJson, Player2SnapshotJson, InputJson/i);
+  assert.match(sql, /VALUES \(4, N'pvp-payload-retention'\)/i);
 });

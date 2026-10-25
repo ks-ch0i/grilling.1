@@ -104,11 +104,12 @@ export function createPvpRepository({
   }
   const ratingRows = new Map(Object.entries(ratings).map(([id, rating]) => [id, { PlayerId: id, Rating: rating, UpdatedAtUtc: new Date(NOW) }]));
   const matches = new Map();
+  const payloads = new Map();
   const ratedPairs = new Map();
   const calls = { windows: [], creates: [], completes: [], snapshotWrites: [], expired: [], published: [] };
 
   return {
-    saves, snapshotRows, ratingRows, matches, ratedPairs, calls,
+    saves, snapshotRows, ratingRows, matches, payloads, ratedPairs, calls,
     async findPlayerIdByIdentity(_pool, identity) {
       return identityRows.get(`${identity.tenantId}/${identity.objectId}`) ?? null;
     },
@@ -197,12 +198,9 @@ export function createPvpRepository({
         Player2Id: input.player2Id,
         Player1SnapshotRevision: input.player1SnapshotRevision,
         Player2SnapshotRevision: input.player2SnapshotRevision,
-        Player1SnapshotJson: own.SnapshotJson,
-        Player2SnapshotJson: opponent.SnapshotJson,
         Seed: input.seed,
         SimulatorVersion: input.simulatorVersion,
         BalanceVersion: input.balanceVersion,
-        InputJson: null,
         Outcome: null,
         RatingBefore1: ownRating,
         RatingBefore2: opponentRating,
@@ -215,11 +213,27 @@ export function createPvpRepository({
         Rated: false,
       };
       matches.set(row.MatchId, row);
-      return { kind: 'created', row: structuredClone(row) };
+      payloads.set(row.MatchId, {
+        MatchId: row.MatchId,
+        Player1SnapshotJson: own.SnapshotJson,
+        Player2SnapshotJson: opponent.SnapshotJson,
+        InputJson: null,
+      });
+      return {
+        kind: 'created',
+        row: {
+          ...structuredClone(row),
+          Player1SnapshotJson: own.SnapshotJson,
+          Player2SnapshotJson: opponent.SnapshotJson,
+        },
+      };
     },
     async getMatchForPlayer(_pool, playerId, matchId) {
       const row = matches.get(matchId);
-      return row?.Player1Id === playerId ? structuredClone(row) : null;
+      const payload = payloads.get(matchId);
+      return row?.Player1Id === playerId
+        ? { ...structuredClone(row), ...structuredClone(payload ?? {}) }
+        : null;
     },
     async expireMatch(_transaction, playerId, matchId) {
       calls.expired.push({ playerId, matchId });
@@ -250,8 +264,8 @@ export function createPvpRepository({
           ratingRows.set(row.Player2Id, { PlayerId: row.Player2Id, Rating: after2, UpdatedAtUtc: input.completedAtUtc });
         }
       }
+      Object.assign(payloads.get(row.MatchId), { InputJson: input.inputJson });
       Object.assign(row, {
-        InputJson: input.inputJson,
         Outcome: input.outcome,
         RatingBefore1: r1,
         RatingBefore2: r2,
@@ -261,14 +275,15 @@ export function createPvpRepository({
         Status: 'completed',
         Rated: rated,
       });
-      return { kind: 'completed', row: structuredClone(row) };
+      return { kind: 'completed', row: { ...structuredClone(row), ...structuredClone(payloads.get(row.MatchId)) } };
     },
     async rejectMatch(_transaction, input) {
       const row = matches.get(input.matchId);
       if (!row || row.Player1Id !== input.player1Id) return { kind: 'not-found' };
       if (row.Status !== 'issued') return { kind: row.Status, row: structuredClone(row) };
-      Object.assign(row, { InputJson: input.inputJson, Outcome: 'invalid', CompletedAtUtc: input.completedAtUtc, Status: 'rejected' });
-      return { kind: 'rejected', row: structuredClone(row) };
+      Object.assign(payloads.get(row.MatchId), { InputJson: input.inputJson });
+      Object.assign(row, { Outcome: 'invalid', CompletedAtUtc: input.completedAtUtc, Status: 'rejected' });
+      return { kind: 'rejected', row: { ...structuredClone(row), ...structuredClone(payloads.get(row.MatchId)) } };
     },
     async getPvpTopFive() {
       return [...ratingRows.values()]
@@ -321,12 +336,9 @@ export function seedIssuedMatch(repository, {
     Player2Id: player2Id,
     Player1SnapshotRevision: 1,
     Player2SnapshotRevision: 1,
-    Player1SnapshotJson: JSON.stringify(makeSnapshot(playerSnapshot)),
-    Player2SnapshotJson: JSON.stringify(makeSnapshot(opponentSnapshot)),
     Seed: seed,
     SimulatorVersion: simulatorVersion,
     BalanceVersion: balanceVersion,
-    InputJson: null,
     Outcome: null,
     RatingBefore1: 1000,
     RatingBefore2: 1000,
@@ -339,5 +351,11 @@ export function seedIssuedMatch(repository, {
     Rated: false,
   };
   repository.matches.set(matchId, row);
+  repository.payloads.set(matchId, {
+    MatchId: matchId,
+    Player1SnapshotJson: JSON.stringify(makeSnapshot(playerSnapshot)),
+    Player2SnapshotJson: JSON.stringify(makeSnapshot(opponentSnapshot)),
+    InputJson: null,
+  });
   return row;
 }

@@ -63,7 +63,7 @@ test('issued match replay uses the frozen opponent snapshot after a later public
   const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: trace.inputs }, new Date('2026-10-21T02:01:00.000Z'), dependencies);
 
   assert.equal(result.outcome, 'win');
-  assert.equal(JSON.parse(repository.matches.get(MATCH_A).Player2SnapshotJson).revision, 1);
+  assert.equal(JSON.parse(repository.payloads.get(MATCH_A).Player2SnapshotJson).revision, 1);
 });
 
 test('draws consume the daily pair result without changing either Elo rating', async () => {
@@ -159,7 +159,6 @@ test('a completed v1 match is not replayed or rewritten by the v2 result service
   const row = seedIssuedMatch(repository, { simulatorVersion: 1, balanceVersion: 1 });
   Object.assign(row, {
     Status: 'completed',
-    InputJson: '[]',
     Outcome: 'win',
     RatingBefore1: 1000,
     RatingBefore2: 1000,
@@ -168,7 +167,13 @@ test('a completed v1 match is not replayed or rewritten by the v2 result service
     CompletedAtUtc: new Date('2026-10-21T02:01:00.000Z'),
     Rated: true,
   });
+  Object.assign(repository.payloads.get(MATCH_A), {
+    InputJson: '[]',
+    Player1SnapshotJson: JSON.stringify(makeSnapshot(strongCombat)),
+    Player2SnapshotJson: JSON.stringify(makeSnapshot(weakCombat)),
+  });
   const before = structuredClone(row);
+  const beforePayload = structuredClone(repository.payloads.get(MATCH_A));
   const beforeRatings = structuredClone([...repository.ratingRows.entries()]);
   const { submitPvpResult } = await loadPvpResultService();
 
@@ -177,6 +182,39 @@ test('a completed v1 match is not replayed or rewritten by the v2 result service
   assert.equal(result.status, 409);
   assert.equal(result.code, 'unsupported-simulator-version');
   assert.deepEqual(repository.matches.get(MATCH_A), before);
+  assert.deepEqual(repository.payloads.get(MATCH_A), beforePayload);
   assert.deepEqual([...repository.ratingRows.entries()], beforeRatings);
   assert.equal(repository.calls.completes.length, 0);
+});
+
+test('completed matches without retained replay payload return explicit expiry without replay', async () => {
+  const repository = createPvpRepository();
+  const row = seedIssuedMatch(repository);
+  row.Status = 'completed';
+  row.Outcome = 'win';
+  row.CompletedAtUtc = new Date('2026-10-21T02:01:00.000Z');
+  repository.payloads.delete(MATCH_A);
+  const beforeRatings = structuredClone([...repository.ratingRows.entries()]);
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:02:00.000Z'), createPvpDependencies(repository));
+
+  assert.deepEqual(result, { status: 410, code: 'match-payload-expired' });
+  assert.deepEqual([...repository.ratingRows.entries()], beforeRatings);
+  assert.equal(repository.calls.completes.length, 0);
+  assert.equal(repository.calls.expired.length, 0);
+});
+
+test('rejected matches without their stored input return explicit expiry', async () => {
+  const repository = createPvpRepository();
+  const row = seedIssuedMatch(repository);
+  row.Status = 'rejected';
+  row.Outcome = 'invalid';
+  row.CompletedAtUtc = new Date('2026-10-21T02:01:00.000Z');
+  repository.payloads.delete(MATCH_A);
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:02:00.000Z'), createPvpDependencies(repository));
+
+  assert.deepEqual(result, { status: 410, code: 'match-payload-expired' });
 });

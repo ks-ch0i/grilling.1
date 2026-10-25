@@ -1,13 +1,13 @@
 ﻿# Current Context
 
 ## Active Plan
-[마창기사 UX·PvP 기록 및 안정성 개선](./plans/2026-10-25-knight-run-follow-up-backlog.md)
+[마창기사 저장 권위 전환 및 PvP 상세 데이터 보관](./plans/2026-10-25-knight-run-save-authority-and-pvp-retention.md)
 
 ## Active Phase
-None (plan complete)
+[P01 PvP 데이터 보관](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P01-pvp-retention/phase.md)
 
 ## Active Task
-None (plan complete)
+[T02 PvP retention cleanup timer](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P01-pvp-retention/T02-pvp-retention-cleanup.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -21,7 +21,11 @@ None (plan complete)
 - P02-T07 PvP 데이터 보관 구조·선택지 결정안 완료: schema/repository/service 정적 대조. 운영 데이터 변경이나 cleanup은 수행하지 않음. Commit `71b7193`.
 - P03-T08 생성 기사 스프라이트 적용 완료: 20-frame transparent sheet, manifest, normal/ranked visuals. 루트 161 tests와 build 통과. Browser manual QA는 미실행. Commit `adf9c9d`.
 - P04-T09 저장 신뢰 경계 평가 완료: client-owned 저장의 구조 검증과 gameplay provenance를 구분하고, 세 권위 모델 및 단계별 권고안을 작성. 코드·스키마·저장 데이터·Azure 변경 없음. Commit `6cc4343`.
-- 4개 Phase, 9개 Task 전체 완료. 선택이 필요한 PvP 보관 기간은 결정 문서에 남아 있고, 저장 권위 전환은 사용자 선택 후 별도 계획으로 진행.
+- 이전 계획의 4개 Phase, 9개 Task 전체 완료. PvP 보관과 저장 권위 변경은 새 선택이 필요해 별도 후속 계획으로 넘겼고, 현재는 그 선택을 반영한 구현 계획을 시작한다.
+- 후속 구현 계획 확정: PvP 경기 요약은 무기한 보관하고 입력·전투 스냅샷은 terminal 시점부터 90일 보관한다. 온라인 검증 보상·진행도는 서버 권위로 전환하며, 오프라인 진행도와 기존 v2 보상값은 복구 가능한 미검증 로컬 데이터로 유지한다.
+- 현재 계획은 3개 도메인 Phase와 8개 Task로 구성한다. 이번 계획에서 코드·DB·저장 데이터·Azure 자원은 변경하지 않았다.
+
+- P01-T01 complete: PvP summaries and replay payloads are separated; missing terminal payloads return 410. Focused tests: 25 passed; API suite: 104 passed.
 
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
@@ -29,4 +33,4 @@ None (plan complete)
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-계획의 구현 작업은 완료했다. 다음은 `.memory/decisions/2026-10-25-knight-run-save-integrity-review.md`의 권위 모델·필드·오프라인 보상 정책과 `.memory/decisions/2026-10-25-pvp-data-retention.md`의 보관 선택을 확정한 뒤, 필요한 별도 계획을 만드는 것이다.
+Read the active T02 blueprint and implement bounded cleanup for expired PvP payloads and UTC rated-pair rows.

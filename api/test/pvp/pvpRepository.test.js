@@ -124,7 +124,8 @@ test('getMatchHistory returns player-perspective summaries and fetches one extra
     assert.match(mock.calls[0].statement, /RatingBefore2 AS RatingBefore[\s\S]*?RatingAfter2 AS RatingAfter[\s\S]*?RatingAfter1 AS OpponentRatingAfter/i);
     assert.match(mock.calls[0].statement, /ORDER BY CompletedAtUtc DESC, MatchId DESC[\s\S]*?OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY/i);
     assert.match(mock.calls[0].statement, /COALESCE\(opponent\.DisplayName, N'Adventurer'\)/i);
-    assert.match(mock.calls[0].statement, /PvpRatedPairDays AS rated ON rated\.MatchId = m\.MatchId/i);
+    assert.match(mock.calls[0].statement, /m\.Rated AS Rated/i);
+    assert.doesNotMatch(mock.calls[0].statement, /PvpRatedPairDays AS rated/i);
     assert.doesNotMatch(mock.calls[0].statement, /SnapshotJson|InputJson|\bSeed\b|TenantId|ObjectId/i);
   } finally {
     mock.restore();
@@ -157,8 +158,9 @@ test('createMatch rechecks both locked snapshot versions and inserts a versioned
     if (/UPDATE dbo\.PvpMatches[\s\S]*Status = N'expired'/i.test(statement)) return { recordset: [] };
     if (/FROM dbo\.PvpMatches WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) return { recordset: [] };
     if (/INSERT dbo\.PvpMatches/i.test(statement)) {
-      return { recordset: [{ MatchId: MATCH_ID, SimulatorVersion: 2, BalanceVersion: 2 }] };
+      return { recordset: [{ MatchId: MATCH_ID, SimulatorVersion: 2, BalanceVersion: 2, Rated: false }] };
     }
+    if (/INSERT dbo\.PvpMatchPayloads/i.test(statement)) return { recordset: [] };
     throw new Error(`Unexpected SQL in PvP repository test: ${statement}`);
   });
 
@@ -181,12 +183,35 @@ test('createMatch rechecks both locked snapshot versions and inserts a versioned
     const snapshotRead = mock.calls.find((call) => /FROM dbo\.PlayerSnapshots WITH/i.test(call.statement));
     const staleMatchCleanup = mock.calls.find((call) => /UPDATE dbo\.PvpMatches[\s\S]*Status = N'expired'/i.test(call.statement));
     const matchInsert = mock.calls.find((call) => /INSERT dbo\.PvpMatches/i.test(call.statement));
+    const payloadInsert = mock.calls.find((call) => /INSERT dbo\.PvpMatchPayloads/i.test(call.statement));
     assert.equal(write.kind, 'created');
+    assert.equal(write.row.Player1SnapshotJson, SNAPSHOT_A);
+    assert.equal(write.row.Player2SnapshotJson, SNAPSHOT_B);
     assert.match(snapshotRead.statement, /BalanceVersion/i);
     assert.equal(staleMatchCleanup.parameters.BalanceVersion, 2);
     assert.equal(staleMatchCleanup.parameters.SimulatorVersion, 2);
     assert.equal(matchInsert.parameters.BalanceVersion, 2);
     assert.match(matchInsert.statement, /SimulatorVersion,\s*BalanceVersion/i);
+    assert.doesNotMatch(matchInsert.statement, /SnapshotJson|InputJson/i);
+    assert.equal(payloadInsert.parameters.Player1SnapshotJson, SNAPSHOT_A);
+    assert.equal(payloadInsert.parameters.Player2SnapshotJson, SNAPSHOT_B);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('getMatchForPlayer loads summary rating and nullable replay payload from the child table', async () => {
+  const mock = mockRequests(async () => ({ recordset: [{ MatchId: MATCH_ID, Rated: true, InputJson: null }] }));
+  try {
+    const repository = await loadRepository();
+    const row = await repository.getMatchForPlayer(mock, PLAYER_A, MATCH_ID);
+
+    assert.equal(row.Rated, true);
+    assert.equal(row.InputJson, null);
+    assert.match(mock.calls[0].statement, /LEFT JOIN dbo\.PvpMatchPayloads AS payload ON payload\.MatchId = m\.MatchId/i);
+    assert.match(mock.calls[0].statement, /payload\.Player1SnapshotJson, payload\.Player2SnapshotJson, payload\.InputJson/i);
+    assert.match(mock.calls[0].statement, /m\.Rated/i);
+    assert.doesNotMatch(mock.calls[0].statement, /PvpRatedPairDays AS pd/i);
   } finally {
     mock.restore();
   }
@@ -221,6 +246,120 @@ test('createMatch rejects a snapshot version changed after candidate search befo
 
     assert.equal(write.kind, 'snapshot-changed');
     assert.equal(mock.calls.length, 2);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('completeRatedMatch writes input to payload and rated marker to the summary in one transaction', async () => {
+  let status = 'issued';
+  let rated = false;
+  let inputJson = null;
+  const rowForSelect = () => ({
+    MatchId: MATCH_ID,
+    Player1Id: PLAYER_A,
+    Player2Id: PLAYER_B,
+    Player1SnapshotRevision: 1,
+    Player2SnapshotRevision: 1,
+    Player1SnapshotJson: SNAPSHOT_A,
+    Player2SnapshotJson: SNAPSHOT_B,
+    Seed: 123456,
+    SimulatorVersion: 2,
+    BalanceVersion: 2,
+    InputJson: inputJson,
+    Outcome: status === 'completed' ? 'win' : null,
+    RatingBefore1: 1000,
+    RatingBefore2: 1000,
+    RatingAfter1: status === 'completed' ? 1016 : null,
+    RatingAfter2: status === 'completed' ? 984 : null,
+    IssuedAtUtc: new Date('2026-10-22T00:00:00.000Z'),
+    ExpiresAtUtc: new Date('2026-10-22T00:10:00.000Z'),
+    CompletedAtUtc: status === 'completed' ? new Date('2026-10-22T00:01:00.000Z') : null,
+    Status: status,
+    Rated: rated,
+  });
+  const mock = mockRequests(async ({ statement, parameters }) => {
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m/i.test(statement)) return { recordset: [rowForSelect()] };
+    if (/SELECT PlayerId[\s\S]*FROM dbo\.Players WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ PlayerId: PLAYER_A }, { PlayerId: PLAYER_B }] };
+    }
+    if (/IF NOT EXISTS[\s\S]*dbo\.PvpRatings/i.test(statement)) return { recordset: [] };
+    if (/SELECT Rating FROM dbo\.PvpRatings/i.test(statement)) return { recordset: [{ Rating: 1000 }] };
+    if (/SELECT TOP \(1\) MatchId[\s\S]*FROM dbo\.PvpRatedPairDays/i.test(statement)) return { recordset: [] };
+    if (/INSERT dbo\.PvpRatedPairDays/i.test(statement)) return { recordset: [] };
+    if (/UPDATE dbo\.PvpRatings/i.test(statement)) return { recordset: [] };
+    if (/UPDATE dbo\.PvpMatchPayloads/i.test(statement)) {
+      inputJson = parameters.InputJson;
+      return { recordset: [] };
+    }
+    if (/UPDATE dbo\.PvpMatches/i.test(statement)) {
+      status = 'completed';
+      rated = parameters.Rated;
+      assert.doesNotMatch(statement, /InputJson/i);
+      return { recordset: [] };
+    }
+    throw new Error(`Unexpected SQL in PvP completion test: ${statement}`);
+  });
+
+  try {
+    const repository = await loadRepository();
+    const result = await repository.completeRatedMatch(mock, {
+      player1Id: PLAYER_A,
+      player2Id: PLAYER_B,
+      matchId: MATCH_ID,
+      inputJson: '[{"tick":0,"kind":"move","value":1}]',
+      outcome: 'win',
+      completedAtUtc: new Date('2026-10-22T00:01:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'completed');
+    assert.equal(result.row.Rated, true);
+    assert.equal(result.row.InputJson, inputJson);
+    assert.equal(mock.calls.find((call) => /UPDATE dbo\.PvpMatchPayloads/i.test(call.statement)).parameters.InputJson, inputJson);
+    assert.equal(mock.calls.find((call) => /UPDATE dbo\.PvpMatches/i.test(call.statement)).parameters.Rated, true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('rejectMatch stores invalid input in payload and terminal status in summary', async () => {
+  let status = 'issued';
+  let inputJson = null;
+  const mock = mockRequests(async ({ statement, parameters }) => {
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m/i.test(statement)) {
+      return { recordset: [{
+        MatchId: MATCH_ID, Player1Id: PLAYER_A, Player2Id: PLAYER_B,
+        Player1SnapshotJson: SNAPSHOT_A, Player2SnapshotJson: SNAPSHOT_B,
+        ExpiresAtUtc: new Date('2026-10-22T00:10:00.000Z'), Status: status,
+        Outcome: status === 'rejected' ? 'invalid' : null,
+        InputJson: inputJson, Rated: false,
+      }] };
+    }
+    if (/UPDATE dbo\.PvpMatchPayloads/i.test(statement)) {
+      inputJson = parameters.InputJson;
+      return { recordset: [] };
+    }
+    if (/UPDATE dbo\.PvpMatches/i.test(statement)) {
+      status = 'rejected';
+      assert.doesNotMatch(statement, /InputJson/i);
+      return { recordset: [] };
+    }
+    throw new Error(`Unexpected SQL in PvP rejection test: ${statement}`);
+  });
+
+  try {
+    const repository = await loadRepository();
+    const result = await repository.rejectMatch(mock, {
+      player1Id: PLAYER_A,
+      matchId: MATCH_ID,
+      inputJson: '[]',
+      completedAtUtc: new Date('2026-10-22T00:01:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'rejected');
+    assert.equal(result.row.Status, 'rejected');
+    assert.equal(result.row.InputJson, '[]');
+    assert.equal(mock.calls.find((call) => /UPDATE dbo\.PvpMatchPayloads/i.test(call.statement)).parameters.InputJson, '[]');
   } finally {
     mock.restore();
   }

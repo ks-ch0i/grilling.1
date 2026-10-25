@@ -108,6 +108,13 @@ export async function submitPvpResult(pool, identity, matchId, body, receivedAtU
   const row = await deps.repository.getMatchForPlayer(pool, playerId, matchId);
   if (!row) return { status: 404, code: 'match-not-found' };
   if (row.Status === 'expired') return { status: 410, code: 'match-expired' };
+  if (['completed', 'rejected'].includes(row.Status) &&
+      (row.InputJson == null || row.Player1SnapshotJson == null || row.Player2SnapshotJson == null)) {
+    return { status: 410, code: 'match-payload-expired' };
+  }
+  if (row.Status === 'issued' && (row.Player1SnapshotJson == null || row.Player2SnapshotJson == null)) {
+    return { status: 409, code: 'match-not-available' };
+  }
   if (row.Status === 'rejected') {
     return row.InputJson === inputJson
       ? { status: 422, code: 'invalid-match-result', outcome: row.Outcome }
