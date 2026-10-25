@@ -97,6 +97,52 @@ test('candidate query excludes snapshots outside the requested balance version',
   }
 });
 
+test('getMatchHistory returns player-perspective summaries and fetches one extra row', async () => {
+  const rows = [{
+    MatchId: MATCH_ID,
+    CompletedAtUtc: new Date('2026-10-21T02:00:00.000Z'),
+    OpponentDisplayName: 'Opponent',
+    Outcome: 'loss',
+    Rated: true,
+    RatingBefore: 1000,
+    RatingAfter: 984,
+    OpponentRatingAfter: 1016,
+  }];
+  const mock = mockRequests(async () => ({ recordset: rows }));
+  try {
+    const repository = await loadRepository();
+    const result = await repository.getMatchHistory(mock, PLAYER_B, { offset: 10, limit: 10 });
+
+    assert.deepEqual(result, rows);
+    assert.equal(mock.calls[0].parameters.PlayerId, PLAYER_B);
+    assert.equal(mock.calls[0].parameters.Offset, 10);
+    assert.equal(mock.calls[0].parameters.Limit, 11);
+    assert.match(mock.calls[0].statement, /UNION ALL/i);
+    assert.match(mock.calls[0].statement, /m\.Player1Id\s*=\s*@PlayerId[\s\S]*?m\.Status\s*=\s*N'completed'/i);
+    assert.match(mock.calls[0].statement, /m\.Player2Id\s*=\s*@PlayerId[\s\S]*?m\.Status\s*=\s*N'completed'/i);
+    assert.match(mock.calls[0].statement, /WHEN N'win' THEN N'loss' WHEN N'loss' THEN N'win'/i);
+    assert.match(mock.calls[0].statement, /RatingBefore2 AS RatingBefore[\s\S]*?RatingAfter2 AS RatingAfter[\s\S]*?RatingAfter1 AS OpponentRatingAfter/i);
+    assert.match(mock.calls[0].statement, /ORDER BY CompletedAtUtc DESC, MatchId DESC[\s\S]*?OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY/i);
+    assert.match(mock.calls[0].statement, /COALESCE\(opponent\.DisplayName, N'Adventurer'\)/i);
+    assert.match(mock.calls[0].statement, /PvpRatedPairDays AS rated ON rated\.MatchId = m\.MatchId/i);
+    assert.doesNotMatch(mock.calls[0].statement, /SnapshotJson|InputJson|\bSeed\b|TenantId|ObjectId/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('getMatchHistory rejects unsafe paging values', async () => {
+  const mock = mockRequests(async () => ({ recordset: [] }));
+  try {
+    const repository = await loadRepository();
+    await assert.rejects(repository.getMatchHistory(mock, PLAYER_A, { offset: -1, limit: 10 }), RangeError);
+    await assert.rejects(repository.getMatchHistory(mock, PLAYER_A, { offset: 0, limit: 0 }), RangeError);
+    assert.equal(mock.calls.length, 0);
+  } finally {
+    mock.restore();
+  }
+});
+
 test('createMatch rechecks both locked snapshot versions and inserts a versioned match ticket', async () => {
   const snapshotRows = [
     { PlayerId: PLAYER_A, Revision: 3, SnapshotJson: SNAPSHOT_A, BalanceVersion: 2 },

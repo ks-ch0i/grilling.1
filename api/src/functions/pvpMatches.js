@@ -2,7 +2,7 @@ import { createPvpHandlers } from './pvp.js';
 
 export function createPvpMatchHandlers(dependencies = {}) {
   const handlers = createPvpHandlers(dependencies);
-  return { search: handlers.search, submit: handlers.submit, topFive: handlers.topFive };
+  return { search: handlers.search, submit: handlers.submit, topFive: handlers.topFive, history: handlers.history };
 }
 
 export function registerPvpMatchFunctions(app, dependencies = {}) {
@@ -18,6 +18,12 @@ export function registerPvpMatchFunctions(app, dependencies = {}) {
     authLevel: 'anonymous',
     route: 'pvp/matches/{matchId}/result',
     handler: handlers.submit,
+  });
+  app.http('pvpMatchHistory', {
+    methods: ['GET'],
+    authLevel: 'anonymous',
+    route: 'pvp/matches/history',
+    handler: handlers.history,
   });
   app.http('pvpRankingTop', {
     methods: ['GET'],

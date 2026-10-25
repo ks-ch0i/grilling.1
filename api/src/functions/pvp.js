@@ -12,7 +12,7 @@ import {
 } from '../domain/pvpRating.js';
 import { createMatchmakingService } from '../services/matchmakingService.js';
 import { createPlayerSnapshotService } from '../services/playerSnapshotService.js';
-import { createPvpResultService } from '../services/pvpResultService.js';
+import { createPvpResultService, MAX_PVP_HISTORY_PAGE } from '../services/pvpResultService.js';
 import { buildRankingSnapshot } from '../services/rankingEvents.js';
 
 const MAX_SMALL_REQUEST_BYTES = 16 * 1024;
@@ -87,6 +87,14 @@ function responseForResult(result) {
 function matchIdFrom(request, context) {
   if (typeof context?.params?.matchId === 'string') return context.params.matchId;
   return /\/pvp\/matches\/([^/]+)\/result\/?$/.exec(new URL(request.url).pathname)?.[1] ?? '';
+}
+
+function historyPageFrom(request) {
+  const values = new URL(request.url).searchParams.getAll('page');
+  if (values.length === 0) return 1;
+  if (values.length !== 1 || !/^[1-9][0-9]*$/.test(values[0])) return null;
+  const page = Number(values[0]);
+  return Number.isSafeInteger(page) && page <= MAX_PVP_HISTORY_PAGE ? page : null;
 }
 
 export function createPvpHandlers({
@@ -177,5 +185,10 @@ export function createPvpHandlers({
     },
     topFive: (request, context = {}) => withUser(request, context, async (_identity, getPool) =>
       jsonResponse(200, buildRankingSnapshot('pvp', await resultService.getPvpTopFive(await getPool()), clock()))),
+    history: (request, context = {}) => withUser(request, context, async (identity, getPool) => {
+      const page = historyPageFrom(request);
+      if (page === null) return jsonResponse(400, { code: 'invalid-history-page' });
+      return responseForResult(await resultService.getPlayerMatchHistory(await getPool(), identity, page));
+    }),
   };
 }

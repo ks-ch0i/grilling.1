@@ -263,6 +263,54 @@ export async function getMatchForPlayer(pool, player1Id, matchId) {
   return selectMatch(pool, player1Id, matchId);
 }
 
+export async function getMatchHistory(pool, playerId, { offset, limit }) {
+  if (!Number.isSafeInteger(offset) || offset < 0) throw new RangeError('Match-history offset must be a non-negative safe integer.');
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Match-history limit must be between 1 and 100.');
+  const result = await pool.request()
+    .input('PlayerId', sql.UniqueIdentifier, playerId)
+    .input('Offset', sql.Int, offset)
+    .input('Limit', sql.Int, limit + 1)
+    .query(`
+      WITH PlayerMatchHistory AS (
+        SELECT
+          m.MatchId,
+          m.CompletedAtUtc,
+          COALESCE(opponent.DisplayName, N'Adventurer') AS OpponentDisplayName,
+          m.Outcome AS Outcome,
+          CAST(CASE WHEN rated.MatchId IS NULL THEN 0 ELSE 1 END AS bit) AS Rated,
+          m.RatingBefore1 AS RatingBefore,
+          m.RatingAfter1 AS RatingAfter,
+          m.RatingAfter2 AS OpponentRatingAfter
+        FROM dbo.PvpMatches AS m
+        INNER JOIN dbo.Players AS opponent ON opponent.PlayerId = m.Player2Id
+        LEFT JOIN dbo.PvpRatedPairDays AS rated ON rated.MatchId = m.MatchId
+        WHERE m.Player1Id = @PlayerId AND m.Status = N'completed'
+
+        UNION ALL
+
+        SELECT
+          m.MatchId,
+          m.CompletedAtUtc,
+          COALESCE(opponent.DisplayName, N'Adventurer') AS OpponentDisplayName,
+          CASE m.Outcome WHEN N'win' THEN N'loss' WHEN N'loss' THEN N'win' ELSE m.Outcome END AS Outcome,
+          CAST(CASE WHEN rated.MatchId IS NULL THEN 0 ELSE 1 END AS bit) AS Rated,
+          m.RatingBefore2 AS RatingBefore,
+          m.RatingAfter2 AS RatingAfter,
+          m.RatingAfter1 AS OpponentRatingAfter
+        FROM dbo.PvpMatches AS m
+        INNER JOIN dbo.Players AS opponent ON opponent.PlayerId = m.Player1Id
+        LEFT JOIN dbo.PvpRatedPairDays AS rated ON rated.MatchId = m.MatchId
+        WHERE m.Player2Id = @PlayerId AND m.Status = N'completed'
+      )
+      SELECT MatchId, CompletedAtUtc, OpponentDisplayName, Outcome, Rated,
+        RatingBefore, RatingAfter, OpponentRatingAfter
+      FROM PlayerMatchHistory
+      ORDER BY CompletedAtUtc DESC, MatchId DESC
+      OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;
+    `);
+  return result.recordset ?? [];
+}
+
 export async function expireMatch(transaction, player1Id, matchId) {
   await new sql.Request(transaction)
     .input('MatchId', sql.UniqueIdentifier, matchId)

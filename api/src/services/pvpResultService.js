@@ -26,6 +26,55 @@ function dependenciesWithDefaults(dependencies = {}) {
   };
 }
 
+export const PVP_HISTORY_PAGE_SIZE = 10;
+export const MAX_PVP_HISTORY_PAGE = 100_000;
+
+function historyItemFrom(row) {
+  const completedAt = row.CompletedAtUtc instanceof Date ? row.CompletedAtUtc : new Date(row.CompletedAtUtc);
+  const outcome = String(row.Outcome ?? '').toLowerCase();
+  const ratingBefore = Number(row.RatingBefore);
+  const ratingAfter = Number(row.RatingAfter);
+  const opponentRatingAfter = Number(row.OpponentRatingAfter);
+  if (!Number.isFinite(completedAt.getTime()) || !['win', 'loss', 'draw'].includes(outcome) ||
+      !Number.isSafeInteger(ratingBefore) || !Number.isSafeInteger(ratingAfter) ||
+      !Number.isSafeInteger(opponentRatingAfter)) {
+    throw new TypeError('PvP match history row is invalid.');
+  }
+  return {
+    matchId: String(row.MatchId),
+    completedAtUtc: completedAt.toISOString(),
+    opponentDisplayName: row.OpponentDisplayName ?? 'Adventurer',
+    outcome,
+    rated: Boolean(row.Rated),
+    ratingBefore,
+    ratingAfter,
+    opponentRatingAfter,
+  };
+}
+
+export async function getPlayerMatchHistory(pool, identity, page, dependencies) {
+  if (!Number.isSafeInteger(page) || page < 1 || page > MAX_PVP_HISTORY_PAGE) {
+    return { status: 400, code: 'invalid-history-page' };
+  }
+  const { repository } = dependenciesWithDefaults(dependencies);
+  const playerId = await repository.findPlayerIdByIdentity(pool, identity);
+  if (!playerId) {
+    return { status: 200, page, pageSize: PVP_HISTORY_PAGE_SIZE, hasPrevious: false, hasNext: false, items: [] };
+  }
+  const rows = await repository.getMatchHistory(pool, playerId, {
+    offset: (page - 1) * PVP_HISTORY_PAGE_SIZE,
+    limit: PVP_HISTORY_PAGE_SIZE,
+  });
+  return {
+    status: 200,
+    page,
+    pageSize: PVP_HISTORY_PAGE_SIZE,
+    hasPrevious: page > 1,
+    hasNext: rows.length > PVP_HISTORY_PAGE_SIZE,
+    items: rows.slice(0, PVP_HISTORY_PAGE_SIZE).map(historyItemFrom),
+  };
+}
+
 function parseJson(value) {
   return typeof value === 'string' ? JSON.parse(value) : value;
 }
@@ -185,6 +234,8 @@ export function createPvpResultService(dependencies = {}) {
   return {
     submitPvpResult: (pool, identity, matchId, body, receivedAtUtc) =>
       submitPvpResult(pool, identity, matchId, body, receivedAtUtc, dependencies),
+    getPlayerMatchHistory: (pool, identity, page) =>
+      getPlayerMatchHistory(pool, identity, page, dependencies),
     getPvpTopFive: (pool) => getPvpTopFive(pool, dependencies),
     getPlayerRank: (pool, identity) => getPlayerPvpRank(pool, identity, dependencies),
   };

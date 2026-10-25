@@ -7,6 +7,7 @@ import { test } from 'node:test';
 const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const migrationPath = path.join(apiRoot, 'migrations', '001-initial-schema.sql');
 const pvpVersionMigrationPath = path.join(apiRoot, 'migrations', '002-pvp-balance-version.sql');
+const pvpHistoryMigrationPath = path.join(apiRoot, 'migrations', '003-pvp-history-indexes.sql');
 
 test('initial schema defines account, save, stage, snapshot and PvP contracts', () => {
   assert.ok(existsSync(migrationPath), 'the initial SQL migration must exist');
@@ -47,4 +48,13 @@ test('PvP balance-version migration labels existing data as v1 and records schem
   assert.match(sql, /CK_PvpMatches_BalanceVersion[^;]*BalanceVersion\s*>=\s*1/i);
   assert.match(sql, /INSERT\s+dbo\.SchemaVersions\s*\(Version,\s*Name\)[\s\S]*?\b2\b/i);
   assert.match(sql, /IF\s+NOT\s+EXISTS[\s\S]*?Version\s*=\s*2/i);
+});
+
+test('PvP history migration adds idempotent player-perspective completion indexes', () => {
+  assert.ok(existsSync(pvpHistoryMigrationPath), 'the PvP history indexes migration must exist');
+  const sql = readFileSync(pvpHistoryMigrationPath, 'utf8');
+  assert.match(sql, /IX_PvpMatches_Player1_Status_CompletedAt[\s\S]*?Player1Id,\s*Status,\s*CompletedAtUtc\s+DESC,\s*MatchId\s+DESC/i);
+  assert.match(sql, /IX_PvpMatches_Player2_Status_CompletedAt[\s\S]*?Player2Id,\s*Status,\s*CompletedAtUtc\s+DESC,\s*MatchId\s+DESC/i);
+  assert.equal((sql.match(/SELECT 1 FROM sys\.indexes/gi) ?? []).length, 2);
+  assert.match(sql, /INSERT dbo\.SchemaVersions \(Version, Name\) VALUES \(3, N'pvp-history-indexes'\)/i);
 });
