@@ -3,6 +3,7 @@ import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as pvpRepository from '../repositories/pvpRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
 import { parseCloudSave } from '../domain/cloudSave.js';
+import { parseRewardProfile } from '../domain/playerProfile.js';
 import { BALANCE_VERSION } from '../domain/gameVersions.js';
 import {
   buildSnapshotContent,
@@ -52,7 +53,10 @@ export async function publishSnapshot(pool, identity, body, dependencies) {
       ? await deps.repository.getCloudSaveForUpdate(transaction, playerId)
       : await deps.repository.getByPlayerId(pool, playerId);
     if (!saveRow) return { kind: 'missing-save' };
-    const save = parseCloudSave(saveRow);
+    const profileRow = saveRow.RewardProfile ?? await deps.repository.getRewardProfileByPlayerId?.(
+      transaction, playerId, { lock: true },
+    );
+    const save = parseCloudSave(saveRow, parseRewardProfile(profileRow));
     if (save.revision !== request.expectedSaveRevision) {
       return { kind: 'revision-mismatch', currentRevision: save.revision };
     }

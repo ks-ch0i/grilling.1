@@ -31,6 +31,26 @@ test('publishSnapshot derives the public snapshot from the matching cloud save r
   assert.equal(repository.calls.published.length, 1);
 });
 
+test('publishSnapshot uses the server reward level and keeps client-owned combat stats', async () => {
+  const repository = createPvpRepository({ snapshots: { [PLAYER_A]: null } });
+  const row = repository.saves.get(PLAYER_A);
+  const state = JSON.parse(row.SaveJson);
+  state.player.level = 90;
+  state.player.baseStats.attack = 77;
+  repository.saves.set(PLAYER_A, {
+    ...row,
+    SaveJson: JSON.stringify(state),
+    RewardProfile: { ...row.RewardProfile, Level: 5 },
+  });
+  const { publishSnapshot } = await loadSnapshotService();
+
+  const result = await publishSnapshot({}, identityA, { expectedSaveRevision: 7 }, createPvpDependencies(repository));
+
+  assert.equal(result.status, 200);
+  assert.equal(result.snapshot.character.level, 5);
+  assert.equal(result.snapshot.character.baseStats.attack, 77);
+});
+
 test('publishing unchanged combat content upgrades an existing v1 snapshot to balance version 2', async () => {
   const repository = createPvpRepository();
   repository.snapshotRows.get(PLAYER_A).BalanceVersion = 1;

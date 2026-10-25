@@ -1,4 +1,12 @@
 import sql from 'mssql';
+import {
+  createRewardProfile,
+  getLegacySaveArchiveByPlayerId,
+  getRewardProfileByPlayerId,
+  updateRewardProfile,
+} from './playerProfileRepository.js';
+
+export { createRewardProfile, getLegacySaveArchiveByPlayerId, getRewardProfileByPlayerId, updateRewardProfile };
 
 const GUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -69,8 +77,52 @@ export async function getByPlayerId(pool, playerId) {
   const result = await pool.request()
     .input('PlayerId', sql.UniqueIdentifier, playerId)
     .query(`
+      SELECT save.SchemaVersion, save.Revision, save.SaveJson, save.UpdatedAtUtc,
+        profile.PlayerId AS RewardProfilePlayerId, profile.Level AS ProfileLevel,
+        profile.Xp AS ProfileXp, profile.XpToNext AS ProfileXpToNext,
+        profile.PendingLevelUps AS ProfilePendingLevelUps, profile.Gold AS ProfileGold,
+        profile.Materials AS ProfileMaterials, profile.InventoryJson AS ProfileInventoryJson,
+        profile.Chapter AS ProfileChapter, profile.CurrentStage AS ProfileCurrentStage,
+        profile.UnlockedChapter AS ProfileUnlockedChapter, profile.UnlockedStage AS ProfileUnlockedStage,
+        profile.ClearedStageIdsJson AS ProfileClearedStageIdsJson,
+        profile.UpdatedAtUtc AS ProfileUpdatedAtUtc
+      FROM dbo.CloudSaves AS save
+      LEFT JOIN dbo.PlayerRewardProfiles AS profile ON profile.PlayerId = save.PlayerId
+      WHERE save.PlayerId = @PlayerId;
+    `);
+  const row = result.recordset?.[0];
+  if (!row) return null;
+  const { SchemaVersion, Revision, SaveJson, UpdatedAtUtc, RewardProfilePlayerId } = row;
+  return {
+    SchemaVersion,
+    Revision,
+    SaveJson,
+    UpdatedAtUtc,
+    RewardProfile: RewardProfilePlayerId ? {
+      PlayerId: RewardProfilePlayerId,
+      Level: row.ProfileLevel,
+      Xp: row.ProfileXp,
+      XpToNext: row.ProfileXpToNext,
+      PendingLevelUps: row.ProfilePendingLevelUps,
+      Gold: row.ProfileGold,
+      Materials: row.ProfileMaterials,
+      InventoryJson: row.ProfileInventoryJson,
+      Chapter: row.ProfileChapter,
+      CurrentStage: row.ProfileCurrentStage,
+      UnlockedChapter: row.ProfileUnlockedChapter,
+      UnlockedStage: row.ProfileUnlockedStage,
+      ClearedStageIdsJson: row.ProfileClearedStageIdsJson,
+      UpdatedAtUtc: row.ProfileUpdatedAtUtc,
+    } : null,
+  };
+}
+
+export async function getSaveForUpdate(transaction, playerId) {
+  const result = await new sql.Request(transaction)
+    .input('PlayerId', sql.UniqueIdentifier, playerId)
+    .query(`
       SELECT SchemaVersion, Revision, SaveJson, UpdatedAtUtc
-      FROM dbo.CloudSaves
+      FROM dbo.CloudSaves WITH (UPDLOCK, HOLDLOCK)
       WHERE PlayerId = @PlayerId;
     `);
   return result.recordset?.[0] ?? null;
@@ -97,5 +149,13 @@ export async function compareAndSwap(transaction, input) {
     OUTPUT inserted.SchemaVersion, inserted.Revision, inserted.SaveJson, inserted.UpdatedAtUtc
     WHERE PlayerId = @PlayerId AND Revision = @ExpectedRevision;
   `);
-  return result.recordset?.[0] ?? null;
+  const row = result.recordset?.[0] ?? null;
+  if (!row || !input.rewardProfile) return row;
+  const profile = await updateRewardProfile(transaction, {
+    playerId: input.playerId,
+    profile: input.rewardProfile,
+    nowUtc: input.updatedAtUtc,
+  });
+  if (!profile) throw new Error('Reward profile update returned no row.');
+  return row;
 }

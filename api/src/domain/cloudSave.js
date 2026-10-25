@@ -1,5 +1,6 @@
 import { BALANCE, GEAR_SLOT, RARITY } from '@knight-run/game-rules/balance';
 import { migrateGameState } from '@knight-run/game-rules/save';
+import { mergeRewardProfile } from './playerProfile.js';
 
 export const MAX_CLOUD_SAVE_BYTES = 256 * 1024;
 
@@ -118,7 +119,19 @@ export function validateCloudSave(body) {
   return { schemaVersion: 2, state: canonicalizeWritableState(body.state) };
 }
 
-export function parseCloudSave(row) {
+export function parseArchivedSaveState(value) {
+  const rawState = typeof value === 'string' ? JSON.parse(value) : value;
+  if (!hasOnlyFiniteNumbers(rawState) || ![1, 2].includes(rawState?.schemaVersion)) {
+    throw new TypeError('Archived cloud save has an unsupported or non-finite state.');
+  }
+  try {
+    return canonicalizeV2State(rawState);
+  } catch (error) {
+    throw new TypeError('Archived cloud save contains an invalid state.', { cause: error });
+  }
+}
+
+export function parseCloudSave(row, rewardProfile) {
   if (!row || ![1, 2].includes(row.SchemaVersion)) {
     throw new TypeError('Cloud save row has an unsupported schema version.');
   }
@@ -138,10 +151,14 @@ export function parseCloudSave(row) {
   } catch (error) {
     throw new TypeError('Cloud save row contains an invalid state.', { cause: error });
   }
-  return {
+  const canonical = {
     schemaVersion: 2,
     revision,
     updatedAtUtc: updatedAt.toISOString(),
     state,
+  };
+  return {
+    ...canonical,
+    state: mergeRewardProfile(canonical.state, rewardProfile),
   };
 }

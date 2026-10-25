@@ -4,6 +4,7 @@ import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as defaultStageRepository from '../repositories/stageRankingRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
 import { parseCloudSave } from '../domain/cloudSave.js';
+import { parseRewardProfile } from '../domain/playerProfile.js';
 import {
   BALANCE_VERSION,
   derivePlayerCombatSnapshot,
@@ -96,7 +97,7 @@ export async function startStageRun(pool, identity, body, dependencies) {
   if (!playerId) return { status: 404, code: 'save-not-found' };
   const saveRow = await deps.repository.getByPlayerId(pool, playerId);
   if (!saveRow) return { status: 404, code: 'save-not-found' };
-  const save = parseCloudSave(saveRow);
+  const save = parseCloudSave(saveRow, parseRewardProfile(saveRow.RewardProfile));
   if (save.revision !== request.expectedSaveRevision) {
     return { status: 409, code: 'save-revision-conflict', currentRevision: save.revision };
   }

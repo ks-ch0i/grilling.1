@@ -86,4 +86,4 @@ Task: T03-deterministic-stage-rewards
 - [x] 구현 완료
 - [x] 검증 통과
 - Validation: focused shared-rules tests 34 passed; root suite 173 passed; Vite build passed with a Phaser chunk-size warning.
-- commit: pending
+- commit: 0c6eabf

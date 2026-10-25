@@ -18,10 +18,16 @@ test('startStageRun issues an immutable seeded ticket from the matching cloud re
   const repository = createStageRepository();
   const saveRow = repository.saves.get(PLAYER_ID);
   const save = JSON.parse(saveRow.SaveJson);
-  save.player.level = 3;
+  save.player.level = 80;
+  save.player.xp = 50000;
+  save.player.xpToNext = 1;
   save.player.availableStatPoints = 3;
   save.player.spentStatPoints = 1;
-  repository.saves.set(PLAYER_ID, { ...saveRow, SaveJson: JSON.stringify(save) });
+  repository.saves.set(PLAYER_ID, {
+    ...saveRow,
+    SaveJson: JSON.stringify(save),
+    RewardProfile: { ...saveRow.RewardProfile, Level: 3, Xp: 12, PendingLevelUps: 1 },
+  });
   const dependencies = createStageDependencies(repository);
   const { startStageRun } = await loadStageRunService();
   const result = await startStageRun({}, identityA, {
@@ -44,7 +50,7 @@ test('startStageRun issues an immutable seeded ticket from the matching cloud re
     xpToNext: result.ticket.playerSnapshot.xpToNext,
     pendingLevelUps: result.ticket.playerSnapshot.pendingLevelUps,
     replayXpMultiplier: result.ticket.playerSnapshot.replayXpMultiplier,
-  }, { level: 3, xp: 0, xpToNext: 100, pendingLevelUps: 0, replayXpMultiplier: 1 });
+  }, { level: 3, xp: 12, xpToNext: 100, pendingLevelUps: 1, replayXpMultiplier: 1 });
   assert.equal(repository.calls.createTicket[0].playerId, PLAYER_ID);
   assert.equal(repository.calls.createTicket[0].expectedSaveRevision, 7);
   assert.equal(repository.calls.createTicket[0].simulatorVersion, 2);
@@ -109,6 +115,12 @@ test('startStageRun rejects stale revisions, locked stages and invalid requests 
   assert.equal(stale.currentRevision, 8);
 
   const lockedRepository = createStageRepository();
+  const spoofedState = JSON.parse(lockedRepository.saves.get(PLAYER_ID).SaveJson);
+  spoofedState.progression.unlockedChapter = 99;
+  spoofedState.progression.unlockedStage = 10;
+  lockedRepository.saves.set(PLAYER_ID, {
+    ...lockedRepository.saves.get(PLAYER_ID), SaveJson: JSON.stringify(spoofedState),
+  });
   const locked = await startStageRun({}, identityA, { chapter: 2, stage: 1, expectedSaveRevision: 7 }, createStageDependencies(lockedRepository));
   assert.equal(locked.status, 403);
   assert.equal(locked.code, 'stage-locked');
@@ -123,7 +135,12 @@ test('startStageRun allows a previously cleared stage and rejects an existing ac
   const repository = createStageRepository();
   const state = JSON.parse(repository.saves.get(PLAYER_ID).SaveJson);
   state.progression.clearedStageIds = ['1-2'];
-  repository.saves.set(PLAYER_ID, { ...repository.saves.get(PLAYER_ID), SaveJson: JSON.stringify(state) });
+  const row = repository.saves.get(PLAYER_ID);
+  repository.saves.set(PLAYER_ID, {
+    ...row,
+    SaveJson: JSON.stringify(state),
+    RewardProfile: { ...row.RewardProfile, ClearedStageIdsJson: '["1-2"]' },
+  });
   const dependencies = createStageDependencies(repository);
   const cleared = await startStageRun({}, identityA, { chapter: 1, stage: 2, expectedSaveRevision: 7 }, dependencies);
   assert.equal(cleared.status, 201);

@@ -96,6 +96,11 @@ export function createPvpRepository({
       Revision: 7,
       SaveJson: JSON.stringify(state),
       UpdatedAtUtc: new Date('2026-10-21T01:00:00.000Z'),
+      RewardProfile: {
+        PlayerId: playerId, Level: 1, Xp: 0, XpToNext: 100, PendingLevelUps: 0,
+        Gold: 0, Materials: 0, InventoryJson: '[]', Chapter: 1, CurrentStage: 1,
+        UnlockedChapter: 1, UnlockedStage: 1, ClearedStageIdsJson: '[]',
+      },
     });
   }
   const snapshotRows = new Map();

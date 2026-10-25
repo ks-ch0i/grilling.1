@@ -9,6 +9,7 @@ const migrationPath = path.join(apiRoot, 'migrations', '001-initial-schema.sql')
 const pvpVersionMigrationPath = path.join(apiRoot, 'migrations', '002-pvp-balance-version.sql');
 const pvpHistoryMigrationPath = path.join(apiRoot, 'migrations', '003-pvp-history-indexes.sql');
 const pvpPayloadMigrationPath = path.join(apiRoot, 'migrations', '004-pvp-payload-retention.sql');
+const rewardProfileMigrationPath = path.join(apiRoot, 'migrations', '005-authoritative-reward-profile.sql');
 
 test('initial schema defines account, save, stage, snapshot and PvP contracts', () => {
   assert.ok(existsSync(migrationPath), 'the initial SQL migration must exist');
@@ -69,4 +70,18 @@ test('PvP payload migration preserves rated summaries and copies replay data bef
   assert.match(sql, /INSERT dbo\.PvpMatchPayloads[\s\S]*?FROM dbo\.PvpMatches/i);
   assert.match(sql, /COUNT_BIG\(\*\)[\s\S]*?THROW[\s\S]*?ALTER TABLE dbo\.PvpMatches DROP COLUMN Player1SnapshotJson, Player2SnapshotJson, InputJson/i);
   assert.match(sql, /VALUES \(4, N'pvp-payload-retention'\)/i);
+});
+
+test('reward profile migration archives original save bytes before default seeding', () => {
+  assert.ok(existsSync(rewardProfileMigrationPath), 'the authoritative reward profile migration must exist');
+  const sql = readFileSync(rewardProfileMigrationPath, 'utf8');
+  assert.match(sql, /CREATE TABLE dbo\.PlayerRewardProfiles[\s\S]*?InventoryJson nvarchar\(max\)[\s\S]*?ClearedStageIdsJson nvarchar\(max\)/i);
+  assert.match(sql, /CREATE TABLE dbo\.LegacySaveArchives[\s\S]*?OriginalRevision bigint[\s\S]*?OriginalSaveJson nvarchar\(max\)/i);
+  const archiveAt = sql.indexOf('INSERT dbo.LegacySaveArchives');
+  const profileAt = sql.indexOf('INSERT dbo.PlayerRewardProfiles');
+  assert.ok(archiveAt >= 0 && profileAt > archiveAt, 'legacy bytes must be archived before canonical profiles are seeded');
+  assert.match(sql.slice(archiveAt, profileAt), /save\.SaveJson[\s\S]*FROM dbo\.CloudSaves/i);
+  assert.doesNotMatch(sql, /UPDATE\s+dbo\.CloudSaves|DELETE\s+FROM\s+dbo\.CloudSaves|DROP\s+COLUMN\s+SaveJson/i);
+  assert.match(sql, /WHERE Reason = N'schema-v5-migration'/i);
+  assert.match(sql, /VALUES \(5, N'authoritative-reward-profile'\)/i);
 });

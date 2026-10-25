@@ -1,5 +1,6 @@
 import sql from 'mssql';
 import { calculateElo } from '../domain/pvpRating.js';
+import { getRewardProfileByPlayerId } from './playerProfileRepository.js';
 
 function requestFor(connection) {
   return typeof connection?.request === 'function' ? connection.request() : new sql.Request(connection);
@@ -29,7 +30,12 @@ export async function getCloudSaveForUpdate(transaction, playerId) {
       FROM dbo.CloudSaves WITH (UPDLOCK, HOLDLOCK)
       WHERE PlayerId = @PlayerId;
     `);
-  return result.recordset?.[0] ?? null;
+  const row = result.recordset?.[0];
+  if (!row) return null;
+  return {
+    ...row,
+    RewardProfile: await getRewardProfileByPlayerId(transaction, playerId, { lock: true }),
+  };
 }
 
 export async function savePlayerSnapshot(transaction, input) {
