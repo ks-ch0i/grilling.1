@@ -7,7 +7,7 @@
 [P02 PvP 경기 이력과 상세 데이터 보관](./phases/2026-10-25-knight-run-follow-up-backlog/P02-pvp-history-and-retention/phase.md)
 
 ## Active Task
-[T06 마을 PvP 기록 화면](./phases/2026-10-25-knight-run-follow-up-backlog/P02-pvp-history-and-retention/T06-pvp-history-town-screen.md)
+[T07 PvP 상세 데이터 보관 정책 결정안](./phases/2026-10-25-knight-run-follow-up-backlog/P02-pvp-history-and-retention/T07-pvp-retention-policy.md)
 
 ## Status
 - 2026-10-25 후속 작업 계획을 만들었다. 4개 Phase, 9개 독립 Task가 있으며 빠른 품질·조작 개선부터 시작한다.
@@ -17,6 +17,7 @@
 - P01-T03 마을 키보드 탐색 완료: 5개 focused tests, 전체 루트 테스트 141개, Vite build 통과. 브라우저 수동 확인은 사용 가능한 브라우저 surface가 없어 미실행.
 - P01 품질과 조작 완료: 4/4 task. P01-T04 전체 루트 테스트 144개, startup tests 3개, production build 통과. 브라우저 network panel 수동 확인은 브라우저 surface 부재로 미실행.
 - P02-T05 인증된 PvP 경기 이력 API 완료: API 전체 테스트 98개, focused tests 22개, Function entry check 통과. Commit `b3eb24b`.
+- P02-T06 마을 PvP 경기 기록 overlay 완료: 루트 테스트 157개, focused tests 23개, Vite build 통과. 브라우저 surface 부재로 수동 QA는 미실행. Commit `e0e88e0`.
 
 ## Deferred Plan
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
@@ -24,4 +25,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-T06 청사진을 읽고 마을에 최신 PvP 경기 이력 화면과 10경기 단위 페이지 이동을 추가한다.
+T07 청사진을 읽고 PvP 입력 로그·전투 snapshot의 현재 보관 구조와 정책 선택지를 읽기 전용으로 정리한다. 데이터 삭제·수정은 하지 않는다.

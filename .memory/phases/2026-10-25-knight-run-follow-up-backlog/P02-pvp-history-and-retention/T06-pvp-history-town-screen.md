@@ -90,4 +90,5 @@ Task: T06-pvp-history-town-screen
 ## Progress
 - [x] 구현 완료
 - [x] 검증 통과
+- commit: `e0e88e0`
 - commit: pending
