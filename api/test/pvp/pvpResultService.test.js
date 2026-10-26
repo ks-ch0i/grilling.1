@@ -32,7 +32,7 @@ test('Elo uses K=32 and exact win, loss and draw scores', async () => {
 
 test('submitPvpResult replays contact combat and updates both ratings transactionally', async () => {
   const repository = createPvpRepository();
-  const row = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat });
+  const row = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat, status: 'started' });
   const dependencies = createPvpDependencies(repository);
   const { inputs, replay } = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   const { submitPvpResult } = await loadPvpResultService();
@@ -48,9 +48,9 @@ test('submitPvpResult replays contact combat and updates both ratings transactio
   assert.equal(repository.calls.published.length, 1);
 });
 
-test('issued match replay uses the frozen opponent snapshot after a later publication', async () => {
+test('started match replay uses the frozen opponent snapshot after a later publication', async () => {
   const repository = createPvpRepository();
-  const row = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat });
+  const row = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat, status: 'started' });
   const dependencies = createPvpDependencies(repository);
   const trace = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: row.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   repository.snapshotRows.set(PLAYER_B, {
@@ -68,7 +68,7 @@ test('issued match replay uses the frozen opponent snapshot after a later public
 
 test('draws consume the daily pair result without changing either Elo rating', async () => {
   const repository = createPvpRepository();
-  const row = seedIssuedMatch(repository, { playerSnapshot: neutralCombat, opponentSnapshot: neutralCombat });
+  const row = seedIssuedMatch(repository, { playerSnapshot: neutralCombat, opponentSnapshot: neutralCombat, status: 'started' });
   const dependencies = createPvpDependencies(repository);
   const { inputs, replay } = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: row.IssuedAtUtc.toISOString() }, neutralCombat, neutralCombat);
   const { submitPvpResult } = await loadPvpResultService();
@@ -83,7 +83,7 @@ test('draws consume the daily pair result without changing either Elo rating', a
 
 test('same-day pair guard makes later results unrated and completed payloads idempotent', async () => {
   const repository = createPvpRepository();
-  const firstRow = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat });
+  const firstRow = seedIssuedMatch(repository, { playerSnapshot: strongCombat, opponentSnapshot: weakCombat, status: 'started' });
   const dependencies = createPvpDependencies(repository);
   const trace = makePvpInputs({ matchId: MATCH_A, seed: 123456, simulatorVersion: 2, balanceVersion: 2, issuedAtUtc: firstRow.IssuedAtUtc.toISOString() }, strongCombat, weakCombat);
   const { submitPvpResult } = await loadPvpResultService();
@@ -91,7 +91,7 @@ test('same-day pair guard makes later results unrated and completed payloads ide
   const retry = await submitPvpResult({}, identityA, MATCH_A, { inputs: trace.inputs }, new Date('2026-10-21T02:11:00.000Z'), dependencies);
   const changed = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:12:00.000Z'), dependencies);
 
-  seedIssuedMatch(repository, { matchId: MATCH_B, playerSnapshot: strongCombat, opponentSnapshot: weakCombat, issuedAtUtc: new Date('2026-10-21T02:03:00.000Z') });
+  seedIssuedMatch(repository, { matchId: MATCH_B, playerSnapshot: strongCombat, opponentSnapshot: weakCombat, issuedAtUtc: new Date('2026-10-21T02:03:00.000Z'), status: 'started' });
   const second = await submitPvpResult({}, identityA, MATCH_B, { inputs: trace.inputs }, new Date('2026-10-21T02:04:00.000Z'), dependencies);
 
   assert.equal(first.rated, true);
@@ -105,7 +105,7 @@ test('same-day pair guard makes later results unrated and completed payloads ide
 
 test('a top-board publish failure does not suppress the player rank event', async () => {
   const repository = createPvpRepository();
-  const row = seedIssuedMatch(repository, { playerSnapshot:strongCombat, opponentSnapshot:weakCombat });
+  const row = seedIssuedMatch(repository, { playerSnapshot:strongCombat, opponentSnapshot:weakCombat, status: 'started' });
   const playerEvents = [];
   const dependencies = createPvpDependencies(repository, {
     publishMatchCompleted:async () => { throw new Error('group publish unavailable'); },
@@ -135,6 +135,34 @@ test('match ownership, expiry and client-supplied result claims are rejected', a
   assert.equal(foreign.status, 404);
   assert.equal(expired.status, 410);
   assert.equal(spoofed.status, 400);
+});
+
+test('issued tickets cannot apply a PvP result before start confirmation', async () => {
+  const repository = createPvpRepository();
+  seedIssuedMatch(repository);
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), createPvpDependencies(repository));
+
+  assert.deepEqual(result, { status: 409, code: 'match-not-started' });
+  assert.equal(repository.matches.get(MATCH_A).Status, 'issued');
+  assert.equal(repository.calls.completes.length, 0);
+  assert.equal(repository.calls.published.length, 0);
+});
+
+test('an overdue started match expires at its original ticket deadline', async () => {
+  const repository = createPvpRepository();
+  seedIssuedMatch(repository, {
+    status: 'started',
+    expiresAtUtc: new Date('2026-10-21T02:00:30.000Z'),
+  });
+  const { submitPvpResult } = await loadPvpResultService();
+
+  const result = await submitPvpResult({}, identityA, MATCH_A, { inputs: [] }, new Date('2026-10-21T02:01:00.000Z'), createPvpDependencies(repository));
+
+  assert.deepEqual(result, { status: 410, code: 'match-expired' });
+  assert.equal(repository.matches.get(MATCH_A).Status, 'expired');
+  assert.equal(repository.calls.completes.length, 0);
 });
 
 test('a v1 issued match is expired without changing either Elo rating', async () => {

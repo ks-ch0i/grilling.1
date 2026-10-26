@@ -112,7 +112,17 @@ export async function submitPvpResult(pool, identity, matchId, body, receivedAtU
       (row.InputJson == null || row.Player1SnapshotJson == null || row.Player2SnapshotJson == null)) {
     return { status: 410, code: 'match-payload-expired' };
   }
-  if (row.Status === 'issued' && (row.Player1SnapshotJson == null || row.Player2SnapshotJson == null)) {
+  if (['issued', 'started'].includes(row.Status) && receivedAt.getTime() >= asDate(row.ExpiresAtUtc).getTime()) {
+    await deps.withTransaction(pool, (transaction) => deps.repository.expireMatch(transaction, playerId, matchId));
+    return { status: 410, code: 'match-expired' };
+  }
+  if (row.Status === 'issued' &&
+      (Number(row.SimulatorVersion) !== PVP_SIMULATOR_VERSION || Number(row.BalanceVersion) !== BALANCE_VERSION)) {
+    await deps.withTransaction(pool, (transaction) => deps.repository.expireMatch(transaction, playerId, matchId));
+    return { status: 409, code: 'unsupported-simulator-version' };
+  }
+  if (row.Status === 'issued') return { status: 409, code: 'match-not-started' };
+  if (row.Status === 'started' && (row.Player1SnapshotJson == null || row.Player2SnapshotJson == null)) {
     return { status: 409, code: 'match-not-available' };
   }
   if (row.Status === 'rejected') {
@@ -121,15 +131,8 @@ export async function submitPvpResult(pool, identity, matchId, body, receivedAtU
       : { status: 409, code: 'match-already-completed' };
   }
   if (row.Status === 'completed' && row.InputJson !== inputJson) return { status: 409, code: 'match-already-completed' };
-  if (row.Status !== 'issued' && row.Status !== 'completed') return { status: 409, code: 'match-not-available' };
-  if (row.Status === 'issued' && receivedAt.getTime() >= asDate(row.ExpiresAtUtc).getTime()) {
-    await deps.withTransaction(pool, (transaction) => deps.repository.expireMatch(transaction, playerId, matchId));
-    return { status: 410, code: 'match-expired' };
-  }
+  if (row.Status !== 'started' && row.Status !== 'completed') return { status: 409, code: 'match-not-available' };
   if (Number(row.SimulatorVersion) !== PVP_SIMULATOR_VERSION || Number(row.BalanceVersion) !== BALANCE_VERSION) {
-    if (row.Status === 'issued') {
-      await deps.withTransaction(pool, (transaction) => deps.repository.expireMatch(transaction, playerId, matchId));
-    }
     return { status: 409, code: 'unsupported-simulator-version' };
   }
 

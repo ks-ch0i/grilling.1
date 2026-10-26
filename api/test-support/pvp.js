@@ -14,6 +14,7 @@ export const PLAYER_B = 'bbbbbbbb-2222-4222-8222-222222222222';
 export const PLAYER_C = 'cccccccc-3333-4333-8333-333333333333';
 export const MATCH_A = 'dddddddd-4444-4444-8444-444444444444';
 export const MATCH_B = 'eeeeeeee-5555-4555-8555-555555555555';
+export const SEARCH_A = 'ffffffff-6666-4666-8666-666666666666';
 export const NOW = new Date('2026-10-21T02:00:00.000Z');
 
 let gearId = 0;
@@ -110,11 +111,15 @@ export function createPvpRepository({
   const ratingRows = new Map(Object.entries(ratings).map(([id, rating]) => [id, { PlayerId: id, Rating: rating, UpdatedAtUtc: new Date(NOW) }]));
   const matches = new Map();
   const payloads = new Map();
+  const searches = new Map();
   const ratedPairs = new Map();
-  const calls = { windows: [], creates: [], completes: [], snapshotWrites: [], expired: [], published: [] };
+  const calls = {
+    windows: [], creates: [], completes: [], snapshotWrites: [], expired: [], published: [],
+    searchClaims: [], searchReads: [], searchAttaches: [], searchCancels: [], searchStarts: [], searchFinishes: [],
+  };
 
   return {
-    saves, snapshotRows, ratingRows, matches, payloads, ratedPairs, calls,
+    saves, snapshotRows, ratingRows, matches, payloads, searches, ratedPairs, calls,
     async findPlayerIdByIdentity(_pool, identity) {
       return identityRows.get(`${identity.tenantId}/${identity.objectId}`) ?? null;
     },
@@ -165,8 +170,9 @@ export function createPvpRepository({
         .filter(([id]) => Math.abs((ratingRows.get(id)?.Rating ?? 1000) - ownRating) <= input.window)
         .filter(([id]) => !ratedPairs.has(`${nowDate}/${[id, input.playerId].sort().join('/')}`))
         .filter(([id]) => ![...matches.values()].some((match) =>
-          match.Status === 'issued' && match.ExpiresAtUtc > input.nowUtc &&
-          match.SimulatorVersion === input.simulatorVersion && match.BalanceVersion === input.balanceVersion &&
+          ['issued', 'started'].includes(match.Status) && match.ExpiresAtUtc > input.nowUtc &&
+          (match.Status === 'started' ||
+            (match.SimulatorVersion === input.simulatorVersion && match.BalanceVersion === input.balanceVersion)) &&
           [match.Player1Id, match.Player2Id].includes(id),
         ))
         .map(([id, row]) => ({
@@ -233,6 +239,118 @@ export function createPvpRepository({
         },
       };
     },
+    async claimSearch(_transaction, input) {
+      calls.searchClaims.push(input);
+      const row = searches.get(input.searchId);
+      if (row) {
+        if (row.PlayerId !== input.playerId ||
+            (row.RetainUntilUtc && row.RetainUntilUtc <= input.nowUtc)) return { kind: 'not-found' };
+        return { kind: 'existing', row: structuredClone(row) };
+      }
+      const created = {
+        SearchId: input.searchId,
+        PlayerId: input.playerId,
+        Status: 'searching',
+        MatchId: null,
+        CreatedAtUtc: input.nowUtc,
+        UpdatedAtUtc: input.nowUtc,
+        SearchDeadlineAtUtc: input.deadlineUtc,
+        RetainUntilUtc: null,
+      };
+      searches.set(input.searchId, created);
+      return { kind: 'created', row: structuredClone(created) };
+    },
+    async getSearch(_connection, input) {
+      calls.searchReads.push(input);
+      const row = searches.get(input.searchId);
+      if (!row || row.PlayerId !== input.playerId ||
+          (row.RetainUntilUtc && row.RetainUntilUtc <= input.nowUtc)) return null;
+      return structuredClone(row);
+    },
+    async attachSearchMatch(_transaction, input) {
+      calls.searchAttaches.push(input);
+      const search = searches.get(input.searchId);
+      const match = matches.get(input.matchId);
+      if (!search || search.PlayerId !== input.playerId) return { kind: 'not-found' };
+      if (search.Status !== 'searching') return { kind: search.Status, row: structuredClone(search) };
+      if (!match || match.Player1Id !== input.playerId) return { kind: 'not-found' };
+      if (match.Status !== 'issued') return { kind: match.Status, row: structuredClone(search) };
+      if (match.ExpiresAtUtc <= input.nowUtc) {
+        match.Status = 'expired';
+        search.Status = 'expired';
+        search.UpdatedAtUtc = input.nowUtc;
+        search.RetainUntilUtc = input.retainUntilUtc;
+        return { kind: 'expired', row: structuredClone(search) };
+      }
+      Object.assign(search, {
+        Status: 'matched', MatchId: input.matchId, UpdatedAtUtc: input.nowUtc,
+        RetainUntilUtc: match.ExpiresAtUtc,
+      });
+      return { kind: 'linked', row: structuredClone(search) };
+    },
+    async cancelSearch(_transaction, input) {
+      calls.searchCancels.push(input);
+      const search = searches.get(input.searchId);
+      if (!search || search.PlayerId !== input.playerId ||
+          (search.RetainUntilUtc && search.RetainUntilUtc <= input.nowUtc)) return { kind: 'not-found' };
+      if (search.Status === 'started') return { kind: 'already-started', row: structuredClone(search) };
+      if (['cancelled', 'expired', 'no-opponent'].includes(search.Status)) {
+        return { kind: search.Status, row: structuredClone(search) };
+      }
+      let status = 'cancelled';
+      if (search.Status === 'matched') {
+        const match = matches.get(search.MatchId);
+        if (!match) return { kind: 'not-found' };
+        if (match.Status === 'started') return { kind: 'already-started', row: structuredClone(search) };
+        if (match.Status !== 'issued' || match.ExpiresAtUtc <= input.nowUtc) status = 'expired';
+        if (match.Status === 'issued') match.Status = 'expired';
+      }
+      Object.assign(search, { Status: status, UpdatedAtUtc: input.nowUtc, RetainUntilUtc: input.retainUntilUtc });
+      return { kind: status, row: structuredClone(search) };
+    },
+    async startSearchMatch(_transaction, input) {
+      calls.searchStarts.push(input);
+      const search = searches.get(input.searchId);
+      if (!search || search.PlayerId !== input.playerId || search.MatchId !== input.matchId ||
+          (search.RetainUntilUtc && search.RetainUntilUtc <= input.nowUtc)) return { kind: 'not-found' };
+      if (!['matched', 'started'].includes(search.Status)) return { kind: search.Status, row: structuredClone(search) };
+      const match = matches.get(input.matchId);
+      if (!match || match.Player1Id !== input.playerId) return { kind: 'not-found' };
+      if (match.ExpiresAtUtc <= input.nowUtc) {
+        if (match.Status === 'issued' || match.Status === 'started') match.Status = 'expired';
+        if (search.Status === 'matched') {
+          Object.assign(search, { Status: 'expired', UpdatedAtUtc: input.nowUtc, RetainUntilUtc: input.retainUntilUtc });
+        }
+        return { kind: 'expired', row: structuredClone(search) };
+      }
+      if (search.Status === 'started' && match.Status === 'started') return { kind: 'started', row: structuredClone(search), match: structuredClone(match) };
+      if (search.Status !== 'matched' || match.Status !== 'issued') return { kind: match.Status, row: structuredClone(search) };
+      match.Status = 'started';
+      Object.assign(search, { Status: 'started', UpdatedAtUtc: input.nowUtc, RetainUntilUtc: input.retainUntilUtc });
+      return { kind: 'started', row: structuredClone(search), match: structuredClone(match) };
+    },
+    async finishSearch(_transaction, input) {
+      calls.searchFinishes.push(input);
+      const search = searches.get(input.searchId);
+      if (!search || search.PlayerId !== input.playerId) return { kind: 'not-found' };
+      if (search.Status !== input.expectedStatus) return { kind: search.Status, row: structuredClone(search) };
+      Object.assign(search, { Status: input.status, UpdatedAtUtc: input.nowUtc, RetainUntilUtc: input.retainUntilUtc });
+      return { kind: input.status, row: structuredClone(search) };
+    },
+    async loadSearchTicket(_connection, input) {
+      const search = searches.get(input.searchId);
+      const match = search?.PlayerId === input.playerId && search.MatchId
+        ? matches.get(search.MatchId)
+        : null;
+      const payload = match ? payloads.get(match.MatchId) : null;
+      if (!match || !payload || !['matched', 'started'].includes(search.Status) ||
+          !['issued', 'started'].includes(match.Status)) return null;
+      return {
+        ...structuredClone(match),
+        ...structuredClone(payload),
+        OpponentDisplayName: identitiesByPlayer.get(match.Player2Id)?.displayName ?? 'Adventurer',
+      };
+    },
     async getMatchForPlayer(_pool, playerId, matchId) {
       const row = matches.get(matchId);
       const payload = payloads.get(matchId);
@@ -243,13 +361,13 @@ export function createPvpRepository({
     async expireMatch(_transaction, playerId, matchId) {
       calls.expired.push({ playerId, matchId });
       const row = matches.get(matchId);
-      if (row?.Player1Id === playerId && row.Status === 'issued') row.Status = 'expired';
+      if (row?.Player1Id === playerId && ['issued', 'started'].includes(row.Status)) row.Status = 'expired';
     },
     async completeRatedMatch(_transaction, input) {
       calls.completes.push(input);
       const row = matches.get(input.matchId);
       if (!row || row.Player1Id !== input.player1Id) return { kind: 'not-found' };
-      if (row.Status !== 'issued') return { kind: row.Status, row: structuredClone(row) };
+      if (row.Status !== 'started') return { kind: row.Status, row: structuredClone(row) };
       if (row.ExpiresAtUtc <= input.completedAtUtc) return { kind: 'expired', row: structuredClone(row) };
       const r1 = ratingRows.get(row.Player1Id)?.Rating ?? 1000;
       const r2 = ratingRows.get(row.Player2Id)?.Rating ?? 1000;
@@ -285,7 +403,7 @@ export function createPvpRepository({
     async rejectMatch(_transaction, input) {
       const row = matches.get(input.matchId);
       if (!row || row.Player1Id !== input.player1Id) return { kind: 'not-found' };
-      if (row.Status !== 'issued') return { kind: row.Status, row: structuredClone(row) };
+      if (row.Status !== 'started') return { kind: row.Status, row: structuredClone(row) };
       Object.assign(payloads.get(row.MatchId), { InputJson: input.inputJson });
       Object.assign(row, { Outcome: 'invalid', CompletedAtUtc: input.completedAtUtc, Status: 'rejected' });
       return { kind: 'rejected', row: { ...structuredClone(row), ...structuredClone(payloads.get(row.MatchId)) } };
@@ -305,7 +423,20 @@ export function createPvpDependencies(repository, overrides = {}) {
   let seed = 123456;
   return {
     repository,
-    withTransaction: async (_pool, work) => work({}),
+    withTransaction: async (_pool, work) => {
+      const mapNames = ['ratingRows', 'matches', 'payloads', 'ratedPairs', 'searches'];
+      const before = new Map(mapNames.filter((name) => repository[name] instanceof Map)
+        .map((name) => [name, structuredClone([...repository[name].entries()])]));
+      try {
+        return await work({});
+      } catch (error) {
+        for (const [name, entries] of before) {
+          repository[name].clear();
+          for (const [key, value] of entries) repository[name].set(key, value);
+        }
+        throw error;
+      }
+    },
     clock: () => new Date(currentTime),
     sleep: async (ms) => { currentTime += ms; },
     createMatchId: () => matchNo++ === 0 ? MATCH_A : MATCH_B,
@@ -334,6 +465,7 @@ export function seedIssuedMatch(repository, {
   seed = 123456,
   simulatorVersion = 2,
   balanceVersion = 2,
+  status = 'issued',
 } = {}) {
   const row = {
     MatchId: matchId,
@@ -352,7 +484,7 @@ export function seedIssuedMatch(repository, {
     IssuedAtUtc: issuedAtUtc,
     ExpiresAtUtc: expiresAtUtc,
     CompletedAtUtc: null,
-    Status: 'issued',
+    Status: status,
     Rated: false,
   };
   repository.matches.set(matchId, row);

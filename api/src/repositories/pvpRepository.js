@@ -421,14 +421,11 @@ export async function startSearchMatch(transaction, input) {
   const match = await selectMatch(transaction, input.playerId, input.matchId, { lock: true });
   if (!match) return { kind: 'not-found' };
   if (new Date(match.ExpiresAtUtc).getTime() <= input.nowUtc.getTime()) {
-    if (match.Status === 'issued') await expireMatch(transaction, input.playerId, input.matchId);
-    if (search.Status === 'matched') {
-      const row = await updateSearchState(transaction, {
-        ...input, expectedStatus: 'matched', status: 'expired',
-      });
-      return row ? { kind: 'expired', row } : { kind: 'conflict' };
-    }
-    return { kind: 'expired', row: search };
+    if (match.Status === 'issued' || match.Status === 'started') await expireMatch(transaction, input.playerId, input.matchId);
+    const row = await updateSearchState(transaction, {
+      ...input, expectedStatus: search.Status, status: 'expired',
+    });
+    return row ? { kind: 'expired', row } : { kind: 'conflict' };
   }
   if (search.Status === 'started' && match.Status === 'started') return { kind: 'started', row: search, match };
   if (search.Status !== 'matched' || match.Status !== 'issued') return { kind: match.Status, row: search };
@@ -467,6 +464,38 @@ export async function loadSearchTicket(connection, input) {
         AND m.Status IN (N'issued', N'started');
     `);
   return result.recordset?.[0] ?? null;
+}
+
+export async function expireSearchMatch(transaction, input) {
+  const search = await getSearch(transaction, {
+    searchId: input.searchId, playerId: input.playerId, nowUtc: input.nowUtc, lock: true,
+  });
+  if (!search) return { kind: 'not-found' };
+  if (search.Status !== 'matched' && search.Status !== 'started') return { kind: search.Status, row: search };
+  const match = await selectMatch(transaction, input.playerId, search.MatchId, { lock: true });
+  if (!match) return { kind: 'not-found' };
+  if (new Date(match.ExpiresAtUtc).getTime() > input.nowUtc.getTime()) return { kind: 'active', row: search, match };
+  if (match.Status === 'issued' || match.Status === 'started') await expireMatch(transaction, input.playerId, search.MatchId);
+  const row = await updateSearchState(transaction, {
+    ...input, expectedStatus: search.Status, status: 'expired',
+  });
+  return row ? { kind: 'expired', row, match: { ...match, Status: 'expired' } } : { kind: 'conflict' };
+}
+
+export async function finishSearch(transaction, input) {
+  if (!['no-opponent', 'expired'].includes(input.status)) throw new TypeError('Search terminal status is invalid.');
+  const search = await getSearch(transaction, {
+    searchId: input.searchId, playerId: input.playerId, nowUtc: input.nowUtc, lock: true,
+  });
+  if (!search) return { kind: 'not-found' };
+  if (search.Status !== input.expectedStatus) return { kind: search.Status, row: search };
+  if (input.status === 'no-opponent' && search.Status !== 'searching') {
+    return { kind: search.Status, row: search };
+  }
+  const row = await updateSearchState(transaction, {
+    ...input, status: input.status,
+  });
+  return row ? { kind: input.status, row } : { kind: 'conflict' };
 }
 
 export async function getMatchForPlayer(pool, player1Id, matchId) {
@@ -523,13 +552,13 @@ export async function expireMatch(transaction, player1Id, matchId) {
   await new sql.Request(transaction)
     .input('MatchId', sql.UniqueIdentifier, matchId)
     .input('Player1Id', sql.UniqueIdentifier, player1Id)
-    .query(`UPDATE dbo.PvpMatches SET Status = N'expired' WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'issued';`);
+    .query(`UPDATE dbo.PvpMatches SET Status = N'expired' WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status IN (N'issued', N'started');`);
 }
 
 export async function rejectMatch(transaction, input) {
   const row = await selectMatch(transaction, input.player1Id, input.matchId, { lock: true });
   if (!row) return { kind: 'not-found' };
-  if (row.Status !== 'issued') return { kind: row.Status, row };
+  if (row.Status !== 'started') return { kind: row.Status, row };
   if (new Date(row.ExpiresAtUtc).getTime() <= input.completedAtUtc.getTime()) {
     await expireMatch(transaction, input.player1Id, input.matchId);
     return { kind: 'expired' };
@@ -553,7 +582,7 @@ export async function rejectMatch(transaction, input) {
     .query(`
       UPDATE dbo.PvpMatches
       SET Outcome = N'invalid', Status = N'rejected', CompletedAtUtc = @CompletedAtUtc
-      WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'issued';
+      WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'started';
     `);
   return { kind: 'rejected', row: await selectMatch(transaction, input.player1Id, input.matchId) };
 }
@@ -563,7 +592,7 @@ export async function completeRatedMatch(transaction, input) {
   if (lockedPlayers.length !== 2) return { kind: 'not-found' };
   const row = await selectMatch(transaction, input.player1Id, input.matchId, { lock: true });
   if (!row) return { kind: 'not-found' };
-  if (row.Status !== 'issued') return { kind: row.Status, row };
+  if (row.Status !== 'started') return { kind: row.Status, row };
   if (new Date(row.ExpiresAtUtc).getTime() <= input.completedAtUtc.getTime()) {
     await expireMatch(transaction, input.player1Id, input.matchId);
     return { kind: 'expired' };
@@ -644,7 +673,7 @@ export async function completeRatedMatch(transaction, input) {
           RatingBefore1 = @RatingBefore1, RatingBefore2 = @RatingBefore2,
           RatingAfter1 = @RatingAfter1, RatingAfter2 = @RatingAfter2,
           CompletedAtUtc = @CompletedAtUtc, Status = N'completed'
-      WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'issued';
+      WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'started';
     `);
   return { kind: 'completed', changed: true, row: await selectMatch(transaction, input.player1Id, input.matchId) };
 }

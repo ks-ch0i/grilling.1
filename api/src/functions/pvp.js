@@ -6,8 +6,10 @@ import {
   MAX_MATCH_RESULT_BYTES,
   PvpValidationError,
   isMatchId,
+  isSearchId,
   validatePvpInputs,
   validateSearchRequest,
+  validateStartSearchRequest,
   validateSnapshotRequest,
 } from '../domain/pvpRating.js';
 import { createMatchmakingService } from '../services/matchmakingService.js';
@@ -89,6 +91,19 @@ function matchIdFrom(request, context) {
   return /\/pvp\/matches\/([^/]+)\/result\/?$/.exec(new URL(request.url).pathname)?.[1] ?? '';
 }
 
+function searchIdFrom(request, context, cancel = false) {
+  if (typeof context?.params?.searchId === 'string') return context.params.searchId;
+  const pattern = cancel
+    ? /\/pvp\/matches\/search\/([^/]+)\/cancel\/?$/
+    : /\/pvp\/matches\/search\/([^/]+)\/?$/;
+  return pattern.exec(new URL(request.url).pathname)?.[1] ?? '';
+}
+
+function matchIdFromStart(request, context) {
+  if (typeof context?.params?.matchId === 'string') return context.params.matchId;
+  return /\/pvp\/matches\/([^/]+)\/start\/?$/.exec(new URL(request.url).pathname)?.[1] ?? '';
+}
+
 function historyPageFrom(request) {
   const values = new URL(request.url).searchParams.getAll('page');
   if (values.length === 0) return 1;
@@ -161,6 +176,36 @@ export function createPvpHandlers({
         throw error;
       }
       return responseForResult(await matchmakingService.findOpponent(await getPool(), identity, body));
+    }),
+    getSearch: (request, context = {}) => withUser(request, context, async (identity, getPool) => {
+      const searchId = searchIdFrom(request, context);
+      if (!isSearchId(searchId)) return jsonResponse(404, { code: 'search-not-found' });
+      return responseForResult(await matchmakingService.getSearch(await getPool(), identity, searchId));
+    }),
+    cancelSearch: (request, context = {}) => withUser(request, context, async (identity, getPool) => {
+      const bounded = await readBoundedJson(request, MAX_SMALL_REQUEST_BYTES, { emptyAsObject: true });
+      if (bounded.error) return jsonResponse(bounded.status, { code: bounded.error });
+      if (!bounded.value || typeof bounded.value !== 'object' || Array.isArray(bounded.value) ||
+          Object.keys(bounded.value).length !== 0) {
+        return jsonResponse(400, { code: 'invalid-search-cancel' });
+      }
+      const searchId = searchIdFrom(request, context, true);
+      if (!isSearchId(searchId)) return jsonResponse(404, { code: 'search-not-found' });
+      return responseForResult(await matchmakingService.cancelSearch(await getPool(), identity, searchId));
+    }),
+    startMatch: (request, context = {}) => withUser(request, context, async (identity, getPool) => {
+      const matchId = matchIdFromStart(request, context);
+      if (!isMatchId(matchId)) return jsonResponse(404, { code: 'match-not-found' });
+      const bounded = await readBoundedJson(request, MAX_SMALL_REQUEST_BYTES);
+      if (bounded.error) return jsonResponse(bounded.status, { code: bounded.error });
+      let body;
+      try {
+        body = validateStartSearchRequest(bounded.value);
+      } catch (error) {
+        if (error instanceof PvpValidationError) return jsonResponse(400, { code: error.code });
+        throw error;
+      }
+      return responseForResult(await matchmakingService.startMatch(await getPool(), identity, matchId, body));
     }),
     submit: (request, context = {}) => {
       const receivedAtUtc = clock();

@@ -71,8 +71,17 @@ export function validateSnapshotRequest(body) {
 }
 
 export function validateSearchRequest(body) {
-  if (!isPlainObject(body) || Object.keys(body).length !== 0) throw new PvpValidationError('invalid-match-search');
-  return {};
+  if (!hasExactKeys(body, ['searchId']) || !isSearchId(body.searchId)) {
+    throw new PvpValidationError('invalid-match-search');
+  }
+  return { searchId: body.searchId };
+}
+
+export function validateStartSearchRequest(body) {
+  if (!hasExactKeys(body, ['searchId']) || !isSearchId(body.searchId)) {
+    throw new PvpValidationError('invalid-match-start');
+  }
+  return { searchId: body.searchId };
 }
 
 export function validatePvpInputs(body) {
@@ -91,5 +100,9 @@ export function validatePvpInputs(body) {
 }
 
 export function isMatchId(value) {
+  return typeof value === 'string' && GUID_PATTERN.test(value);
+}
+
+export function isSearchId(value) {
   return typeof value === 'string' && GUID_PATTERN.test(value);
 }

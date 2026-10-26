@@ -259,7 +259,7 @@ test('createMatch rejects a snapshot version changed after candidate search befo
 });
 
 test('completeRatedMatch writes input to payload and rated marker to the summary in one transaction', async () => {
-  let status = 'issued';
+  let status = 'started';
   let rated = false;
   let inputJson = null;
   const rowForSelect = () => ({
@@ -330,7 +330,7 @@ test('completeRatedMatch writes input to payload and rated marker to the summary
 });
 
 test('rejectMatch stores invalid input in payload and terminal status in summary', async () => {
-  let status = 'issued';
+  let status = 'started';
   let inputJson = null;
   const mock = mockRequests(async ({ statement, parameters }) => {
     if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m/i.test(statement)) {
@@ -551,6 +551,38 @@ test('startSearchMatch transitions a matched issued ticket without extending its
     assert.ok(matchTransition);
     assert.match(matchTransition.statement, /Status\s*=\s*N'started'/i);
     assert.doesNotMatch(matchTransition.statement, /ExpiresAtUtc\s*=/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('startSearchMatch expires an overdue issued ticket without starting it', async () => {
+  const mock = mockRequests(async ({ statement }) => {
+    if (/FROM dbo\.PvpMatchSearches WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'matched', MatchId: MATCH_ID }] };
+    }
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ MatchId: MATCH_ID, Player1Id: PLAYER_A, Status: 'issued', ExpiresAtUtc: new Date('2026-10-26T00:00:30.000Z') }] };
+    }
+    if (/UPDATE dbo\.PvpMatches[\s\S]*Status\s*=\s*N'expired'/i.test(statement)) return { recordset: [] };
+    if (/UPDATE dbo\.PvpMatchSearches/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'expired', MatchId: MATCH_ID }] };
+    }
+    throw new Error('Unexpected SQL in PvP expired-start test: ' + statement);
+  });
+  try {
+    const repository = await loadRepository();
+    const result = await repository.startSearchMatch(mock, {
+      searchId: SEARCH_ID,
+      matchId: MATCH_ID,
+      playerId: PLAYER_A,
+      nowUtc: new Date('2026-10-26T00:01:00.000Z'),
+      retainUntilUtc: new Date('2026-10-26T00:11:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'expired');
+    assert.equal(mock.calls.find((call) => /UPDATE dbo\.PvpMatchSearches/i.test(call.statement)).parameters.Status, 'expired');
+    assert.ok(mock.calls.some((call) => /UPDATE dbo\.PvpMatches[\s\S]*Status\s*=\s*N'expired'/i.test(call.statement)));
   } finally {
     mock.restore();
   }

@@ -1,6 +1,6 @@
 # Task P01-T02: 검색 lifecycle 서비스와 인증 API
 
-## Status: planned
+## Status: done
 
 ## Goal
 DB 저장소를 사용해 검색 시작·상태 확인·취소·경기 시작 경계를 구현한다. 같은 SearchId의 HTTP 재시도는 기존 row/ticket을 반환하고 중복 loop를 만들지 않으며, 결과 제출은 서버가 시작을 승인한 매치만 받는다.
@@ -49,6 +49,7 @@ All routes use the existing Entra-authenticated withUser boundary.
 - api/src/domain/pvpRating.js — validateSearchRequest accepts exactly one valid searchId; add validators for searchId and start request as needed.
 - api/src/services/matchmakingService.js — add search lifecycle methods, single-loop claim behavior, state polling and ticket reuse.
 - api/src/services/pvpResultService.js and api/src/repositories/pvpRepository.js — allow first result only from started, while preserving completed-result idempotency; expire overdue issued or started matches at the existing ExpiresAtUtc.
+- api/src/repositories/pvpRepository.js — finish searches at deadline and reconcile expired linked tickets without changing the search-then-match lock order.
 - api/src/functions/pvp.js — inject lifecycle service; add handlers getSearch, cancelSearch, startMatch; keep authentication and bounded JSON parsing.
 - api/src/functions/pvpMatches.js — register GET search/{searchId}, POST search/{searchId}/cancel, POST {matchId}/start routes and export handlers.
 - api/test/pvp/matchmakingService.test.js — cover unique loop ownership, same-ID retries, cancellation polling at <=5 seconds, 60 second deadline, duplicate ticket return and ticket-create/attach atomicity.
@@ -69,6 +70,11 @@ All routes use the existing Entra-authenticated withUser boundary.
 ## Validation Commands
 - node --test api/test/pvp/matchmakingService.test.js api/test/pvp/pvpFunctions.test.js api/test/pvp/pvpResultService.test.js
 - npm run check --prefix api
+
+## Validation Result
+- The specified lifecycle/function/result suite passed: 35 tests.
+- Repository regression suite passed: 18 tests.
+- npm run check --prefix api passed.
 
 ## Commit
 Plan: 2026-10-26-pvp-search-cancel

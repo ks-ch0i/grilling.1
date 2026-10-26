@@ -9,7 +9,7 @@
 | Task | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
 | P01-T01 | done | 검색 상태 테이블, match started 상태와 transaction repository 경계를 추가한다. | [T01](./T01-search-state-schema.md) |
-| P01-T02 | planned | 검색 lifecycle 서비스와 인증된 시작·상태·취소·시작 API를 구현한다. | [T02](./T02-search-lifecycle-api.md) |
+| P01-T02 | done | 검색 lifecycle 서비스와 인증된 시작·상태·취소·시작 API를 구현한다. | [T02](./T02-search-lifecycle-api.md) |
 | P01-T03 | planned | SearchId 멱등 클라이언트와 검색 취소 overlay, 서버 시작 확인을 연결한다. | [T03](./T03-search-cancel-client.md) |
 | P01-T04 | planned | terminal 검색 row를 기존 일일 retention 작업에서 제한된 batch로 삭제한다. | [T04](./T04-search-retention-cleanup.md) |
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { identityA, MATCH_A } from '../../test-support/pvp.js';
+import { identityA, MATCH_A, SEARCH_A } from '../../test-support/pvp.js';
 
 const env = {
   ENTRA_TENANT_ID: identityA.tenantId,
@@ -22,7 +22,7 @@ function parseBody(response) {
 }
 
 async function makeHandlers(overrides = {}) {
-  const calls = { pools: [], snapshots: [], searches: [], results: [], top: [], history: [], errors: [] };
+  const calls = { pools: [], snapshots: [], searches: [], states: [], cancellations: [], starts: [], results: [], top: [], history: [], errors: [] };
   const dependencies = {
     env,
     credential: { getToken: async () => ({ token: 'unused' }) },
@@ -38,7 +38,19 @@ async function makeHandlers(overrides = {}) {
     matchmakingService: {
       findOpponent: async (_pool, user, body) => {
         calls.searches.push({ user, body });
-        return { status: 201, ticket: { matchId: MATCH_A } };
+        return { status: 201, searchId: body.searchId, state: 'matched', ticket: { matchId: MATCH_A } };
+      },
+      getSearch: async (_pool, user, searchId) => {
+        calls.states.push({ user, searchId });
+        return { status: 200, searchId, state: 'matched', matchId: MATCH_A, ticket: { matchId: MATCH_A } };
+      },
+      cancelSearch: async (_pool, user, searchId) => {
+        calls.cancellations.push({ user, searchId });
+        return { status: 200, searchId, state: 'cancelled' };
+      },
+      startMatch: async (_pool, user, matchId, body) => {
+        calls.starts.push({ user, matchId, body });
+        return { status: 200, searchId: body.searchId, matchId, state: 'started' };
       },
     },
     resultService: {
@@ -70,14 +82,54 @@ test('PUT snapshot and POST search bind requests to the authenticated account', 
     body: JSON.stringify({ expectedSaveRevision: 7 }),
   }));
   const search = await handlers.search(new Request('https://game.internal/api/pvp/matches/search', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ searchId: SEARCH_A }),
   }));
 
   assert.equal(snapshot.status, 200);
   assert.equal(search.status, 201);
   assert.deepEqual(handlers.calls.snapshots[0], { user: identityA, body: { expectedSaveRevision: 7 } });
-  assert.deepEqual(handlers.calls.searches[0], { user: identityA, body: {} });
+  assert.deepEqual(handlers.calls.searches[0], { user: identityA, body: { searchId: SEARCH_A } });
   assert.equal(handlers.calls.pools.length, 2);
+});
+
+test('search status, cancellation and start endpoints bind the authenticated owner and identifiers', async () => {
+  const handlers = await makeHandlers();
+  const status = await handlers.getSearch(new Request('https://game.internal/api/pvp/matches/search/' + SEARCH_A), { params: { searchId: SEARCH_A } });
+  const cancelled = await handlers.cancelSearch(new Request('https://game.internal/api/pvp/matches/search/' + SEARCH_A + '/cancel', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+  }), { params: { searchId: SEARCH_A } });
+  const started = await handlers.startMatch(new Request('https://game.internal/api/pvp/matches/' + MATCH_A + '/start', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ searchId: SEARCH_A }),
+  }), { params: { matchId: MATCH_A } });
+
+  assert.equal(status.status, 200);
+  assert.deepEqual(parseBody(status), { searchId: SEARCH_A, state: 'matched', matchId: MATCH_A, ticket: { matchId: MATCH_A } });
+  assert.deepEqual(parseBody(cancelled), { searchId: SEARCH_A, state: 'cancelled' });
+  assert.deepEqual(parseBody(started), { searchId: SEARCH_A, matchId: MATCH_A, state: 'started' });
+  assert.deepEqual(handlers.calls.states, [{ user: identityA, searchId: SEARCH_A }]);
+  assert.deepEqual(handlers.calls.cancellations, [{ user: identityA, searchId: SEARCH_A }]);
+  assert.deepEqual(handlers.calls.starts, [{ user: identityA, matchId: MATCH_A, body: { searchId: SEARCH_A } }]);
+});
+
+test('search lifecycle endpoints require authentication and reject malformed identifiers before SQL', async () => {
+  const unauthenticated = await makeHandlers({
+    authenticate: async () => { throw Object.assign(new Error('invalid token'), { statusCode: 401 }); },
+    sqlPoolProvider: async () => assert.fail('unauthenticated search lifecycle request must not open SQL'),
+  });
+  const unauthorized = await unauthenticated.getSearch(
+    new Request('https://game.internal/api/pvp/matches/search/' + SEARCH_A),
+    { params: { searchId: SEARCH_A } },
+  );
+  assert.equal(unauthorized.status, 401);
+  assert.deepEqual(parseBody(unauthorized), { error: 'unauthorized' });
+
+  const handlers = await makeHandlers({ sqlPoolProvider: async () => assert.fail('malformed ID must not open SQL') });
+  const malformed = await handlers.getSearch(
+    new Request('https://game.internal/api/pvp/matches/search/not-a-guid'),
+    { params: { searchId: 'not-a-guid' } },
+  );
+  assert.equal(malformed.status, 404);
+  assert.deepEqual(parseBody(malformed), { code: 'search-not-found' });
 });
 
 test('result endpoint forwards only input events and the server receive time', async () => {
@@ -116,6 +168,21 @@ test('spoofed result claims, oversized bodies and invalid searches stop before o
   assert.equal(parseBody(oversized).code, 'result-too-large');
   assert.equal(invalidSearch.status, 400);
   assert.equal(parseBody(invalidSearch).code, 'invalid-match-search');
+  const invalidSearchId = await handlers.search(new Request('https://game.internal/api/pvp/matches/search', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ searchId: 'bad-id' }),
+  }));
+  const invalidStart = await handlers.startMatch(new Request('https://game.internal/api/pvp/matches/' + MATCH_A + '/start', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+  }), { params: { matchId: MATCH_A } });
+  const invalidCancel = await handlers.cancelSearch(new Request('https://game.internal/api/pvp/matches/search/' + SEARCH_A + '/cancel', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }),
+  }), { params: { searchId: SEARCH_A } });
+  assert.equal(invalidSearchId.status, 400);
+  assert.equal(parseBody(invalidSearchId).code, 'invalid-match-search');
+  assert.equal(invalidStart.status, 400);
+  assert.equal(parseBody(invalidStart).code, 'invalid-match-start');
+  assert.equal(invalidCancel.status, 400);
+  assert.equal(parseBody(invalidCancel).code, 'invalid-search-cancel');
 });
 
 test('PvP HTTP routes register with the expected methods and paths', async () => {
@@ -127,6 +194,9 @@ test('PvP HTTP routes register with the expected methods and paths', async () =>
   assert.deepEqual(routes.map(({ options }) => [options.route, ...options.methods]), [
     ['pvp/snapshot', 'PUT'],
     ['pvp/matches/search', 'POST'],
+    ['pvp/matches/search/{searchId}', 'GET'],
+    ['pvp/matches/search/{searchId}/cancel', 'POST'],
+    ['pvp/matches/{matchId}/start', 'POST'],
     ['pvp/matches/{matchId}/result', 'POST'],
     ['pvp/matches/history', 'GET'],
     ['rankings/pvp/top', 'GET'],
