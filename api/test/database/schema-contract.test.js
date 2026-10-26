@@ -12,6 +12,7 @@ const pvpPayloadMigrationPath = path.join(apiRoot, 'migrations', '004-pvp-payloa
 const rewardProfileMigrationPath = path.join(apiRoot, 'migrations', '005-authoritative-reward-profile.sql');
 const profileActionMigrationPath = path.join(apiRoot, 'migrations', '006-profile-action-ledger.sql');
 const stageRewardMigrationPath = path.join(apiRoot, 'migrations', '007-stage-result-reward-persistence.sql');
+const pvpSearchStateMigrationPath = path.join(apiRoot, 'migrations', '008-pvp-search-state.sql');
 
 test('initial schema defines account, save, stage, snapshot and PvP contracts', () => {
   assert.ok(existsSync(migrationPath), 'the initial SQL migration must exist');
@@ -108,4 +109,20 @@ test('stage reward migration adds replay receipts and permits historical termina
   assert.match(sql, /IF NOT EXISTS \(SELECT 1 FROM dbo\.SchemaVersions WHERE Version = 7\)/i);
   assert.match(sql, /VALUES \(7, N'stage-result-reward-persistence'\)/i);
   assert.doesNotMatch(sql, /DELETE\s+FROM\s+dbo\.StageRunTickets|DROP\s+COLUMN/i);
+});
+
+test('PvP search-state migration stores owner-scoped searches and permits started matches', () => {
+  assert.ok(existsSync(pvpSearchStateMigrationPath), 'the additive PvP search-state migration must exist');
+  const sql = readFileSync(pvpSearchStateMigrationPath, 'utf8');
+  assert.match(sql, /CREATE TABLE dbo\.PvpMatchSearches[\s\S]*?SearchId uniqueidentifier NOT NULL[\s\S]*?PlayerId uniqueidentifier NOT NULL[\s\S]*?Status nvarchar\(16\) NOT NULL[\s\S]*?MatchId uniqueidentifier NULL/i);
+  assert.match(sql, /CreatedAtUtc datetime2\(7\) NOT NULL[\s\S]*?UpdatedAtUtc datetime2\(7\) NOT NULL[\s\S]*?SearchDeadlineAtUtc datetime2\(7\) NOT NULL[\s\S]*?RetainUntilUtc datetime2\(7\) NULL/i);
+  assert.match(sql, /CK_PvpMatchSearches_Status[\s\S]*?N'searching'[\s\S]*?N'matched'[\s\S]*?N'started'[\s\S]*?N'cancelled'[\s\S]*?N'no-opponent'[\s\S]*?N'expired'/i);
+  assert.match(sql, /FK_PvpMatchSearches_Player[\s\S]*?REFERENCES dbo\.Players\(PlayerId\)/i);
+  assert.match(sql, /FK_PvpMatchSearches_Match[\s\S]*?REFERENCES dbo\.PvpMatches\(MatchId\)/i);
+  assert.match(sql, /IX_PvpMatchSearches_Status_Deadline[\s\S]*?Status,\s*SearchDeadlineAtUtc/i);
+  assert.match(sql, /IX_PvpMatchSearches_RetainUntil[\s\S]*?RetainUntilUtc,\s*SearchId/i);
+  assert.match(sql, /ALTER TABLE dbo\.PvpMatches DROP CONSTRAINT CK_PvpMatches_Status/i);
+  assert.match(sql, /CK_PvpMatches_Status[\s\S]*?N'issued'[\s\S]*?N'started'[\s\S]*?N'completed'[\s\S]*?N'expired'[\s\S]*?N'rejected'/i);
+  assert.match(sql, /IF NOT EXISTS \(SELECT 1 FROM dbo\.SchemaVersions WHERE Version = 8\)/i);
+  assert.match(sql, /VALUES \(8, N'pvp-search-state'\)/i);
 });

@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const PLAYER_A = 'aaaaaaaa-1111-4111-8111-111111111111';
 const PLAYER_B = 'bbbbbbbb-2222-4222-8222-222222222222';
 const MATCH_ID = 'cccccccc-3333-4333-8333-333333333333';
+const SEARCH_ID = 'dddddddd-4444-4444-8444-444444444444';
 const SNAPSHOT_A = JSON.stringify({ character: { level: 1 }, equipment: {}, combat: {} });
 const SNAPSHOT_B = JSON.stringify({ character: { level: 2 }, equipment: {}, combat: {} });
 
@@ -92,6 +93,8 @@ test('candidate query excludes snapshots outside the requested balance version',
 
     assert.equal(mock.calls[0].parameters.BalanceVersion, 2);
     assert.match(mock.calls[0].statement, /ps\.BalanceVersion\s*=\s*@BalanceVersion/i);
+    assert.match(mock.calls[0].statement, /m\.Status\s+IN\s*\(N'issued',\s*N'started'\)/i);
+    assert.match(mock.calls[0].statement, /m\.Status\s*=\s*N'started'\s+OR\s*\(m\.SimulatorVersion\s*=\s*@SimulatorVersion\s+AND\s+m\.BalanceVersion\s*=\s*@BalanceVersion\)/i);
   } finally {
     mock.restore();
   }
@@ -182,6 +185,7 @@ test('createMatch rechecks both locked snapshot versions and inserts a versioned
 
     const snapshotRead = mock.calls.find((call) => /FROM dbo\.PlayerSnapshots WITH/i.test(call.statement));
     const staleMatchCleanup = mock.calls.find((call) => /UPDATE dbo\.PvpMatches[\s\S]*Status = N'expired'/i.test(call.statement));
+    const activeMatchCheck = mock.calls.find((call) => /FROM dbo\.PvpMatches WITH \(UPDLOCK, HOLDLOCK\)/i.test(call.statement));
     const matchInsert = mock.calls.find((call) => /INSERT dbo\.PvpMatches/i.test(call.statement));
     const payloadInsert = mock.calls.find((call) => /INSERT dbo\.PvpMatchPayloads/i.test(call.statement));
     assert.equal(write.kind, 'created');
@@ -190,6 +194,9 @@ test('createMatch rechecks both locked snapshot versions and inserts a versioned
     assert.match(snapshotRead.statement, /BalanceVersion/i);
     assert.equal(staleMatchCleanup.parameters.BalanceVersion, 2);
     assert.equal(staleMatchCleanup.parameters.SimulatorVersion, 2);
+    assert.match(staleMatchCleanup.statement, /Status\s+IN\s*\(N'issued',\s*N'started'\)/i);
+    assert.match(staleMatchCleanup.statement, /ExpiresAtUtc\s*<=\s*@NowUtc\s+OR\s+\(Status\s*=\s*N'issued'\s+AND\s+\(SimulatorVersion\s*<>\s*@SimulatorVersion\s+OR\s+BalanceVersion\s*<>\s*@BalanceVersion\)\)/i);
+    assert.match(activeMatchCheck.statement, /Status\s*=\s*N'started'\s+OR\s+\(SimulatorVersion\s*=\s*@SimulatorVersion\s+AND\s+BalanceVersion\s*=\s*@BalanceVersion\)/i);
     assert.equal(matchInsert.parameters.BalanceVersion, 2);
     assert.match(matchInsert.statement, /SimulatorVersion,\s*BalanceVersion/i);
     assert.doesNotMatch(matchInsert.statement, /SnapshotJson|InputJson/i);
@@ -360,6 +367,224 @@ test('rejectMatch stores invalid input in payload and terminal status in summary
     assert.equal(result.row.Status, 'rejected');
     assert.equal(result.row.InputJson, '[]');
     assert.equal(mock.calls.find((call) => /UPDATE dbo\.PvpMatchPayloads/i.test(call.statement)).parameters.InputJson, '[]');
+  } finally {
+    mock.restore();
+  }
+});
+
+test('claimSearch creates one owner-scoped searching row under a serializable key lock', async () => {
+  const mock = mockRequests(async () => ({
+    recordset: [{ WasCreated: true, SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'searching', MatchId: null }],
+  }));
+  try {
+    const repository = await loadRepository();
+    const result = await repository.claimSearch(mock, {
+      searchId: SEARCH_ID,
+      playerId: PLAYER_A,
+      nowUtc: new Date('2026-10-26T00:00:00.000Z'),
+      deadlineUtc: new Date('2026-10-26T00:01:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'created');
+    assert.equal(result.row.SearchId, SEARCH_ID);
+    assert.equal(result.row.Status, 'searching');
+    assert.equal(mock.calls[0].parameters.SearchId, SEARCH_ID);
+    assert.equal(mock.calls[0].parameters.PlayerId, PLAYER_A);
+    assert.match(mock.calls[0].statement, /PvpMatchSearches\s+WITH\s*\(UPDLOCK,\s*HOLDLOCK\)/i);
+    assert.match(mock.calls[0].statement, /INSERT dbo\.PvpMatchSearches/i);
+    assert.match(mock.calls[0].statement, /WHERE SearchId\s*=\s*@SearchId AND PlayerId\s*=\s*@PlayerId/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('getSearch scopes by owner, hides expired states and locks when requested', async () => {
+  const mock = mockRequests(async () => ({
+    recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'searching', MatchId: null }],
+  }));
+  try {
+    const repository = await loadRepository();
+    const row = await repository.getSearch(mock, {
+      searchId: SEARCH_ID,
+      playerId: PLAYER_A,
+      nowUtc: new Date('2026-10-26T00:00:01.000Z'),
+      lock: true,
+    });
+
+    assert.equal(row.SearchId, SEARCH_ID);
+    assert.equal(mock.calls[0].parameters.PlayerId, PLAYER_A);
+    assert.match(mock.calls[0].statement, /PvpMatchSearches\s+WITH\s*\(UPDLOCK,\s*HOLDLOCK\)/i);
+    assert.match(mock.calls[0].statement, /RetainUntilUtc\s+IS\s+NULL\s+OR\s+RetainUntilUtc\s*>\s*@NowUtc/i);
+    assert.match(mock.calls[0].statement, /SearchId\s*=\s*@SearchId\s+AND\s+PlayerId\s*=\s*@PlayerId/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('attachSearchMatch binds only an issued match while the search is still searching', async () => {
+  const mock = mockRequests(async ({ statement }) => {
+    if (/FROM dbo\.PvpMatchSearches/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'searching', MatchId: null }] };
+    }
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ MatchId: MATCH_ID, Player1Id: PLAYER_A, Status: 'issued', ExpiresAtUtc: new Date('2026-10-26T00:10:02.000Z') }] };
+    }
+    if (/UPDATE dbo\.PvpMatchSearches/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'matched', MatchId: MATCH_ID }] };
+    }
+    throw new Error('Unexpected SQL in PvP search-attach test: ' + statement);
+  });
+  try {
+    const repository = await loadRepository();
+    const result = await repository.attachSearchMatch(mock, {
+      searchId: SEARCH_ID,
+      playerId: PLAYER_A,
+      matchId: MATCH_ID,
+      nowUtc: new Date('2026-10-26T00:00:02.000Z'),
+      retainUntilUtc: new Date('2026-10-26T00:10:02.000Z'),
+    });
+
+    assert.equal(result.kind, 'linked');
+    assert.equal(result.row.Status, 'matched');
+    assert.equal(result.row.MatchId, MATCH_ID);
+    assert.equal(mock.calls[0].parameters.SearchId, SEARCH_ID);
+    assert.equal(mock.calls[1].parameters.MatchId, MATCH_ID);
+    assert.equal(mock.calls[2].parameters.RetainUntilUtc.toISOString(), '2026-10-26T00:10:02.000Z');
+    assert.equal(mock.calls[2].parameters.Status, 'matched');
+    assert.match(mock.calls[2].statement, /Status\s*=\s*@ExpectedStatus/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('cancelSearch locks search before match and atomically expires an unstarted issued match', async () => {
+  const mock = mockRequests(async ({ statement }) => {
+    if (/SELECT[\s\S]*FROM dbo\.PvpMatchSearches WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'matched', MatchId: MATCH_ID }] };
+    }
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ MatchId: MATCH_ID, Player1Id: PLAYER_A, Status: 'issued', ExpiresAtUtc: new Date('2026-10-26T00:10:00.000Z') }] };
+    }
+    if (/UPDATE dbo\.PvpMatches[\s\S]*Status\s*=\s*N'expired'/i.test(statement)) return { recordset: [] };
+    if (/UPDATE dbo\.PvpMatchSearches/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'cancelled', MatchId: MATCH_ID }] };
+    }
+    throw new Error('Unexpected SQL in PvP cancellation test: ' + statement);
+  });
+  try {
+    const repository = await loadRepository();
+    const result = await repository.cancelSearch(mock, {
+      searchId: SEARCH_ID,
+      playerId: PLAYER_A,
+      nowUtc: new Date('2026-10-26T00:01:00.000Z'),
+      retainUntilUtc: new Date('2026-10-26T00:11:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'cancelled');
+    assert.equal(result.row.MatchId, MATCH_ID);
+    const searchLockIndex = mock.calls.findIndex((call) => /FROM dbo\.PvpMatchSearches WITH \(UPDLOCK, HOLDLOCK\)/i.test(call.statement));
+    const matchLockIndex = mock.calls.findIndex((call) => /FROM dbo\.PvpMatches AS m WITH \(UPDLOCK, HOLDLOCK\)/i.test(call.statement));
+    assert.ok(searchLockIndex >= 0 && matchLockIndex > searchLockIndex);
+    assert.ok(mock.calls.some((call) => /UPDATE dbo\.PvpMatches[\s\S]*Status\s*=\s*N'expired'/i.test(call.statement)));
+    assert.equal(mock.calls.find((call) => /UPDATE dbo\.PvpMatchSearches/i.test(call.statement)).parameters.Status, 'cancelled');
+  } finally {
+    mock.restore();
+  }
+});
+
+test('startSearchMatch returns an already-started match idempotently', async () => {
+  const mock = mockRequests(async ({ statement }) => {
+    if (/SELECT[\s\S]*FROM dbo\.PvpMatchSearches WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'started', MatchId: MATCH_ID }] };
+    }
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ MatchId: MATCH_ID, Player1Id: PLAYER_A, Status: 'started', ExpiresAtUtc: new Date('2026-10-26T00:10:00.000Z') }] };
+    }
+    throw new Error('Unexpected SQL in PvP start idempotency test: ' + statement);
+  });
+  try {
+    const repository = await loadRepository();
+    const result = await repository.startSearchMatch(mock, {
+      searchId: SEARCH_ID,
+      matchId: MATCH_ID,
+      playerId: PLAYER_A,
+      nowUtc: new Date('2026-10-26T00:01:00.000Z'),
+      retainUntilUtc: new Date('2026-10-26T00:11:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'started');
+    assert.equal(result.row.Status, 'started');
+    assert.equal(result.row.MatchId, MATCH_ID);
+    assert.equal(mock.calls.length, 2);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('startSearchMatch transitions a matched issued ticket without extending its expiry', async () => {
+  const mock = mockRequests(async ({ statement }) => {
+    if (/SELECT[\s\S]*FROM dbo\.PvpMatchSearches WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'matched', MatchId: MATCH_ID }] };
+    }
+    if (/SELECT m\.MatchId[\s\S]*FROM dbo\.PvpMatches AS m WITH \(UPDLOCK, HOLDLOCK\)/i.test(statement)) {
+      return { recordset: [{ MatchId: MATCH_ID, Player1Id: PLAYER_A, Status: 'issued', ExpiresAtUtc: new Date('2026-10-26T00:10:00.000Z') }] };
+    }
+    if (/UPDATE dbo\.PvpMatches[\s\S]*Status\s*=\s*N'started'/i.test(statement)) return { recordset: [{ MatchId: MATCH_ID }] };
+    if (/UPDATE dbo\.PvpMatchSearches/i.test(statement)) {
+      return { recordset: [{ SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'started', MatchId: MATCH_ID }] };
+    }
+    throw new Error('Unexpected SQL in PvP start transition test: ' + statement);
+  });
+  try {
+    const repository = await loadRepository();
+    const result = await repository.startSearchMatch(mock, {
+      searchId: SEARCH_ID,
+      matchId: MATCH_ID,
+      playerId: PLAYER_A,
+      nowUtc: new Date('2026-10-26T00:01:00.000Z'),
+      retainUntilUtc: new Date('2026-10-26T00:11:00.000Z'),
+    });
+
+    assert.equal(result.kind, 'started');
+    assert.equal(result.row.Status, 'started');
+    const matchTransition = mock.calls.find((call) => /UPDATE dbo\.PvpMatches/i.test(call.statement));
+    assert.ok(matchTransition);
+    assert.match(matchTransition.statement, /Status\s*=\s*N'started'/i);
+    assert.doesNotMatch(matchTransition.statement, /ExpiresAtUtc\s*=/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('loadSearchTicket requires owner match and returns its linked match payload', async () => {
+  const mock = mockRequests(async ({ statement }) => {
+    if (/FROM dbo\.PvpMatchSearches AS s/i.test(statement)) {
+      return {
+        recordset: [{
+          SearchId: SEARCH_ID, PlayerId: PLAYER_A, Status: 'matched', MatchId: MATCH_ID,
+          MatchStatus: 'issued', Player1Id: PLAYER_A, Player2Id: PLAYER_B,
+          Player1SnapshotJson: SNAPSHOT_A, Player2SnapshotJson: SNAPSHOT_B,
+          Seed: 123456, SimulatorVersion: 2, BalanceVersion: 2,
+          IssuedAtUtc: new Date('2026-10-26T00:00:02.000Z'),
+          ExpiresAtUtc: new Date('2026-10-26T00:10:02.000Z'),
+          RatingBefore1: 1000, RatingBefore2: 1000, Rated: false,
+          OpponentDisplayName: 'Opponent',
+        }],
+      };
+    }
+    throw new Error('Unexpected SQL in PvP search-ticket test: ' + statement);
+  });
+  try {
+    const repository = await loadRepository();
+    const row = await repository.loadSearchTicket(mock, { searchId: SEARCH_ID, playerId: PLAYER_A });
+
+    assert.equal(row.MatchId, MATCH_ID);
+    assert.equal(row.Player1SnapshotJson, SNAPSHOT_A);
+    assert.equal(row.Player2SnapshotJson, SNAPSHOT_B);
+    assert.equal(row.OpponentDisplayName, 'Opponent');
+    assert.match(mock.calls[0].statement, /INNER JOIN dbo\.PvpMatches AS m ON m\.MatchId\s*=\s*s\.MatchId/i);
+    assert.match(mock.calls[0].statement, /s\.SearchId\s*=\s*@SearchId\s+AND\s+s\.PlayerId\s*=\s*@PlayerId/i);
+    assert.match(mock.calls[0].statement, /LEFT JOIN dbo\.PvpMatchPayloads/i);
   } finally {
     mock.restore();
   }

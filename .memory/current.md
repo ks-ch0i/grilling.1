@@ -1,13 +1,17 @@
 # Current Context
 
 ## Active Plan
-[마창기사 저장 권위 전환 및 PvP 상세 데이터 보관](./plans/2026-10-25-knight-run-save-authority-and-pvp-retention.md)
+[비동기 PvP 검색 취소](./plans/2026-10-26-pvp-search-cancel.md) — implementation in progress.
 
 ## Active Phase
-[P03 client save boundary — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/phase.md)
+P01 — [비동기 PvP 검색 취소](./phases/2026-10-26-pvp-search-cancel/P01-pvp-search-cancel/phase.md), status in_progress.
 
 ## Active Task
-[T08 gameplay reward integration — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/T08-gameplay-reward-integration.md)
+P01-T02 — [검색 lifecycle 서비스와 인증 API](./phases/2026-10-26-pvp-search-cancel/P01-pvp-search-cancel/T02-search-lifecycle-api.md), status planned.
+
+## Latest Pushed Item
+- `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
+- Result and validation are recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
 
 ## Status
 - 2026-10-26 추가 작업 완료: 로컬 게스트 실행·게임 화면 크기 초기화 수정, 일반/랭킹 적 추격과 v3 재현 규칙, 일반 적 3종·보스·기사의 승인된 2D 애니메이션 반영. 기사는 걷는 동안 상체 한 자세를 유지하며 말과 망토만 움직인다. 최종 클라이언트 204 tests, API 148 tests, production build 및 브라우저 전투·미리보기 검증 통과.
@@ -27,6 +31,7 @@
 - 이전 계획의 4개 Phase, 9개 Task 전체 완료. PvP 보관과 저장 권위 변경은 새 선택이 필요해 별도 후속 계획으로 넘겼고, 현재는 그 선택을 반영한 구현 계획을 시작한다.
 - 후속 구현 계획 확정: PvP 경기 요약은 무기한 보관하고 입력·전투 스냅샷은 terminal 시점부터 90일 보관한다. 온라인 검증 보상·진행도는 서버 권위로 전환하며, 오프라인 진행도와 기존 v2 보상값은 복구 가능한 미검증 로컬 데이터로 유지한다.
 - 현재 계획은 3개 도메인 Phase와 8개 Task로 구성한다. 이번 계획에서 코드·DB·저장 데이터·Azure 자원은 변경하지 않았다.
+- 2026-10-26 비동기 PvP 검색 취소 계획을 만들고 실행 중이다. P01-T01은 검색 상태 migration과 repository 경계를 구현했다. Focused schema/repository tests 25개와 API check를 통과했다.
 
 - P01-T01 complete: PvP summaries and replay payloads are separated; missing terminal payloads return 410. Focused tests: 25 passed; API suite: 104 passed.
 
@@ -43,4 +48,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-No remaining tasks in this plan. Select or create the next plan when ready.
+Use `/memory-execute` or say “current 보고 이어서 해줘” to implement P01-T02 from its blueprint, validate it, then advance the pointer sequentially.

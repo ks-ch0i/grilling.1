@@ -11,6 +11,8 @@ const MATCH_COLUMNS = `MatchId, Player1Id, Player2Id, Player1SnapshotRevision, P
   RatingBefore1, RatingBefore2, RatingAfter1, RatingAfter2, IssuedAtUtc, ExpiresAtUtc,
   CompletedAtUtc, Status, Rated`;
 const MATCH_OUTPUT_COLUMNS = MATCH_COLUMNS.split(',').map((column) => `inserted.${column.trim()}`).join(', ');
+const SEARCH_COLUMNS = 'SearchId, PlayerId, Status, MatchId, CreatedAtUtc, UpdatedAtUtc, SearchDeadlineAtUtc, RetainUntilUtc';
+const SEARCH_OUTPUT_COLUMNS = SEARCH_COLUMNS.split(',').map((column) => `inserted.${column.trim()}`).join(', ');
 
 export async function getPlayerSnapshot(connection, playerId, { lock = false } = {}) {
   const request = requestFor(connection).input('PlayerId', sql.UniqueIdentifier, playerId);
@@ -120,8 +122,9 @@ export async function findOpponentCandidate(pool, input) {
         )
         AND NOT EXISTS (
           SELECT 1 FROM dbo.PvpMatches AS m
-          WHERE m.Status = N'issued' AND m.ExpiresAtUtc > @NowUtc
-            AND m.SimulatorVersion = @SimulatorVersion AND m.BalanceVersion = @BalanceVersion
+          WHERE m.Status IN (N'issued', N'started') AND m.ExpiresAtUtc > @NowUtc
+            AND (m.Status = N'started'
+              OR (m.SimulatorVersion = @SimulatorVersion AND m.BalanceVersion = @BalanceVersion))
             AND (m.Player1Id = p.PlayerId OR m.Player2Id = p.PlayerId
               OR m.Player1Id = @PlayerId OR m.Player2Id = @PlayerId)
         )
@@ -184,8 +187,9 @@ export async function createMatch(transaction, input) {
     .input('BalanceVersion', sql.Int, input.balanceVersion)
     .query(`
       UPDATE dbo.PvpMatches SET Status = N'expired'
-      WHERE Status = N'issued'
-        AND (ExpiresAtUtc <= @NowUtc OR SimulatorVersion <> @SimulatorVersion OR BalanceVersion <> @BalanceVersion)
+      WHERE Status IN (N'issued', N'started')
+        AND (ExpiresAtUtc <= @NowUtc
+          OR (Status = N'issued' AND (SimulatorVersion <> @SimulatorVersion OR BalanceVersion <> @BalanceVersion)))
         AND (Player1Id IN (@Player1Id, @Player2Id) OR Player2Id IN (@Player1Id, @Player2Id));
     `);
 
@@ -216,8 +220,8 @@ export async function createMatch(transaction, input) {
     .query(`
       SELECT TOP (1) MatchId
       FROM dbo.PvpMatches WITH (UPDLOCK, HOLDLOCK)
-      WHERE Status = N'issued' AND ExpiresAtUtc > @NowUtc
-        AND SimulatorVersion = @SimulatorVersion AND BalanceVersion = @BalanceVersion
+      WHERE Status IN (N'issued', N'started') AND ExpiresAtUtc > @NowUtc
+        AND (Status = N'started' OR (SimulatorVersion = @SimulatorVersion AND BalanceVersion = @BalanceVersion))
         AND (Player1Id IN (@Player1Id, @Player2Id) OR Player2Id IN (@Player1Id, @Player2Id));
     `);
   if (active.recordset?.[0]) return { kind: 'active-match' };
@@ -276,6 +280,191 @@ async function selectMatch(connection, player1Id, matchId, { lock = false } = {}
       FROM dbo.PvpMatches AS m${lock ? ' WITH (UPDLOCK, HOLDLOCK)' : ''}
       LEFT JOIN dbo.PvpMatchPayloads AS payload ON payload.MatchId = m.MatchId
       WHERE m.MatchId = @MatchId AND m.Player1Id = @Player1Id;
+    `);
+  return result.recordset?.[0] ?? null;
+}
+
+async function updateSearchState(transaction, input) {
+  const result = await requestFor(transaction)
+    .input('SearchId', sql.UniqueIdentifier, input.searchId)
+    .input('PlayerId', sql.UniqueIdentifier, input.playerId)
+    .input('ExpectedStatus', sql.NVarChar(16), input.expectedStatus)
+    .input('Status', sql.NVarChar(16), input.status)
+    .input('MatchId', sql.UniqueIdentifier, input.matchId ?? null)
+    .input('SetMatchId', sql.Bit, Boolean(input.setMatchId))
+    .input('NowUtc', sql.DateTime2, input.nowUtc)
+    .input('RetainUntilUtc', sql.DateTime2, input.retainUntilUtc)
+    .query(`
+      UPDATE dbo.PvpMatchSearches
+      SET Status = @Status,
+          MatchId = CASE WHEN @SetMatchId = 1 THEN @MatchId ELSE MatchId END,
+          UpdatedAtUtc = @NowUtc,
+          RetainUntilUtc = @RetainUntilUtc
+      OUTPUT ${SEARCH_OUTPUT_COLUMNS}
+      WHERE SearchId = @SearchId AND PlayerId = @PlayerId AND Status = @ExpectedStatus;
+    `);
+  return result.recordset?.[0] ?? null;
+}
+
+export async function claimSearch(transaction, input) {
+  const result = await requestFor(transaction)
+    .input('SearchId', sql.UniqueIdentifier, input.searchId)
+    .input('PlayerId', sql.UniqueIdentifier, input.playerId)
+    .input('NowUtc', sql.DateTime2, input.nowUtc)
+    .input('DeadlineUtc', sql.DateTime2, input.deadlineUtc)
+    .query(`
+      DECLARE @ExistingPlayerId uniqueidentifier;
+      SELECT @ExistingPlayerId = PlayerId
+      FROM dbo.PvpMatchSearches WITH (UPDLOCK, HOLDLOCK)
+      WHERE SearchId = @SearchId;
+
+      IF @ExistingPlayerId IS NULL
+      BEGIN
+        INSERT dbo.PvpMatchSearches
+          (SearchId, PlayerId, Status, MatchId, CreatedAtUtc, UpdatedAtUtc, SearchDeadlineAtUtc, RetainUntilUtc)
+        OUTPUT CAST(1 AS bit) AS WasCreated, ${SEARCH_OUTPUT_COLUMNS}
+        VALUES (@SearchId, @PlayerId, N'searching', NULL, @NowUtc, @NowUtc, @DeadlineUtc, NULL);
+      END
+      ELSE IF @ExistingPlayerId = @PlayerId
+      BEGIN
+        SELECT CAST(0 AS bit) AS WasCreated, ${SEARCH_COLUMNS}
+        FROM dbo.PvpMatchSearches
+        WHERE SearchId = @SearchId AND PlayerId = @PlayerId
+          AND (RetainUntilUtc IS NULL OR RetainUntilUtc > @NowUtc);
+      END;
+    `);
+  const row = result.recordset?.[0];
+  if (!row) return { kind: 'not-found' };
+  const { WasCreated, ...search } = row;
+  return { kind: WasCreated ? 'created' : 'existing', row: search };
+}
+
+export async function getSearch(connection, input) {
+  const result = await requestFor(connection)
+    .input('SearchId', sql.UniqueIdentifier, input.searchId)
+    .input('PlayerId', sql.UniqueIdentifier, input.playerId)
+    .input('NowUtc', sql.DateTime2, input.nowUtc)
+    .query(`
+      SELECT ${SEARCH_COLUMNS}
+      FROM dbo.PvpMatchSearches${input.lock ? " WITH (UPDLOCK, HOLDLOCK)" : ""}
+      WHERE SearchId = @SearchId AND PlayerId = @PlayerId
+        AND (RetainUntilUtc IS NULL OR RetainUntilUtc > @NowUtc);
+    `);
+  return result.recordset?.[0] ?? null;
+}
+
+export async function attachSearchMatch(transaction, input) {
+  const search = await getSearch(transaction, {
+    searchId: input.searchId, playerId: input.playerId, nowUtc: input.nowUtc, lock: true,
+  });
+  if (!search) return { kind: 'not-found' };
+  if (search.Status !== 'searching') return { kind: search.Status, row: search };
+
+  const match = await selectMatch(transaction, input.playerId, input.matchId, { lock: true });
+  if (!match) return { kind: 'not-found' };
+  if (match.Status !== 'issued') return { kind: match.Status, row: match };
+  if (new Date(match.ExpiresAtUtc).getTime() <= input.nowUtc.getTime()) {
+    await expireMatch(transaction, input.playerId, input.matchId);
+    const row = await updateSearchState(transaction, {
+      ...input, expectedStatus: 'searching', status: 'expired', retainUntilUtc: input.retainUntilUtc,
+    });
+    return row ? { kind: 'expired', row } : { kind: 'conflict' };
+  }
+
+  const row = await updateSearchState(transaction, {
+    ...input,
+    expectedStatus: 'searching',
+    status: 'matched',
+    matchId: input.matchId,
+    setMatchId: true,
+    retainUntilUtc: match.ExpiresAtUtc,
+  });
+  return row ? { kind: 'linked', row } : { kind: 'conflict' };
+}
+
+export async function cancelSearch(transaction, input) {
+  const search = await getSearch(transaction, {
+    searchId: input.searchId, playerId: input.playerId, nowUtc: input.nowUtc, lock: true,
+  });
+  if (!search) return { kind: 'not-found' };
+  if (search.Status === 'started') return { kind: 'already-started', row: search };
+  if (search.Status === 'cancelled' || search.Status === 'expired' || search.Status === 'no-opponent') {
+    return { kind: search.Status, row: search };
+  }
+
+  let nextStatus = 'cancelled';
+  if (search.Status === 'matched') {
+    const match = await selectMatch(transaction, input.playerId, search.MatchId, { lock: true });
+    if (!match) return { kind: 'not-found' };
+    if (match.Status === 'started') return { kind: 'already-started', row: search };
+    if (match.Status !== 'issued' || new Date(match.ExpiresAtUtc).getTime() <= input.nowUtc.getTime()) {
+      if (match.Status === 'issued') await expireMatch(transaction, input.playerId, search.MatchId);
+      nextStatus = 'expired';
+    } else {
+      await expireMatch(transaction, input.playerId, search.MatchId);
+    }
+  }
+
+  const row = await updateSearchState(transaction, {
+    ...input, expectedStatus: search.Status, status: nextStatus,
+  });
+  return row ? { kind: nextStatus, row } : { kind: 'conflict' };
+}
+
+export async function startSearchMatch(transaction, input) {
+  const search = await getSearch(transaction, {
+    searchId: input.searchId, playerId: input.playerId, nowUtc: input.nowUtc, lock: true,
+  });
+  if (!search || search.MatchId !== input.matchId) return { kind: 'not-found' };
+  if (search.Status !== 'matched' && search.Status !== 'started') return { kind: search.Status, row: search };
+
+  const match = await selectMatch(transaction, input.playerId, input.matchId, { lock: true });
+  if (!match) return { kind: 'not-found' };
+  if (new Date(match.ExpiresAtUtc).getTime() <= input.nowUtc.getTime()) {
+    if (match.Status === 'issued') await expireMatch(transaction, input.playerId, input.matchId);
+    if (search.Status === 'matched') {
+      const row = await updateSearchState(transaction, {
+        ...input, expectedStatus: 'matched', status: 'expired',
+      });
+      return row ? { kind: 'expired', row } : { kind: 'conflict' };
+    }
+    return { kind: 'expired', row: search };
+  }
+  if (search.Status === 'started' && match.Status === 'started') return { kind: 'started', row: search, match };
+  if (search.Status !== 'matched' || match.Status !== 'issued') return { kind: match.Status, row: search };
+
+  const transitioned = await requestFor(transaction)
+    .input('MatchId', sql.UniqueIdentifier, input.matchId)
+    .input('Player1Id', sql.UniqueIdentifier, input.playerId)
+    .query(`
+      UPDATE dbo.PvpMatches
+      SET Status = N'started'
+      OUTPUT inserted.MatchId
+      WHERE MatchId = @MatchId AND Player1Id = @Player1Id AND Status = N'issued';
+    `);
+  if (!transitioned.recordset?.[0]) return { kind: 'conflict' };
+
+  const row = await updateSearchState(transaction, {
+    ...input, expectedStatus: 'matched', status: 'started',
+  });
+  return row ? { kind: 'started', row, match: { ...match, Status: 'started' } } : { kind: 'conflict' };
+}
+
+export async function loadSearchTicket(connection, input) {
+  const result = await requestFor(connection)
+    .input('SearchId', sql.UniqueIdentifier, input.searchId)
+    .input('PlayerId', sql.UniqueIdentifier, input.playerId)
+    .query(`
+      SELECT m.${MATCH_COLUMNS.split(",").map((column) => column.trim()).join(", m.")},
+        payload.Player1SnapshotJson, payload.Player2SnapshotJson, payload.InputJson,
+        COALESCE(opponent.DisplayName, N'Adventurer') AS OpponentDisplayName
+      FROM dbo.PvpMatchSearches AS s
+      INNER JOIN dbo.PvpMatches AS m ON m.MatchId = s.MatchId AND m.Player1Id = s.PlayerId
+      LEFT JOIN dbo.PvpMatchPayloads AS payload ON payload.MatchId = m.MatchId
+      INNER JOIN dbo.Players AS opponent ON opponent.PlayerId = m.Player2Id
+      WHERE s.SearchId = @SearchId AND s.PlayerId = @PlayerId
+        AND s.Status IN (N'matched', N'started')
+        AND m.Status IN (N'issued', N'started');
     `);
   return result.recordset?.[0] ?? null;
 }
