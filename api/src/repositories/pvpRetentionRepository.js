@@ -14,11 +14,22 @@ function batchRequest(transaction, { nowUtc, batchSize }) {
     .input('BatchSize', sql.Int, batchSize);
 }
 
-export async function expireOverdueIssuedMatchesBatch(transaction, input) {
+export async function expireOverdueActiveMatchesBatch(transaction, input) {
   const result = await batchRequest(transaction, input).query(`
     UPDATE TOP (@BatchSize) dbo.PvpMatches
     SET Status = N'expired'
-    WHERE Status = N'issued' AND ExpiresAtUtc <= @NowUtc;
+    WHERE Status IN (N'issued', N'started') AND ExpiresAtUtc <= @NowUtc;
+    SELECT @@ROWCOUNT AS RowsAffected;
+  `);
+  return rowsAffected(result);
+}
+
+export async function deleteExpiredSearchBatch(transaction, input) {
+  const result = await batchRequest(transaction, input).query(`
+    DELETE TOP (@BatchSize) dbo.PvpMatchSearches
+    WHERE Status IN (N'matched', N'started', N'cancelled', N'no-opponent', N'expired')
+      AND RetainUntilUtc IS NOT NULL
+      AND RetainUntilUtc <= @NowUtc;
     SELECT @@ROWCOUNT AS RowsAffected;
   `);
   return rowsAffected(result);

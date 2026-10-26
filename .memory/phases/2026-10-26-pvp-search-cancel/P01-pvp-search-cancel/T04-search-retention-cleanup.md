@@ -1,6 +1,11 @@
 # Task P01-T04: 검색 상태 retention 정리
 
-## Status: planned
+## Status: done
+
+## Implementation Result
+- Overdue issued and started matches now expire against their unchanged ticket expiry. Added bounded search-row deletion for matched, started, cancelled, no-opponent and expired states only when RetainUntilUtc is present and due; searching rows remain untouched.
+- Cleanup now shares one ten-batch budget fairly across match expiry, payload deletion, pair-day deletion and search-row deletion, and reports matchesExpired/searchRowsDeleted. The existing daily 03:15 UTC timer and structured summary logging remain intact.
+- Retention repository/service/function tests: 13 passed. `npm run check --prefix api` passed. No database migration or environment cleanup was run.
 
 ## Goal
 terminal PvP 검색 상태를 RetainUntilUtc 이후 기존 일일 cleanup timer에서 제한된 batch로 물리 삭제한다. 기존 cleanup 총 한도 10 batch를 유지하고 각 cleanup operation이 반복적으로 기회를 받도록 한다.

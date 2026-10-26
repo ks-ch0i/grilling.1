@@ -3,7 +3,7 @@
 ## Goal
 비동기 PvP 검색에 재시도 가능한 취소 흐름을 추가한다. 검색별 상태를 DB에 저장하고, 같은 검색 ID로 시작·취소·상태 확인을 멱등 처리한다. 티켓이 발급된 뒤에도 PvpScene의 서버 시작 확인 전까지 취소할 수 있으며, 취소와 시작은 DB transaction에서 먼저 커밋한 쪽이 결정한다.
 
-## Status: in_progress
+## Status: complete
 
 ## Confirmed Decisions
 - 저장된 캐릭터·장비 snapshot을 대상으로 하는 현재의 비동기 PvP와 매칭 범위, 레이팅 규칙, 60초 검색 제한을 유지한다.

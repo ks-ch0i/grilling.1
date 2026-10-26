@@ -37,24 +37,27 @@ export async function cleanupPvpRetention(pool, {
 } = {}) {
   validateLimits(batchSize, maxBatches);
   const nowUtc = asDate(clock());
-  const summary = { payloadRowsDeleted: 0, pairDayRowsDeleted: 0, batches: 0 };
-  const operations = [
-    { name: 'expireOverdueIssuedMatchesBatch', count: null },
+  const summary = { matchesExpired:0, payloadRowsDeleted:0, pairDayRowsDeleted:0, searchRowsDeleted:0, batches:0 };
+  let operations = [
+    { name:'expireOverdueActiveMatchesBatch', count:'matchesExpired' },
     { name: 'deleteExpiredPayloadBatch', count: 'payloadRowsDeleted' },
     { name: 'deleteOldRatedPairDayBatch', count: 'pairDayRowsDeleted' },
+    { name:'deleteExpiredSearchBatch', count:'searchRowsDeleted' },
   ];
 
-  for (const operation of operations) {
-    while (summary.batches < maxBatches) {
+  while (operations.length > 0 && summary.batches < maxBatches) {
+    const nextRound = [];
+    for (const operation of operations) {
+      if (summary.batches >= maxBatches) break;
       const affected = rowCount(await withTransaction(pool, (transaction) => repository[operation.name](transaction, {
         nowUtc,
         batchSize,
       })), batchSize);
       summary.batches += 1;
-      if (operation.count) summary[operation.count] += affected;
-      if (affected === 0) break;
+      summary[operation.count] += affected;
+      if (affected > 0) nextRound.push(operation);
     }
-    if (summary.batches >= maxBatches) break;
+    operations = nextRound;
   }
 
   return summary;

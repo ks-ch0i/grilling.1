@@ -23,7 +23,7 @@ test('registers the monitored UTC daily timer without running at startup', async
     env,
     credential: {},
     sqlPoolProvider: async () => ({}),
-    service: async () => ({ payloadRowsDeleted: 0, pairDayRowsDeleted: 0, batches: 0 }),
+    service: async () => ({ matchesExpired:0, payloadRowsDeleted:0, pairDayRowsDeleted:0, searchRowsDeleted:0, batches:0 }),
     clock: () => nowUtc,
   });
 
@@ -43,7 +43,7 @@ test('handler connects once, passes one fixed clock to cleanup and logs only agg
   const cleanups = [];
   const logs = [];
   let clockCalls = 0;
-  const summary = { payloadRowsDeleted: 11, pairDayRowsDeleted: 4, batches: 3 };
+  const summary = { matchesExpired:5, payloadRowsDeleted:11, pairDayRowsDeleted:4, searchRowsDeleted:7, batches:8 };
   const handler = createPvpRetentionCleanupHandler({
     env,
     credential: { id: 'managed-identity' },

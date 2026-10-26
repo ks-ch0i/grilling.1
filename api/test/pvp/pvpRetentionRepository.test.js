@@ -34,17 +34,36 @@ function mockRequests() {
 
 const nowUtc = new Date('2026-10-25T03:15:00.000Z');
 
-test('expireOverdueIssuedMatchesBatch changes only issued matches whose ticket expired', async () => {
+test('expireOverdueActiveMatchesBatch changes issued and started matches after the original ticket expiry', async () => {
   const mock = mockRequests();
   try {
     const repository = await loadRepository();
-    const affected = await repository.expireOverdueIssuedMatchesBatch({}, { nowUtc, batchSize: 125 });
+    const affected = await repository.expireOverdueActiveMatchesBatch({}, { nowUtc, batchSize: 125 });
 
     assert.equal(affected, 7);
     assert.equal(mock.calls[0].parameters.NowUtc, nowUtc);
     assert.equal(mock.calls[0].parameters.BatchSize, 125);
     assert.match(mock.calls[0].statement, /UPDATE TOP \(@BatchSize\) dbo\.PvpMatches/i);
-    assert.match(mock.calls[0].statement, /SET Status = N'expired'[\s\S]*?WHERE Status = N'issued' AND ExpiresAtUtc <= @NowUtc/i);
+    assert.match(mock.calls[0].statement, /SET Status = N'expired'[\s\S]*?WHERE Status IN \(N'issued', N'started'\) AND ExpiresAtUtc <= @NowUtc/i);
+    assert.match(mock.calls[0].statement, /SELECT @@ROWCOUNT AS RowsAffected/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('deleteExpiredSearchBatch is bounded and excludes searching or unexpired rows', async () => {
+  const mock = mockRequests();
+  try {
+    const repository = await loadRepository();
+    const affected = await repository.deleteExpiredSearchBatch({}, { nowUtc, batchSize: 55 });
+
+    assert.equal(affected, 7);
+    assert.equal(mock.calls[0].parameters.NowUtc, nowUtc);
+    assert.equal(mock.calls[0].parameters.BatchSize, 55);
+    assert.match(mock.calls[0].statement, /DELETE TOP \(@BatchSize\) dbo\.PvpMatchSearches/i);
+    assert.match(mock.calls[0].statement, /Status IN \(N'matched', N'started', N'cancelled', N'no-opponent', N'expired'\)/i);
+    assert.match(mock.calls[0].statement, /RetainUntilUtc IS NOT NULL[\s\S]*?RetainUntilUtc <= @NowUtc/i);
+    assert.doesNotMatch(mock.calls[0].statement, /Status\s*=\s*N'searching'/i);
     assert.match(mock.calls[0].statement, /SELECT @@ROWCOUNT AS RowsAffected/i);
   } finally {
     mock.restore();

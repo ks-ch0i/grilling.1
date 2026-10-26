@@ -3,7 +3,7 @@
 ## Goal
 검색 상태를 서버에 보관하고, 검색 시작·취소·상태 확인·전투 시작 경계를 한 SearchId로 추적한다. 검색 취소는 검색 loop와 아직 시작되지 않은 issued 티켓까지 종료하며, PvpScene 시작과 transaction 경합으로 보호한다.
 
-## Status: in_progress
+## Status: complete
 
 ## Tasks
 | Task | Status | Summary | Blueprint |
@@ -11,7 +11,7 @@
 | P01-T01 | done | 검색 상태 테이블, match started 상태와 transaction repository 경계를 추가한다. | [T01](./T01-search-state-schema.md) |
 | P01-T02 | done | 검색 lifecycle 서비스와 인증된 시작·상태·취소·시작 API를 구현한다. | [T02](./T02-search-lifecycle-api.md) |
 | P01-T03 | done | SearchId 멱등 클라이언트와 검색 취소 overlay, 서버 시작 확인을 연결한다. | [T03](./T03-search-cancel-client.md) |
-| P01-T04 | planned | terminal 검색 row를 기존 일일 retention 작업에서 제한된 batch로 삭제한다. | [T04](./T04-search-retention-cleanup.md) |
+| P01-T04 | done | terminal 검색 row를 기존 일일 retention 작업에서 제한된 batch로 삭제한다. | [T04](./T04-search-retention-cleanup.md) |
 
 ## Dependencies
 - T01 precedes T02 and T04 because both consume the new search-state schema and repository methods.
