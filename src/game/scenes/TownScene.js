@@ -684,6 +684,7 @@ export class TownScene extends Phaser.Scene {
       this.showPvpNotice({ title:'인터넷 연결 필요', message:'비동기 PvP는 온라인에서만 입장할 수 있습니다.', actions:[{ label:'확인', onClick:()=>this.refresh() }] });
       return;
     }
+    const searchHandle = this.pvpClient.createMatchSearch();
     this.transitioning = true;
     this.pvpSearching = true;
     this.refresh();
@@ -696,14 +697,32 @@ export class TownScene extends Phaser.Scene {
     };
     const overlay = this.add.container(0, 0).setDepth(300);
     this.pvpOverlay = overlay;
-    overlay.add(this.add.rectangle(640, 360, 540, 220, 0x090e14, 0.94).setStrokeStyle(2, 0xd8ba77));
+    const backdrop = this.add.rectangle(640, 360, 1280, 720, 0x05080c, 0.72).setInteractive();
+    backdrop.on('pointerdown', () => {});
+    overlay.add(backdrop);
+    overlay.add(this.add.rectangle(640, 360, 540, 260, 0x090e14, 0.96).setStrokeStyle(2, 0xd8ba77));
     overlay.add(this.add.text(640, 286, 'PvP 상대 검색', { fontFamily:'sans-serif', fontSize:'25px', color:'#f4e6bf' }).setOrigin(0.5));
     this.pvpSearchLabel = this.add.text(640, 360, '', { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df', align:'center', wordWrap:{ width:470 }, lineSpacing:7 }).setOrigin(0.5);
     overlay.add(this.pvpSearchLabel);
+    let cancelPending = false;
+    const cancelButton = createButton(this, {
+      x:565, y:452, width:150, height:46, label:'검색 취소',
+      onClick:() => {
+        if (cancelPending) return;
+        cancelPending = true;
+        this.keyboardNavigation?.reset();
+        const label = cancelButton.list?.[1];
+        label?.setText('취소 확인 중...');
+        cancelButton.disableInteractive();
+        cancelButton.setAlpha(0.55);
+        void searchHandle.cancel().catch(() => {});
+      },
+    });
+    overlay.add(cancelButton);
     updateSearchText();
     this.pvpSearchTimer = this.time.addEvent({ delay:500, loop:true, callback:updateSearchText });
     let response;
-    try { response = await this.pvpClient.findMatch(); }
+    try { response = await searchHandle.completion; }
     catch (error) { response = { ok:false, reason:error?.message === 'authentication-required' ? 'authentication-required' : 'network-unavailable' }; }
     this.pvpSearchTimer?.remove(false);
     this.pvpSearchTimer = null;
@@ -713,6 +732,7 @@ export class TownScene extends Phaser.Scene {
     if (response?.ok && response.ticket) {
       this.scene.start('PvpScene', {
         ticket:response.ticket,
+        searchId:searchHandle.searchId,
         gameState:this.gameState,
         saveState:this.saveState,
         pvpClient:this.pvpClient,
@@ -723,6 +743,10 @@ export class TownScene extends Phaser.Scene {
     }
     this.transitioning = false;
     const reason = response?.reason ?? 'network-unavailable';
+    if (reason === 'cancelled') {
+      this.refresh();
+      return;
+    }
     if (reason === 'no-opponent') {
       this.showPvpNotice({
         title:'상대를 찾지 못했습니다',

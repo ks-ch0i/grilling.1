@@ -17,6 +17,7 @@ export class PvpScene extends Phaser.Scene {
 
   init(data = {}) {
     this.ticket = data.ticket;
+    this.searchId = data.searchId;
     this.gameState = data.gameState;
     this.saveState = typeof data.saveState === 'function' ? data.saveState : () => {};
     this.pvpClient = data.pvpClient;
@@ -41,13 +42,36 @@ export class PvpScene extends Phaser.Scene {
     this.clockLabel = this.add.text(640, 160, '60초', { fontFamily:'sans-serif', fontSize:'26px', color:'#ffcf45' }).setOrigin(0.5);
     this.statusLabel = this.add.text(640, 198, '결과와 레이팅은 서버 응답으로만 표시합니다.', { fontFamily:'sans-serif', fontSize:'14px', color:'#d3dce4' }).setOrigin(0.5);
 
+    if (!this.ticket || !this.ticket.playerSnapshot?.combat || !this.ticket.opponentSnapshot?.combat ||
+        !this.pvpClient || typeof this.searchId !== 'string' || typeof this.pvpClient.startMatch !== 'function') {
+      this.showStartFailure('invalid-match-ticket');
+      return;
+    }
+    void this.activateMatch();
+  }
+
+  async activateMatch() {
+    if (this.startActivationPending || this.matchStarted) return;
+    this.startActivationPending = true;
+    this.statusLabel?.setText('서버에서 전투 시작을 확인하고 있습니다...');
+    let confirmation;
     try {
-      if (!this.ticket || !this.ticket.playerSnapshot?.combat || !this.ticket.opponentSnapshot?.combat || !this.pvpClient) {
-        throw new TypeError('PvP ticket data is incomplete.');
-      }
+      confirmation = await this.pvpClient.startMatch(this.searchId, this.ticket.matchId);
+    } catch {
+      confirmation = { ok:false, reason:'start-outcome-unknown' };
+    }
+    this.startActivationPending = false;
+    if (!confirmation?.ok) {
+      this.showStartFailure(confirmation?.reason ?? 'start-outcome-unknown');
+      return;
+    }
+    this.matchStarted = true;
+    this.statusLabel?.setText('결과와 레이팅은 서버 응답으로만 표시합니다.');
+    try {
       const issued = Date.parse(this.ticket.issuedAtUtc);
       const expires = Date.parse(this.ticket.expiresAtUtc);
       if (!Number.isFinite(issued) || !Number.isFinite(expires) || Date.now() >= expires) {
+        this.matchStarted = false;
         this.showSubmissionFailure('match-expired');
         return;
       }
@@ -61,7 +85,8 @@ export class PvpScene extends Phaser.Scene {
         return;
       }
     } catch {
-      this.showSubmissionFailure('invalid-match-ticket');
+      this.matchStarted = false;
+      this.showStartFailure('invalid-match-ticket');
       return;
     }
 
@@ -123,7 +148,7 @@ export class PvpScene extends Phaser.Scene {
   }
 
   async finishMatch() {
-    if (this.submitting || !this.ticket || !this.pvpClient) return;
+    if (!this.matchStarted || this.submitting || !this.ticket || !this.pvpClient) return;
     this.finished = true;
     this.submitting = true;
     this.statusLabel?.setText('전투 기록을 서버에서 확인하고 있습니다...');
@@ -132,6 +157,7 @@ export class PvpScene extends Phaser.Scene {
   }
 
   async submitRecordedInputs(inputs) {
+    if (!this.matchStarted) return;
     const response = await this.pvpClient.submitMatch(this.ticket, inputs);
     this.submitting = false;
     if (!response?.ok) {
@@ -169,6 +195,45 @@ export class PvpScene extends Phaser.Scene {
     this.showOverlay(`서버 판정 · ${outcomeLabel}`, ratingLine, [
       { label:'마을로', onClick:()=>this.returnToTown() },
     ]);
+  }
+
+  showStartFailure(reason) {
+    this.matchStarted = false;
+    this.finished = true;
+    const authenticationRequired = reason === 'authentication-required';
+    const expired = reason === 'match-expired';
+    const cancelled = reason === 'search-cancelled';
+    const message = expired
+      ? '전투 시작 전에 티켓이 만료됐습니다. 결과는 제출하지 않았습니다.'
+      : cancelled
+        ? '검색이 취소되어 전투를 시작하지 않았습니다.'
+        : reason === 'invalid-match-ticket'
+          ? '전투 정보를 확인할 수 없어 시작하지 않았습니다.'
+          : authenticationRequired
+            ? '계정 인증을 다시 완료한 뒤 시작 상태를 확인해 주세요.'
+            : '서버 시작 상태를 확인할 수 없습니다. 같은 검색 ID로 다시 확인할 수 있습니다.';
+    const actions = [];
+    if (!expired && !cancelled && reason !== 'invalid-match-ticket') {
+      if (authenticationRequired) {
+        actions.push({ label:'다시 인증', onClick:async()=>{
+          const result = await this.pvpClient.retryAuthentication();
+          if (result?.ok !== false) {
+            this.overlay?.destroy(true);
+            this.overlay = null;
+            void this.activateMatch();
+          }
+        } });
+      } else {
+        actions.push({ label:'시작 상태 확인', onClick:()=>{
+          this.overlay?.destroy(true);
+          this.overlay = null;
+          this.finished = false;
+          void this.activateMatch();
+        } });
+      }
+    }
+    actions.push({ label:'마을로', onClick:()=>this.returnToTown() });
+    this.showOverlay(authenticationRequired ? '회사 계정 인증 필요' : '전투를 시작하지 못했습니다', message, actions);
   }
 
   showSubmissionFailure(reason, submittedInputs = this.recorder.getInputs()) {

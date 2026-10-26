@@ -7,7 +7,7 @@
 P01 — [비동기 PvP 검색 취소](./phases/2026-10-26-pvp-search-cancel/P01-pvp-search-cancel/phase.md), status in_progress.
 
 ## Active Task
-P01-T03 — [SearchId 멱등 클라이언트와 취소 overlay](./phases/2026-10-26-pvp-search-cancel/P01-pvp-search-cancel/T03-search-cancel-client.md), status planned.
+P01-T04 — [검색 상태 retention 정리](./phases/2026-10-26-pvp-search-cancel/P01-pvp-search-cancel/T04-search-retention-cleanup.md), status planned.
 
 ## Latest Pushed Item
 - `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
@@ -33,6 +33,7 @@ P01-T03 — [SearchId 멱등 클라이언트와 취소 overlay](./phases/2026-10
 - 현재 계획은 3개 도메인 Phase와 8개 Task로 구성한다. 이번 계획에서 코드·DB·저장 데이터·Azure 자원은 변경하지 않았다.
 - 2026-10-26 비동기 PvP 검색 취소 계획을 만들고 실행 중이다. P01-T01은 검색 상태 migration과 repository 경계를 구현했다. Focused schema/repository tests 25개와 API check를 통과했다.
 - P01-T02 complete: SearchId idempotency, authenticated status/cancel/start routes, 5-second cancellation polling, atomic ticket attachment, and started-only result acceptance are implemented. Lifecycle/API/result tests: 35 passed; repository regressions: 18 passed; API check passed.
+- P01-T03 complete: added SearchId-stable client retries, cancel/status reconciliation, TownScene cancel overlay and PvpScene start confirmation gate. Focused tests: 31 passed; full client suite: 209 passed; production build passed with the Phaser chunk-size warning.
 
 - P01-T01 complete: PvP summaries and replay payloads are separated; missing terminal payloads return 410. Focused tests: 25 passed; API suite: 104 passed.
 
@@ -49,4 +50,4 @@ P01-T03 — [SearchId 멱등 클라이언트와 취소 overlay](./phases/2026-10
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-Use `/memory-execute` or say “current 보고 이어서 해줘” to implement P01-T03 from its blueprint, validate it, then advance the pointer sequentially.
+Use `/memory-execute` or say “current 보고 이어서 해줘” to implement P01-T04 from its blueprint, validate it, then advance the pointer sequentially.

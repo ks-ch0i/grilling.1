@@ -133,7 +133,7 @@ test('profile action calls send only the command envelope to the authenticated r
   assert.equal(calls[0].options.headers.authorization, 'Bearer profile-token');
 });
 
-test('PvP snapshot, search and result calls use their exact API routes and DTOs', async () => {
+test('PvP snapshot, search lifecycle and result calls use their exact API routes and DTOs', async () => {
   const calls = [];
   const client = createCloudSaveClient({
     apiBaseUrl:'/api/',
@@ -143,22 +143,33 @@ test('PvP snapshot, search and result calls use their exact API routes and DTOs'
       return new Response(JSON.stringify({ status:'ok' }), { status:200 });
     },
   });
+  const searchId = 'aaaaaaaa-1111-4111-8111-111111111111';
   const matchId = '11111111-1111-4111-8111-111111111111';
   await client.publishPvpSnapshot(account, { expectedSaveRevision:9 });
-  await client.searchPvpMatch(account, {});
+  await client.searchPvpMatch(account, { searchId });
+  await client.getPvpSearch(account, searchId);
+  await client.cancelPvpSearch(account, searchId);
+  await client.startPvpMatch(account, matchId, { searchId });
   await client.submitPvpResult(account, matchId, { inputs:[] });
 
   assert.deepEqual(calls.map(({ url }) => url), [
     '/api/pvp/snapshot',
     '/api/pvp/matches/search',
+    `/api/pvp/matches/search/${searchId}`,
+    `/api/pvp/matches/search/${searchId}/cancel`,
+    `/api/pvp/matches/${matchId}/start`,
     `/api/pvp/matches/${matchId}/result`,
   ]);
-  assert.deepEqual(calls.map(({ options }) => options.method), ['PUT', 'POST', 'POST']);
-  assert.deepEqual(calls.map(({ options }) => JSON.parse(options.body)), [
-    { expectedSaveRevision:9 }, {}, { inputs:[] },
+  assert.deepEqual(calls.map(({ options }) => options.method), ['PUT', 'POST', undefined, 'POST', 'POST', 'POST']);
+  assert.deepEqual(calls.map(({ options }) => options.body ? JSON.parse(options.body) : undefined), [
+    { expectedSaveRevision:9 }, { searchId }, undefined, {}, { searchId }, { inputs:[] },
   ]);
   assert.equal(calls[0].options.headers.authorization, 'Bearer pvp-token');
+  assert.equal(calls[3].options.headers['content-type'], 'application/json');
   await assert.rejects(() => client.submitPvpResult(account, '', { inputs:[] }), TypeError);
+  await assert.rejects(() => client.getPvpSearch(account, 'bad-id'), TypeError);
+  await assert.rejects(() => client.cancelPvpSearch(account, 'bad-id'), TypeError);
+  await assert.rejects(() => client.startPvpMatch(account, 'bad-id', { searchId }), TypeError);
 });
 
 test('ranking snapshot and account rank reads use authenticated GET requests', async () => {

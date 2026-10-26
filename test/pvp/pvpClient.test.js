@@ -34,6 +34,18 @@ function makeClient(overrides = {}) {
       calls.push(['search', body]);
       return overrides.search ? overrides.search(body, calls) : { status:404, code:'no-opponent' };
     },
+    async getPvpSearch(_account, searchId) {
+      calls.push(['status', searchId]);
+      return overrides.searchStatus ? overrides.searchStatus(searchId, calls) : { status:404, code:'search-not-found' };
+    },
+    async cancelPvpSearch(_account, searchId) {
+      calls.push(['cancel', searchId]);
+      return overrides.cancel ? overrides.cancel(searchId, calls) : { status:200, searchId, state:'cancelled' };
+    },
+    async startPvpMatch(_account, matchId, body) {
+      calls.push(['start', matchId, body]);
+      return overrides.start ? overrides.start(matchId, body, calls) : { status:200, searchId:body.searchId, matchId, state:'started' };
+    },
     async submitPvpResult(_account, matchId, body) {
       calls.push(['submit', matchId, structuredClone(body)]);
       return overrides.submit ? overrides.submit(matchId, body, calls) : { status:200, outcome:'win', rated:true,
@@ -50,10 +62,12 @@ function makeClient(overrides = {}) {
     getCurrentState:() => currentState,
     getSaveRevision:() => revision,
     getMode:() => 'verified-online',
-    syncPendingSave:async() => { calls.push(['sync']); return { ok:true, pending:false }; },
+    syncPendingSave:overrides.syncPendingSave ?? (async() => { calls.push(['sync']); return { ok:true, pending:false }; }),
     refreshAccountSave:async() => { calls.push(['refresh']); return { status:'ready', mode:'verified-online' }; },
     isOnline:() => overrides.online !== false,
     now,
+    createSearchId:overrides.createSearchId ?? (() => 'aaaaaaaa-2222-4222-8222-222222222222'),
+    wait:overrides.wait ?? (async () => {}),
   });
   return {
     client,
@@ -63,7 +77,7 @@ function makeClient(overrides = {}) {
   };
 }
 
-test('match search syncs and refreshes cloud save, publishes its snapshot, then sends an empty search DTO', async () => {
+test('match search syncs and refreshes cloud save, publishes its snapshot, then sends its SearchId', async () => {
   const { client, calls } = makeClient();
   const result = await client.findMatch();
 
@@ -71,8 +85,116 @@ test('match search syncs and refreshes cloud save, publishes its snapshot, then 
   assert.equal(result.reason, 'no-opponent');
   assert.deepEqual(result.search, { initialWindow:100, maximumWindow:500, windowStep:100, intervalMs:5_000, waitMs:60_000 });
   assert.deepEqual(calls.map(([name]) => name), ['sync', 'refresh', 'publish', 'search']);
-  assert.deepEqual(calls.at(-1)[1], {});
+  assert.equal(calls.at(-1)[1].searchId, 'aaaaaaaa-2222-4222-8222-222222222222');
   assert.deepEqual(calls.find(([name]) => name === 'publish')[1], { expectedSaveRevision:4 });
+});
+
+test('a search handle creates one UUID and cancellation during snapshot publishing stays local', async () => {
+  let releaseSync;
+  let generated = 0;
+  const harness = makeClient({
+    syncPendingSave:() => new Promise((resolve) => { releaseSync = () => resolve({ ok:true, pending:false }); }),
+    createSearchId:() => { generated += 1; return 'bbbbbbbb-2222-4222-8222-222222222222'; },
+  });
+  // Hold the first save sync while the handle exists, then cancel before a server row can be created.
+  const handle = harness.client.createMatchSearch();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(handle.searchId, 'bbbbbbbb-2222-4222-8222-222222222222');
+  assert.equal(generated, 1);
+  assert.deepEqual(await handle.cancel(), { ok:true, state:'cancelled', local:true });
+  releaseSync();
+  assert.deepEqual(await handle.completion, { ok:false, reason:'cancelled', state:'cancelled' });
+  assert.equal(harness.calls.some(([name]) => name === 'search'), false);
+});
+
+test('a lost search response retries the same SearchId after status confirms no row', async () => {
+  let postCount = 0;
+  const harness = makeClient({
+    wait:async () => {},
+    search:async (body) => {
+      postCount += 1;
+      assert.equal(body.searchId, 'aaaaaaaa-2222-4222-8222-222222222222');
+      if (postCount === 1) throw new TypeError('connection reset');
+      return { status:201, state:'matched', searchId:body.searchId, ticket };
+    },
+    searchStatus:async () => ({ status:404, code:'search-not-found' }),
+  });
+
+  const handle = harness.client.createMatchSearch();
+  const result = await handle.completion;
+
+  assert.deepEqual(result, { ok:true, ticket, searchId:handle.searchId, state:'matched' });
+  assert.equal(postCount, 2);
+  assert.deepEqual(harness.calls.filter(([name]) => name === 'search').map(([, body]) => body.searchId), [handle.searchId, handle.searchId]);
+  assert.equal(harness.calls.some(([name]) => name === 'status'), true);
+});
+
+test('cancel reconciliation repeats cancel with the same SearchId after a matched state and lost response', async () => {
+  let cancelCount = 0;
+  const harness = makeClient({
+    search:async () => new Promise(() => {}),
+    cancel:async (searchId) => {
+      cancelCount += 1;
+      assert.equal(searchId, 'aaaaaaaa-2222-4222-8222-222222222222');
+      if (cancelCount === 1) throw new TypeError('response lost');
+      return { status:200, searchId, state:'cancelled' };
+    },
+    searchStatus:async (searchId) => ({ status:200, searchId, state:'matched', ticket }),
+  });
+  const handle = harness.client.createMatchSearch();
+  const pending = handle.completion;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const cancelled = await handle.cancel();
+  assert.deepEqual(cancelled, { ok:true, state:'cancelled' });
+  assert.deepEqual(await pending, { ok:false, reason:'cancelled', state:'cancelled' });
+  assert.equal(cancelCount, 2);
+  assert.equal(harness.calls.filter(([name]) => name === 'search').length, 1);
+});
+
+test('start confirmation retries the same search and match pair and accepts an already-started status', async () => {
+  let starts = 0;
+  const harness = makeClient({
+    start:async (matchId, body) => {
+      starts += 1;
+      assert.equal(matchId, ticket.matchId);
+      assert.equal(body.searchId, 'cccccccc-2222-4222-8222-222222222222');
+      throw new TypeError('start response lost');
+    },
+    searchStatus:async (searchId) => ({ status:200, searchId, state:'started', ticket }),
+    createSearchId:() => 'cccccccc-2222-4222-8222-222222222222',
+  });
+
+  assert.deepEqual(await harness.client.startMatch('cccccccc-2222-4222-8222-222222222222', ticket.matchId), {
+    ok:true, searchId:'cccccccc-2222-4222-8222-222222222222', matchId:ticket.matchId, state:'started',
+  });
+  assert.equal(starts, 1);
+  assert.deepEqual(harness.calls.filter(([name]) => name === 'start').map(([, matchId, body]) => [matchId, body.searchId]), [
+    [ticket.matchId, 'cccccccc-2222-4222-8222-222222222222'],
+  ]);
+});
+
+test('start confirmation retries an identical pair when status remains matched', async () => {
+  const startPairs = [];
+  const harness = makeClient({
+    start:async (matchId, body) => {
+      startPairs.push([matchId, body.searchId]);
+      return startPairs.length === 1
+        ? { status:503, code:'temporary' }
+        : { status:200, searchId:body.searchId, matchId, state:'started' };
+    },
+    searchStatus:async (searchId) => ({ status:200, searchId, state:'matched', ticket }),
+  });
+
+  const result = await harness.client.startMatch('dddddddd-2222-4222-8222-222222222222', ticket.matchId);
+
+  assert.deepEqual(result, {
+    ok:true, searchId:'dddddddd-2222-4222-8222-222222222222', matchId:ticket.matchId, state:'started',
+  });
+  assert.deepEqual(startPairs, [
+    [ticket.matchId, 'dddddddd-2222-4222-8222-222222222222'],
+    [ticket.matchId, 'dddddddd-2222-4222-8222-222222222222'],
+  ]);
 });
 
 test('match search accepts v2 tickets and rejects legacy simulator or balance versions', async (t) => {
@@ -82,7 +204,7 @@ test('match search accepts v2 tickets and rejects legacy simulator or balance ve
     ['legacy balance ticket', { ...ticket, balanceVersion:1 }],
   ]) {
     await t.test(name, async () => {
-      const harness = makeClient({ search:async () => ({ status:201, ticket:overrides }) });
+      const harness = makeClient({ search:async (body) => ({ status:201, state:'matched', searchId:body.searchId, ticket:overrides }) });
       const result = await harness.client.findMatch();
       assert.equal(result.ok, name === 'v2 ticket');
       if (name === 'v2 ticket') assert.equal(result.ticket.balanceVersion, 2);

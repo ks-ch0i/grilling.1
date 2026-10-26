@@ -1,6 +1,11 @@
 # Task P01-T03: 검색 취소 클라이언트와 전투 시작 확인
 
-## Status: planned
+## Status: done
+
+## Implementation Result
+- Added authenticated status, cancel and start client calls with UUID validation. The in-memory search handle reuses one SearchId for POST retries, status checks, cancellation reconciliation and start confirmation; no browser persistence is used.
+- TownScene keeps the search overlay open through cancellation confirmation, preserves the elapsed-time display, blocks other town input, and passes SearchId with the matched ticket. PvpScene waits for the idempotent server start confirmation before creating simulation state, input handlers or result submission paths.
+- Focused API/PvP tests: 31 passed. Full client suite: 209 passed. Production build passed with the existing Phaser chunk-size warning. `npm test` script glob did not resolve under this Windows/Node setup, so the same suite was run with the discovered test files passed explicitly to `node --test`.
 
 ## Goal
 클라이언트 생성 SearchId를 검색 요청·취소·상태 재확인에 일관되게 사용한다. 마을 검색 overlay에 취소 동작을 추가하고, 서버가 start를 승인한 뒤에만 PvP simulation을 시작한다.

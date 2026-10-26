@@ -5,6 +5,13 @@ export class CloudSaveAuthenticationError extends Error {
   }
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireUuid(value, label) {
+  if (typeof value !== 'string' || !UUID_PATTERN.test(value)) throw new TypeError(`A valid ${label} is required.`);
+  return value;
+}
+
 export function createCloudSaveClient({
   apiBaseUrl = import.meta.env?.VITE_FUNCTIONS_API_BASE_URL ?? '/api',
   fetchImplementation = globalThis.fetch,
@@ -97,11 +104,34 @@ export function createCloudSaveClient({
       return { status: result.status, ...result.body };
     },
     async searchPvpMatch(account, body = {}) {
+      requireUuid(body?.searchId, 'PvP search id');
       const result = await request(account, '/pvp/matches/search', {
         method: 'POST',
         body: JSON.stringify(body),
       });
       return { status: result.status, ...result.body };
+    },
+    async getPvpSearch(account, searchId) {
+      requireUuid(searchId, 'PvP search id');
+      const result = await request(account, `/pvp/matches/search/${searchId}`);
+      return { status:result.status, ...result.body };
+    },
+    async cancelPvpSearch(account, searchId) {
+      requireUuid(searchId, 'PvP search id');
+      const result = await request(account, `/pvp/matches/search/${searchId}/cancel`, {
+        method:'POST',
+        body:JSON.stringify({}),
+      });
+      return { status:result.status, ...result.body };
+    },
+    async startPvpMatch(account, matchId, { searchId } = {}) {
+      requireUuid(matchId, 'PvP match id');
+      requireUuid(searchId, 'PvP search id');
+      const result = await request(account, `/pvp/matches/${matchId}/start`, {
+        method:'POST',
+        body:JSON.stringify({ searchId }),
+      });
+      return { status:result.status, ...result.body };
     },
     async submitPvpResult(account, matchId, body) {
       if (typeof matchId !== 'string' || !matchId) throw new TypeError('A PvP match id is required.');
