@@ -1,6 +1,6 @@
 # Task: T01 Background Art Assets
 
-## Status: pending
+## Status: done
 
 ## Goal
 페인터리 스타일의 마을·PvP 정지 배경 2장과 전투 5테마별 원경 파노라마·중경 반복 타일·전경 반복 타일을 만든다. 각 파일은 선택된 환경 테마에 맞고 전투 인물을 가리지 않는 레이어로 사용할 수 있어야 한다.
@@ -63,10 +63,10 @@
   3. Tests verify 5×3 battle records + 2 static records, every path exists, far logical dimensions are 4,800×560, tiles are 1,280×560 with alpha, and static images are 1,280×720.
 
 ## Acceptance Criteria
-- [ ] All 15 battle layer images and both static backgrounds exist at the manifest paths.
-- [ ] Battle far layers cover the 4,800px world; mid/front layers repeat seamlessly with transparent cutouts.
-- [ ] Every theme has a visually distinct approved environment and leaves the floor lane readable at game scale.
-- [ ] Manifest contains no missing/duplicate keys and asset tests validate dimensions, alpha and file existence.
+- [x] All 15 battle layer images and both static backgrounds exist at the manifest paths.
+- [x] Battle far layers cover the 4,800px world; mid/front layers repeat with transparent cutouts and matched horizontal edge pixels.
+- [x] Every theme has a visually distinct approved environment and leaves the floor lane readable at game scale.
+- [x] Manifest contains no missing/duplicate keys and asset tests validate dimensions, alpha and file existence.
 
 ## Validation
 - `node --test test/background-assets.test.js` — all 17 PNG files, dimensions, tile alpha, theme names and manifest paths validate.
@@ -86,6 +86,6 @@ Task: T01-background-art-assets
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과: background asset tests 4/4, Vite production build, `git diff --check`, 5-theme tile joins and Town/PvP visual review
+- [x] commit 예정: `feat(art): add painterly scene backgrounds`

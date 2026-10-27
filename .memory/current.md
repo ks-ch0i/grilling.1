@@ -1,13 +1,13 @@
 # Current Context
 
 ## Active Plan
-[기사 장비·배경 아트와 전투 거리 조정](./plans/2026-10-27-equipment-background-combat-layout.md) — planned.
+[기사 장비·배경 아트와 전투 거리 조정](./plans/2026-10-27-equipment-background-combat-layout.md) — in_progress.
 
 ## Active Phase
 P03 — [장면 배경](./phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/phase.md), status in_progress.
 
 ## Active Task
-[P03-T01 배경 아트 에셋](./phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/T01-background-art-assets.md) — ready.
+[P03-T02 배경 장면 연결](./phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/T02-background-scene-integration.md) — ready.
 
 ## Latest Pushed Item
 - `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
@@ -18,6 +18,7 @@ P03 — [장면 배경](./phases/2026-10-27-equipment-background-combat-layout/P
 - P02-T01 complete: added 30 transparent 12-frame equipment atlases, standalone standing knight base, immutable slot/rarity manifest, and RGBA/frame/padding contract tests. Asset tests 4/4 and Vite build passed.
 - P02-T02 complete: added rarity-based gear layers in ordinary/ranked combat, walk/action/facing synchronization, the live Town horse/standing-knight preview, and BootScene asset completeness checks. Focused tests 26/26, Vite build, and `git diff --check` passed.
 - P02-T03 complete: replaced PvP fighter rectangles with mounted player/opponent views rendered from their own ticket equipment snapshots; invalid snapshots fail before simulation, input, or submission. PvP appearance and client tests 20/20, Vite build, and `git diff --check` passed.
+- P03-T01 complete: added 15 painterly battle layers, static Town/PvP backgrounds, an immutable 5-theme manifest, and PNG dimension/alpha/repeat-edge tests. Focused tests 4/4, Vite build, `git diff --check`, and visual review passed.
 - 2026-10-26 추가 작업 완료: 로컬 게스트 실행·게임 화면 크기 초기화 수정, 일반/랭킹 적 추격과 v3 재현 규칙, 일반 적 3종·보스·기사의 승인된 2D 애니메이션 반영. 기사는 걷는 동안 상체 한 자세를 유지하며 말과 망토만 움직인다. 최종 클라이언트 204 tests, API 148 tests, production build 및 브라우저 전투·미리보기 검증 통과.
 - P03-T08 complete: provisional Battle results stay in the unverified shadow until server verification; profile actions use revision-bound stable IDs and protect displaced equipment. Client suite: 191 passed; API suite: 148 passed; build passed.
 - P03-T07 complete: account-scoped verified backups and unverified shadows are separated; guest/offline recovery is explicit, reconnect is read-only, and ranked ticket fallback uses the local shadow. Focused tests: 81 passed; root suite: 186 passed; Vite build passed.
@@ -55,4 +56,4 @@ P03 — [장면 배경](./phases/2026-10-27-equipment-background-combat-layout/P
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-`$memory-execute` — execute P03-T01 from [the active blueprint](./phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/T01-background-art-assets.md).
+`$memory-execute` — execute P03-T02 from [the active blueprint](./phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/T02-background-scene-integration.md).
