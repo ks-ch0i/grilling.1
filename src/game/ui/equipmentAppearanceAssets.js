@@ -39,3 +39,23 @@ export function equipmentAppearanceTextureKey(slot, rarity) {
   if (!EQUIPMENT_RARITIES.includes(rarity)) throw new RangeError(`Unsupported equipment rarity: ${rarity}`);
   return `gear-${slot}-${rarity}`;
 }
+
+export function preloadEquipmentAppearanceAssets(load) {
+  for (const asset of EQUIPMENT_APPEARANCE_ASSETS) {
+    load.spritesheet(asset.key, asset.path, {
+      frameWidth:EQUIPMENT_APPEARANCE_FRAMES.frameWidth,
+      frameHeight:EQUIPMENT_APPEARANCE_FRAMES.frameHeight,
+    });
+  }
+  load.image('knight-standing', '/assets/gear/knight-standing.png');
+}
+
+export function hasValidEquipmentAppearanceAssets(textures) {
+  if (!textures?.exists('knight-standing')) return false;
+  return EQUIPMENT_APPEARANCE_ASSETS.every(({ key }) => {
+    if (!textures.exists(key)) return false;
+    const texture = textures.get(key);
+    return texture.getFrameNames().length === EQUIPMENT_APPEARANCE_FRAMES.frameCount &&
+      Array.from({ length:EQUIPMENT_APPEARANCE_FRAMES.frameCount }, (_, frame) => texture.has(String(frame))).every(Boolean);
+  });
+}

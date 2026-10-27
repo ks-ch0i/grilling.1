@@ -11,9 +11,10 @@ import {
 } from '@knight-run/game-rules/simulation';
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
-import { KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../ui/knightAnimations.js';
+import { getKnightEquipmentFrame, KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../ui/knightAnimations.js';
 import { ENEMY_ANIMATIONS, ENEMY_SPRITE_SHEETS, enemyAnimationKey, selectStageEnemyType } from '../ui/enemyAnimations.js';
 import { WholeBodyWalk, WALK_CHARACTERS } from '../ui/WholeBodyWalk.js';
+import { EquipmentAppearance } from '../ui/equipmentAppearance.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
 
 const STAGE_LAYOUT = getStageLayout();
@@ -193,6 +194,10 @@ export class BattleScene extends Phaser.Scene {
       sprite,
       spriteScale,
       walkRig,
+      equipmentAppearance:new EquipmentAppearance(this, view, this.gameState.equipment, {
+        scale:spriteScale,
+        origin:[0.5,244/256],
+      }),
       facingDirection:1,
       visualMoving:false,
       visualAction:null,
@@ -248,6 +253,7 @@ export class BattleScene extends Phaser.Scene {
       sprite.anims.stop();
       sprite.setVisible(false);
       this.player.walkRig.setVisible(true);
+      this.syncPlayerEquipmentAppearance();
       return true;
     }
     if (!sprite?.anims || !this.anims.exists(key)) return false;
@@ -255,7 +261,20 @@ export class BattleScene extends Phaser.Scene {
     sprite.setVisible(true);
     sprite.setScale(this.player.spriteScale);
     if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key);
+    this.syncPlayerEquipmentAppearance();
     return true;
+  }
+
+  syncPlayerEquipmentAppearance() {
+    const player = this.player;
+    if (!player?.equipmentAppearance) return;
+    player.equipmentAppearance.setFacing(player.facingDirection);
+    const frame = getKnightEquipmentFrame({
+      visualAction:player.visualAction,
+      walkFrame:player.walkRig?.frame,
+      spriteFrameName:player.sprite?.frame?.name,
+    });
+    if (frame !== null) player.equipmentAppearance.setFrame(frame);
   }
 
   refreshKnightAnimation() {
@@ -311,6 +330,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.player) {
       this.player.walkRig.follow(this.player.x,this.player.visualMoving && !this.player.visualAction,
         this.player.facingDirection,seconds,freeze);
+      this.syncPlayerEquipmentAppearance();
     }
     for (const enemy of this.enemies) {
       enemy.walkRig.follow(enemy.x,enemy.active && enemy.visualMoving && !enemy.visualAction,

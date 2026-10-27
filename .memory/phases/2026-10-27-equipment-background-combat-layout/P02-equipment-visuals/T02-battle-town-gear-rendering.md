@@ -1,6 +1,6 @@
 # Task: T02 Battle and Town Gear Rendering
 
-## Status: pending
+## Status: done
 
 ## Goal
 T01의 슬롯·희귀도 이미지로 장착 외형을 일반·랭킹 전투 기사와 마을 미리보기에 렌더링한다. 공격/피격/쓰러짐과 이동 프레임 전환 중에도 레이어가 사라지거나 몸체 기준선에서 어긋나지 않게 한다.
@@ -72,10 +72,10 @@ T01의 슬롯·희귀도 이미지로 장착 외형을 일반·랭킹 전투 기
   6. Error & Exception Handling: invalid asset manifest is stopped in BootScene. A null equipped slot remains invisible. Player movement, collision, action priority, floor, and saved state do not change.
 
 ## Acceptance Criteria
-- [ ] General and ranked BattleScene show equipped layer art on all 4 gait frames and all 6 contact/hit/defeat frames; left/right flips remain aligned.
-- [ ] Slot selection depends only on slot and rarity; empty slots hide cleanly; runtime state and save data are not mutated.
-- [ ] TownScene shows a 64px horse at x=556 and a 64px standing knight at x=628 inside the 144×80 header area, updates after equip/unequip, and keeps the detail panel usable.
-- [ ] BootScene refuses a partial appearance asset set with a visible load error instead of starting a scene with missing textures.
+- [x] General and ranked BattleScene show equipped layer art on all 4 gait frames and all 6 contact/hit/defeat frames; left/right flips remain aligned.
+- [x] Slot selection depends only on slot and rarity; empty slots hide cleanly; runtime state and save data are not mutated.
+- [x] TownScene shows a 64px horse at x=556 and a 64px standing knight at x=628 inside the 144×80 header area, updates after equip/unequip, and keeps the detail panel usable.
+- [x] BootScene refuses a partial appearance asset set with a visible load error instead of starting a scene with missing textures.
 
 ## Validation
 - `node --test test/equipment-appearance.test.js test/knight-animation.test.js test/whole-body-walk.test.js test/town-profile-actions.test.js` — frame routing, facing, empty slots, and TownScene refresh contracts pass.
@@ -94,6 +94,6 @@ Task: T02-battle-town-gear-rendering
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과 — focused tests 26/26, Vite production build, `git diff --check`.
+- commit message: `feat(gear): render equipment in battle and town`

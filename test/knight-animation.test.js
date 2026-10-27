@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../src/game/ui/knightAnimations.js';
+import { getKnightEquipmentFrame, KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../src/game/ui/knightAnimations.js';
 
 test('knight action animations use distinct valid frames in the action atlas', () => {
   const actionFrames = Object.values(KNIGHT_ANIMATIONS).flatMap(({ start, end }) => {
@@ -33,4 +33,12 @@ test('knight facing changes on left/right movement and persists while idle', () 
   assert.equal(selectKnightFacing(0, -1), -1);
   assert.equal(selectKnightFacing(1, -1), 1);
   assert.equal(selectKnightFacing(0, 1), 1);
+});
+
+test('equipment action layers map the six knight atlas frames after the four gait frames', () => {
+  assert.equal(getKnightEquipmentFrame({ visualAction:null, walkFrame:0, spriteFrameName:'4' }), 0);
+  assert.equal(getKnightEquipmentFrame({ visualAction:null, walkFrame:3, spriteFrameName:'4' }), 3);
+  assert.equal(getKnightEquipmentFrame({ visualAction:'contact', walkFrame:1, spriteFrameName:'0' }), 4);
+  assert.equal(getKnightEquipmentFrame({ visualAction:'hit', walkFrame:1, spriteFrameName:'5' }), 9);
+  assert.equal(getKnightEquipmentFrame({ visualAction:'defeat', walkFrame:1, spriteFrameName:'6' }), null);
 });

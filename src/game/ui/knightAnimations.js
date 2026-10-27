@@ -18,3 +18,13 @@ export function selectKnightFacing(direction, previousDirection = 1) {
   if (direction === -1 || direction === 1) return direction;
   return previousDirection === -1 ? -1 : 1;
 }
+
+export function getKnightEquipmentFrame({ visualAction, walkFrame, spriteFrameName }) {
+  if (!visualAction) {
+    return Number.isInteger(walkFrame) && walkFrame >= 0 && walkFrame <= 3 ? walkFrame : null;
+  }
+  const actionFrame = Number(spriteFrameName);
+  return Number.isInteger(actionFrame) && actionFrame >= 0 && actionFrame <= 5
+    ? 4 + actionFrame
+    : null;
+}

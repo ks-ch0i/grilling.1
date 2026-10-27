@@ -15,6 +15,7 @@ import {
   removeInventoryInputHandlers,
 } from '../ui/inventoryScroll.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
+import { renderTownEquipmentPreview } from '../ui/equipmentAppearance.js';
 
 const SLOT_LABEL = { helmet:'투구', armor:'갑옷', gloves:'장갑', boots:'신발', spear:'창', horse:'말' };
 const RARITY_LABEL = { common:'커먼', uncommon:'언커먼', rare:'레어', unique:'유니크', legendary:'레전더리' };
@@ -290,11 +291,12 @@ export class TownScene extends Phaser.Scene {
       this.add.text(32, 696, this.profileActionMessage, { fontFamily:'sans-serif', fontSize:'12px', color:'#ffb6ad' });
     }
     this.add.rectangle(640, 128, 1216, 48, 0x1a2531, 0.96).setStrokeStyle(1, 0x47576a);
+    this.renderEquipmentPreview();
     this.add.text(44, 109, `미사용 ${player.availableStatPoints} · 배정 ${player.spentStatPoints} · 골드 ${gold}\n공격 ${stats.attack} · 방어 ${stats.defense} · 최대 HP ${stats.maxHp}`, { fontFamily:'sans-serif', fontSize:'12px', color:'#d8e0e8', lineSpacing:3 });
     const allocationButtons = [
-      { key:'attack', x:500, width:112, label:'공격 +5' },
-      { key:'defense', x:620, width:112, label:'방어 +10' },
-      { key:'maxHp', x:740, width:126, label:'최대 HP +30' },
+      { key:'attack', x:452, width:68, label:'공격+5' },
+      { key:'defense', x:664, width:74, label:'방어+10' },
+      { key:'maxHp', x:744, width:126, label:'최대 HP+30' },
     ];
     allocationButtons.forEach(({ key, x, width, label }) => createButton(this, {
       x, y:108, width, height:40, label,
@@ -352,6 +354,11 @@ export class TownScene extends Phaser.Scene {
         onClick:() => this.confirmLegacyRecovery(hasShadow),
       });
     }
+  }
+
+  renderEquipmentPreview() {
+    this.equipmentPreview = renderTownEquipmentPreview(this, this.gameState.equipment);
+    return this.equipmentPreview;
   }
 
   renderEquipment() {
