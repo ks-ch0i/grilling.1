@@ -1,0 +1,50 @@
+[
+  {
+    "slot": "horse",
+    "part": "back"
+  },
+  {
+    "slot": "spear",
+    "part": "back"
+  },
+  {
+    "slot": "armor",
+    "part": "back"
+  },
+  {
+    "slot": "boots",
+    "part": "back"
+  },
+  {
+    "slot": "gloves",
+    "part": "back"
+  },
+  {
+    "slot": "helmet",
+    "part": "back"
+  },
+  {
+    "slot": "horse",
+    "part": "front"
+  },
+  {
+    "slot": "armor",
+    "part": "front"
+  },
+  {
+    "slot": "boots",
+    "part": "front"
+  },
+  {
+    "slot": "spear",
+    "part": "front"
+  },
+  {
+    "slot": "gloves",
+    "part": "front"
+  },
+  {
+    "slot": "helmet",
+    "part": "front"
+  }
+]
