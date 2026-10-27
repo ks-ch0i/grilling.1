@@ -1,97 +1,143 @@
 param(
   [string] $RepositoryRoot = (Split-Path $PSScriptRoot -Parent),
+  [string] $SourceDirectory = (Join-Path (Split-Path $PSScriptRoot -Parent) '.memory/phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/references'),
   [string] $OutputDirectory = (Join-Path $RepositoryRoot 'public/assets/gear-aligned'),
   [string[]] $Rarities = @('common','uncommon','rare','unique','legendary')
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+$boundsHelper = @'
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+
+public static class EquipmentAtlasPixels {
+  public static Rectangle FindBounds(Bitmap bitmap, Rectangle region, byte alphaThreshold) {
+    var data = bitmap.LockBits(region, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+    try {
+      int stride = Math.Abs(data.Stride);
+      int rowLength = region.Width * 4;
+      var row = new byte[rowLength];
+      int left = region.Width;
+      int top = region.Height;
+      int right = -1;
+      int bottom = -1;
+      for (int y = 0; y < region.Height; y++) {
+        int sourceY = data.Stride >= 0 ? y : region.Height - 1 - y;
+        IntPtr rowPointer = IntPtr.Add(data.Scan0, sourceY * stride);
+        Marshal.Copy(rowPointer, row, 0, rowLength);
+        for (int x = 0; x < region.Width; x++) {
+          if (row[x * 4 + 3] < alphaThreshold) continue;
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+      if (right < left || bottom < top) return Rectangle.Empty;
+      return new Rectangle(region.X + left, region.Y + top, right - left + 1, bottom - top + 1);
+    } finally {
+      bitmap.UnlockBits(data);
+    }
+  }
+}
+'@
+$drawingReferences = @([System.Drawing.Bitmap].Assembly.Location, [System.Drawing.Rectangle].Assembly.Location)
+Add-Type -TypeDefinition $boundsHelper -ReferencedAssemblies $drawingReferences
+
+$slots = @('helmet','armor','gloves','boots','spear','horse')
+$frames = 256
+$atlasWidth = $frames * 2
+$atlasHeight = $frames * 6
+
+# Targets are center X/Y followed by maximum width/height in a 256px frame.
+# Each complete slot silhouette is fitted proportionally, then aligned to the
+# same body landmarks across rarities. The final cell remains empty padding.
+$walkTargets = @{
+  helmet = @(132,72,88,88); armor = @(128,148,160,166); gloves = @(128,126,104,56)
+  boots = @(128,208,150,78); spear = @(128,137,246,46); horse = @(128,172,246,152)
+}
+$actionTargets = @(
+  @{ helmet=@(116,102,84,88); armor=@(136,150,160,166); gloves=@(128,126,104,58); boots=@(128,188,150,78); spear=@(128,142,246,50); horse=@(130,167,246,152) },
+  @{ helmet=@(129,98,84,88); armor=@(146,150,160,166); gloves=@(128,132,104,58); boots=@(128,188,150,78); spear=@(128,140,246,50); horse=@(131,164,246,152) },
+  @{ helmet=@(156,78,84,88); armor=@(163,136,160,166); gloves=@(128,128,104,58); boots=@(128,182,150,78); spear=@(128,138,246,52); horse=@(131,155,246,152) },
+  @{ helmet=@(120,78,84,88); armor=@(136,136,160,166); gloves=@(128,128,104,58); boots=@(128,182,150,78); spear=@(128,138,246,52); horse=@(132,155,246,152) },
+  @{ helmet=@(80,129,84,88); armor=@(105,171,160,166); gloves=@(128,164,104,58); boots=@(128,205,150,78); spear=@(128,166,246,52); horse=@(130,196,246,120) },
+  @{ helmet=@(122,156,84,88); armor=@(146,198,160,150); gloves=@(128,190,104,58); boots=@(128,220,150,66); spear=@(128,194,246,52); horse=@(130,204,246,96) }
+)
+$townTargets = @{
+  helmet = @(128,62,88,88); armor = @(128,140,160,166); gloves = @(128,142,104,58)
+  boots = @(128,211,150,78); spear = @(183,128,44,184); horse = @(128,132,246,160)
+}
+
+function Get-Target($slot, $frame) {
+  if ($frame -lt 4) { return $walkTargets[$slot] }
+  if ($frame -lt 10) { return $actionTargets[$frame - 4][$slot] }
+  return $townTargets[$slot]
+}
+
+if (-not (Test-Path -LiteralPath $SourceDirectory -PathType Container)) {
+  throw "Equipment source directory does not exist: $SourceDirectory"
+}
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
-# Crops refer to intact items inside the original 256px cells, not their transparent margins.
-$crops = @{
-  helmet = @{
-    common=@(0,114,73,103,114); uncommon=@(0,116,90,101,102); rare=@(0,96,74,115,113); unique=@(4,115,64,108,116); legendary=@(0,106,72,123,113)
-  }
-  armor = @{
-    common=@(0,73,70,131,122); uncommon=@(0,95,67,93,120); rare=@(0,83,73,125,114); unique=@(0,73,68,150,121); legendary=@(0,80,69,141,123)
-  }
-  boots = @{
-    common=@(@(10,84,64,48,119),@(10,138,64,74,116));
-    uncommon=@(@(10,93,64,47,123),@(10,147,64,81,113));
-    rare=@(@(10,42,64,89,110),@(10,138,64,86,110));
-    unique=@(@(10,66,64,82,92),@(10,170,64,71,96));
-    legendary=@(@(10,69,64,76,113),@(10,151,64,75,113))
-  }
-  spear = @{
-    common=@(0,12,113,236,16); uncommon=@(0,8,110,240,27); rare=@(0,7,112,244,24); unique=@(0,10,109,239,19); legendary=@(0,14,121,233,21)
-  }
-  horse = @{
-    common=@(0,58,73,189,113); uncommon=@(0,58,73,189,113); rare=@(0,25,81,220,109); unique=@(0,25,82,221,109); legendary=@(0,25,81,221,109)
-  }
-  gloves = @{
-    common=@(@(0,57,68,72,92),@(0,163,68,71,92));
-    uncommon=@(@(0,52,72,69,114),@(0,135,72,70,114));
-    rare=@(@(0,121,68,80,90),@(0,121,68,80,90));
-    unique=@(@(0,32,73,91,108),@(0,142,73,91,106));
-    legendary=@(@(0,59,72,71,111),@(0,143,71,71,112))
-  }
-}
-
-# Each record is [center x, center y, width, height, clockwise rotation].
-$walk=@{helmet=@(133,70,43,46,0);armor=@(144,110,42,48,0);boots=@(@(126,174,18,34,0),@(141,180,20,32,0));gloves=@(@(113,111,12,15,0),@(125,126,12,15,0));spear=@(70,98,132,8,15);horse=@(128,158,163,82,0)}
-$actions=@(
-  @{helmet=@(116,102,38,41,0);armor=@(136,125,41,43,20);boots=@(@(143,173,17,30,0),@(154,180,19,31,0));gloves=@(@(109,126,12,14,0),@(120,132,12,14,0));spear=@(70,124,128,8,0);horse=@(130,167,163,82,0)},
-  @{helmet=@(129,98,39,42,0);armor=@(146,125,42,44,0);boots=@(@(143,173,17,30,0),@(154,180,19,31,0));gloves=@(@(123,129,12,14,0),@(132,137,12,14,0));spear=@(82,110,140,8,20);horse=@(131,164,164,84,0)},
-  @{helmet=@(156,78,40,42,0);armor=@(163,111,42,45,0);boots=@(@(141,165,17,30,0),@(151,177,19,31,0));gloves=@(@(135,123,12,14,0),@(143,132,12,14,0));spear=@(88,84,140,8,40);horse=@(131,155,169,85,0)},
-  @{helmet=@(120,78,40,42,0);armor=@(136,111,42,45,0);boots=@(@(130,166,17,30,0),@(143,175,19,31,0));gloves=@(@(115,123,12,14,0),@(125,132,12,14,0));spear=@(65,83,140,8,40);horse=@(132,155,169,85,0)},
-  @{helmet=@(80,129,38,40,25);armor=@(105,150,42,43,35);boots=@(@(132,183,17,30,20),@(142,188,19,31,20));gloves=@(@(95,158,12,14,20),@(107,165,12,14,20));spear=@(65,145,120,8,15);horse=@(130,202,166,53,0)},
-  @{helmet=@(122,156,38,40,25);armor=@(146,179,42,43,35);boots=@(@(127,215,17,30,60),@(143,219,19,31,60));gloves=@(@(130,188,12,14,20),@(142,193,12,14,20));spear=@(80,184,140,8,15);horse=@(130,214,170,44,0)}
-)
-$town=@{helmet=@(124,34,46,48,0);armor=@(128,90,55,65,0);boots=@(@(110,219,22,50,0),@(159,219,27,50,0));gloves=@(@(86,135,14,18,0),@(169,135,14,18,0));spear=@(179,127,180,8,-90);horse=@(128,151,166,88,0)}
-
-function Draw-Item($graphics,$image,$crop,$target,$frame,[bool]$flip) {
-  $sourceFrame=[int]$crop[0]
-  $source=[System.Drawing.Rectangle]::new([int]($crop[1]+($sourceFrame%2)*256),[int]($crop[2]+[Math]::Floor($sourceFrame/2)*256),[int]$crop[3],[int]$crop[4])
-  $cx=[double]$target[0]+($frame%2)*256
-  $cy=[double]$target[1]+[Math]::Floor($frame/2)*256
-  $width=[double]$target[2];$height=[double]$target[3];$angle=[double]$target[4]
-  $saved=$graphics.Save()
-  $graphics.SetClip([System.Drawing.Rectangle]::new(($frame%2)*256,[int]([Math]::Floor($frame/2)*256),256,256))
-  $graphics.TranslateTransform([float]$cx,[float]$cy)
-  $graphics.RotateTransform([float]$angle)
-  if($flip){$graphics.ScaleTransform(-1,1)}
-  $dest=[System.Drawing.RectangleF]::new([float](-$width/2),[float](-$height/2),[float]$width,[float]$height)
-  $graphics.DrawImage($image,$dest,$source,[System.Drawing.GraphicsUnit]::Pixel)
-  $graphics.Restore($saved)
-}
-
-foreach($slot in @('helmet','armor','gloves','boots','spear','horse')) {
-  foreach($rarity in $Rarities) {
-    $sourcePath=Join-Path $RepositoryRoot "public/assets/gear/$slot-$rarity.png"
-    $image=[System.Drawing.Image]::FromFile($sourcePath)
-    $atlas=[System.Drawing.Bitmap]::new(512,1536,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $g=[System.Drawing.Graphics]::FromImage($atlas)
-    $g.Clear([System.Drawing.Color]::Transparent)
-    $g.InterpolationMode=[System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g.PixelOffsetMode=[System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-    for($frame=0;$frame -le 10;$frame++) {
-      $pose=if($frame -lt 4){$walk}elseif($frame -lt 10){$actions[$frame-4]}else{$town}
-      if($slot -in @('gloves','boots')) {
-        Draw-Item $g $image $crops[$slot][$rarity][0] $pose[$slot][0] $frame $false
-        Draw-Item $g $image $crops[$slot][$rarity][1] $pose[$slot][1] $frame ($slot -eq 'gloves' -and $rarity -eq 'rare')
-      } elseif ($slot -eq 'horse' -and $rarity -in @('rare','unique','legendary') -and $frame -in @(6,7)) {
-        # The rearing horse raises its head independently of the saddle.
-        $crop=$crops[$slot][$rarity]; $target=$pose[$slot]; $headWidth=62
-        $headTargetWidth=$target[2]*$headWidth/$crop[3]; $bodyTargetWidth=$target[2]-$headTargetWidth
-        $left=$target[0]-$target[2]/2
-        Draw-Item $g $image @($crop[0],$crop[1],$crop[2],$headWidth,$crop[4]) @(($left+$headTargetWidth/2+7),($target[1]-23),$headTargetWidth,$target[3],0) $frame $false
-        Draw-Item $g $image @($crop[0],($crop[1]+$headWidth),$crop[2],($crop[3]-$headWidth),$crop[4]) @(($left+$headTargetWidth+$bodyTargetWidth/2),$target[1],$bodyTargetWidth,$target[3],0) $frame $false
-      } else {
-        $flip=($slot -eq 'spear' -and $frame -lt 10)
-        Draw-Item $g $image $crops[$slot][$rarity] $pose[$slot] $frame $flip
-      }
+foreach ($slot in $slots) {
+  foreach ($rarity in $Rarities) {
+    $sourcePath = Join-Path $SourceDirectory "$slot-$rarity-4x3.png"
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+      throw "Missing complete equipment source atlas: $sourcePath"
     }
-    $atlas.Save((Join-Path $OutputDirectory "$slot-$rarity.png"),[System.Drawing.Imaging.ImageFormat]::Png)
-    $g.Dispose();$atlas.Dispose();$image.Dispose()
+
+    $source = [System.Drawing.Bitmap]::new($sourcePath)
+    $atlas = [System.Drawing.Bitmap]::new($atlasWidth, $atlasHeight, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $graphics = [System.Drawing.Graphics]::FromImage($atlas)
+    try {
+      $graphics.Clear([System.Drawing.Color]::Transparent)
+      $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
+      $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+      $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+      $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+
+      for ($frame = 0; $frame -le 10; $frame++) {
+        $column = $frame % 4
+        $row = [int][Math]::Floor($frame / 4)
+        $left = [int][Math]::Floor($column * $source.Width / 4)
+        $right = [int][Math]::Floor(($column + 1) * $source.Width / 4)
+        $top = [int][Math]::Floor($row * $source.Height / 3)
+        $bottom = [int][Math]::Floor(($row + 1) * $source.Height / 3)
+        $cell = [System.Drawing.Rectangle]::new($left, $top, $right - $left, $bottom - $top)
+        $content = [EquipmentAtlasPixels]::FindBounds($source, $cell, 32)
+        if ($content.IsEmpty) { throw "$sourcePath frame $frame has no visible art" }
+
+        $target = Get-Target $slot $frame
+        $scale = [Math]::Min([double]$target[2] / $content.Width, [double]$target[3] / $content.Height)
+        $width = [Math]::Max(1, [int][Math]::Round($content.Width * $scale))
+        $height = [Math]::Max(1, [int][Math]::Round($content.Height * $scale))
+        $destination = [System.Drawing.Rectangle]::new(
+          [int][Math]::Round($target[0] - $width / 2),
+          [int][Math]::Round($target[1] - $height / 2),
+          $width,
+          $height
+        )
+        if ($destination.Left -lt 0 -or $destination.Top -lt 0 -or $destination.Right -gt $frames -or $destination.Bottom -gt $frames) {
+          throw "$sourcePath frame $frame does not fit in a 256px cell: $destination"
+        }
+
+        $cellLeft = ($frame % 2) * $frames
+        $cellTop = [int][Math]::Floor($frame / 2) * $frames
+        $graphics.SetClip([System.Drawing.Rectangle]::new($cellLeft, $cellTop, $frames, $frames))
+        $targetRect = [System.Drawing.Rectangle]::new($cellLeft + $destination.X, $cellTop + $destination.Y, $destination.Width, $destination.Height)
+        $graphics.DrawImage($source, $targetRect, $content, [System.Drawing.GraphicsUnit]::Pixel)
+        $graphics.ResetClip()
+      }
+
+      $outputPath = Join-Path $OutputDirectory "$slot-$rarity.png"
+      $atlas.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    } finally {
+      $graphics.Dispose()
+      $atlas.Dispose()
+      $source.Dispose()
+    }
   }
 }

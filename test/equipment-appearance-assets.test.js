@@ -148,9 +148,23 @@ test('all equipment atlases are RGBA 512x1536 PNGs with a transparent padding fr
     assert.equal(decoded.hasTransparentPixel, true, `${asset.path} alpha`);
     assert.equal(decoded.paddingIsTransparent, true, `${asset.path} padding frame`);
     for (let frame=0; frame<11; frame++) assert.ok(decoded.frameBounds[frame].maxX >= 0, `${asset.path} frame ${frame}`);
+    if (asset.rarity === 'common') {
+      const bounds=decoded.frameBounds[0];
+      const width=bounds.maxX-bounds.minX+1;
+      const height=bounds.maxY-bounds.minY+1;
+      const minimum={
+        helmet:[60,60],
+        armor:[80,100],
+        gloves:[30,50],
+        boots:[45,70],
+        spear:[100,12],
+        horse:[150,100],
+      }[asset.slot];
+      assert.ok(width >= minimum[0] && height >= minimum[1], `${asset.path} must contain its complete slot silhouette: ${width}x${height}`);
+    }
     const walk=decoded.frameBounds[0];
     const centerY=(walk.minY+walk.maxY)/2;
-    const expectedY={helmet:[50,90],armor:[85,135],gloves:[95,140],boots:[150,200],spear:[75,120],horse:[125,195]}[asset.slot];
+    const expectedY={helmet:[50,90],armor:[135,165],gloves:[95,150],boots:[185,225],spear:[120,155],horse:[125,195]}[asset.slot];
     assert.ok(centerY >= expectedY[0] && centerY <= expectedY[1], `${asset.path} walk body alignment: ${centerY}`);
   }
 });

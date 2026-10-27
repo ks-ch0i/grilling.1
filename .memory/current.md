@@ -1,19 +1,20 @@
 # Current Context
 
 ## Active Plan
-[장비 레이어 전체 정렬](./plans/2026-10-27-equipment-layer-alignment.md) — done.
+[장비 조합만으로 캐릭터 구성](./plans/2026-10-27-equipment-only-character.md) — in progress.
 
 ## Active Phase
-P01 — [장비 레이어 정렬](./phases/2026-10-27-equipment-layer-alignment/P01-layer-alignment/phase.md), status done.
+P01 — [장비 레이어만 렌더링](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/phase.md), status in progress.
 
 ## Active Task
-None — P01-T01 complete.
+[T02 장면별 장비 전용 렌더링](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/T02-gear-only-scene-rendering.md)
 
 ## Latest Pushed Item
 - `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
 - Result and validation are recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
 
 ## Status
+- 2026-10-27 장비 전용 캐릭터 P01-T01 완료: 30개 완전 슬롯 atlas와 원본 재생성 builder, 자산 계약 검증 및 합성 시각 검토를 마쳤다. P01-T02에서 장면의 기사·말 베이스 픽셀을 제거한다. 강화 파괴 장비 복구 세부 규칙은 별도 논의로 남겼다.
 - P01-T01 complete: shared 4,800px stage bounds, three fixed enemy clusters, 3,600px boss spawn, and immediate v3 ticket expiry/v4 issuance. Game-rules tests 30/30, API stage-run tests 20/20, Vite build, API check passed. Commit `142cf18`; worktree branch: `feat/equipment-background-combat-layout-20261027`.
 - P02-T01 complete: added 30 transparent 12-frame equipment atlases, standalone standing knight base, immutable slot/rarity manifest, and RGBA/frame/padding contract tests. Asset tests 4/4 and Vite build passed.
 - P02-T02 complete: added rarity-based gear layers in ordinary/ranked combat, walk/action/facing synchronization, the live Town horse/standing-knight preview, and BootScene asset completeness checks. Focused tests 26/26, Vite build, and `git diff --check` passed.
@@ -55,8 +56,9 @@ None — P01-T01 complete.
 - 이전 계획: [사내 온라인 랭킹 및 비동기 PvP](./plans/2026-10-21-internal-online-ranking-pvp.md)
 - 보류 위치: [P03 Azure 인프라 코드](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/phase.md), [T10 Azure 인프라 구성](./phases/2026-10-21-internal-online-ranking-pvp/P03-azure-infrastructure/T10-azure-infrastructure.md)
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
+- 강화 파괴 장비 복구 — 기능 추가는 확정됐지만 보관 기간, 비용/재료, 가능 조건, 재시도와 UI는 별도 논의 후 계획한다. 현재 Active Plan에서는 강화 파괴 규칙을 바꾸지 않는다.
 
 ## Next Step
-`$memory-execute` — execute P01-T01 from [the active blueprint](./phases/2026-10-27-equipment-layer-alignment/P01-layer-alignment/T01-neutral-rider-and-layer-layout.md).
+`$memory-execute` — execute P01-T01 from [the active blueprint](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/T01-complete-equipment-atlases.md).
 
 - 2026-10-27 layer repair: replaced shared arbitrary per-slot transforms with 30 pose-aligned atlases; offline composites reviewed across walk/action/Town poses and rarity samples. Focused client tests 36/36; build passed; git diff --check passed. Manual browser verification remains available.
