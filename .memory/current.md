@@ -1,15 +1,20 @@
 # Current Context
 
 ## Active Plan
-[마창기사 저장 권위 전환 및 PvP 상세 데이터 보관](./plans/2026-10-25-knight-run-save-authority-and-pvp-retention.md)
+[기사 장비·배경 아트와 전투 거리 조정](./plans/2026-10-27-equipment-background-combat-layout.md) — planned.
 
 ## Active Phase
-[P03 client save boundary — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/phase.md)
+P02 — [장비 외형 에셋](./phases/2026-10-27-equipment-background-combat-layout/P02-equipment-visuals/phase.md), status in_progress.
 
 ## Active Task
-[T08 gameplay reward integration — complete](./phases/2026-10-25-knight-run-save-authority-and-pvp-retention/P03-client-save-boundary/T08-gameplay-reward-integration.md)
+[P02-T01 장비 외형 에셋](./phases/2026-10-27-equipment-background-combat-layout/P02-equipment-visuals/T01-equipment-appearance-assets.md) — ready.
+
+## Latest Pushed Item
+- `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
+- Result and validation are recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
 
 ## Status
+- P01-T01 complete: shared 4,800px stage bounds, three fixed enemy clusters, 3,600px boss spawn, and immediate v3 ticket expiry/v4 issuance. Game-rules tests 30/30, API stage-run tests 20/20, Vite build, API check passed. Worktree branch: `feat/equipment-background-combat-layout-20261027`.
 - 2026-10-26 추가 작업 완료: 로컬 게스트 실행·게임 화면 크기 초기화 수정, 일반/랭킹 적 추격과 v3 재현 규칙, 일반 적 3종·보스·기사의 승인된 2D 애니메이션 반영. 기사는 걷는 동안 상체 한 자세를 유지하며 말과 망토만 움직인다. 최종 클라이언트 204 tests, API 148 tests, production build 및 브라우저 전투·미리보기 검증 통과.
 - P03-T08 complete: provisional Battle results stay in the unverified shadow until server verification; profile actions use revision-bound stable IDs and protect displaced equipment. Client suite: 191 passed; API suite: 148 passed; build passed.
 - P03-T07 complete: account-scoped verified backups and unverified shadows are separated; guest/offline recovery is explicit, reconnect is read-only, and ranked ticket fallback uses the local shadow. Focused tests: 81 passed; root suite: 186 passed; Vite build passed.
@@ -27,6 +32,10 @@
 - 이전 계획의 4개 Phase, 9개 Task 전체 완료. PvP 보관과 저장 권위 변경은 새 선택이 필요해 별도 후속 계획으로 넘겼고, 현재는 그 선택을 반영한 구현 계획을 시작한다.
 - 후속 구현 계획 확정: PvP 경기 요약은 무기한 보관하고 입력·전투 스냅샷은 terminal 시점부터 90일 보관한다. 온라인 검증 보상·진행도는 서버 권위로 전환하며, 오프라인 진행도와 기존 v2 보상값은 복구 가능한 미검증 로컬 데이터로 유지한다.
 - 현재 계획은 3개 도메인 Phase와 8개 Task로 구성한다. 이번 계획에서 코드·DB·저장 데이터·Azure 자원은 변경하지 않았다.
+- 2026-10-26 비동기 PvP 검색 취소 계획을 만들고 실행 중이다. P01-T01은 검색 상태 migration과 repository 경계를 구현했다. Focused schema/repository tests 25개와 API check를 통과했다.
+- P01-T02 complete: SearchId idempotency, authenticated status/cancel/start routes, 5-second cancellation polling, atomic ticket attachment, and started-only result acceptance are implemented. Lifecycle/API/result tests: 35 passed; repository regressions: 18 passed; API check passed.
+- P01-T03 complete: added SearchId-stable client retries, cancel/status reconciliation, TownScene cancel overlay and PvpScene start confirmation gate. Focused tests: 31 passed; full client suite: 209 passed; production build passed with the Phaser chunk-size warning.
+- P01-T04 complete: terminal search retention cleanup now shares the ten-batch daily budget fairly across four operations. Focused API tests: 13 passed; API check passed. All P01 tasks are complete; no database migration was applied.
 
 - P01-T01 complete: PvP summaries and replay payloads are separated; missing terminal payloads return 410. Focused tests: 25 passed; API suite: 104 passed.
 
@@ -43,4 +52,4 @@
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-No remaining tasks in this plan. Select or create the next plan when ready.
+`$memory-execute` — execute P02-T01 from [the active blueprint](./phases/2026-10-27-equipment-background-combat-layout/P02-equipment-visuals/T01-equipment-appearance-assets.md).

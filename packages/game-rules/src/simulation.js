@@ -3,14 +3,22 @@ import { resolveContact } from './combat.js';
 import { resolveStageDrops, xpRequiredForLevel } from './rewards.js';
 
 const TICKS_PER_SECOND = 60;
-const WORLD_WIDTH = 11200;
+const STAGE_LAYOUTS = Object.freeze({
+  4: Object.freeze({
+    worldWidth: 4800,
+    normalEnemyClusterXs: Object.freeze([700, 1900, 3100]),
+    bossX: 3600,
+  }),
+});
+const STAGE_WORLD_WIDTH = STAGE_LAYOUTS[4].worldWidth;
+const PVP_WORLD_WIDTH = 11200;
 const PLAYER_WIDTH = 64;
 const NORMAL_ENEMY_WIDTH = 128;
 const BOSS_WIDTH = NORMAL_ENEMY_WIDTH * 1.65;
 const PLAYER_START_X = 120;
 const PLAYER_MIN_X = 45;
-const PLAYER_MAX_X = WORLD_WIDTH - 45;
-const BOSS_X = 10500;
+const STAGE_PLAYER_MAX_X = STAGE_WORLD_WIDTH - 45;
+const PVP_PLAYER_MAX_X = PVP_WORLD_WIDTH - 45;
 const PVP_OPPONENT_X = 700;
 const PVP_PLAYER_WIDTH = 64;
 const LEVEL_UP_KEYS = Object.freeze(['attack', 'defense', 'maxHp']);
@@ -30,7 +38,7 @@ function assertTicket(ticket) {
   if (!Number.isInteger(ticket.stage) || ticket.stage < 1 || ticket.stage > 10) {
     throw new RangeError('stage must be an integer from 1 to 10.');
   }
-  if (ticket.simulatorVersion !== 3) throw new RangeError('unsupported simulatorVersion.');
+  if (ticket.simulatorVersion !== 4) throw new RangeError('unsupported simulatorVersion.');
   if (ticket.balanceVersion !== 2) throw new RangeError('unsupported balanceVersion.');
   if (typeof ticket.issuedAtUtc !== 'string' || !ticket.issuedAtUtc) throw new TypeError('issuedAtUtc must be a non-empty string.');
 }
@@ -98,8 +106,9 @@ export function createRankedRun(ticket, playerSnapshot) {
   const countRandom = nextRandom(ticket.seed);
   const enemyCount = BALANCE.normalEnemyCount.min +
     Math.floor(countRandom.value * (BALANCE.normalEnemyCount.max - BALANCE.normalEnemyCount.min + 1));
-  const enemies = Array.from({ length: enemyCount }, (_, index) =>
-    createEnemy(`enemy-${index + 1}`, 700 + index * 950, false, ticket.chapter, ticket.stage, index));
+  const spawnXs = getStageNormalEnemySpawnXs(enemyCount, ticket.simulatorVersion);
+  const enemies = spawnXs.map((x, index) =>
+    createEnemy(`enemy-${index + 1}`, x, false, ticket.chapter, ticket.stage, index));
   return {
     mode: 'stage',
     ticket: { ...ticket },
@@ -138,6 +147,23 @@ function nextRandom(randomState) {
   state ^= state << 5;
   state >>>= 0;
   return { state, value: state / 0x100000000 };
+}
+
+export function getStageLayout(simulatorVersion = 4) {
+  if (!Number.isInteger(simulatorVersion) || !STAGE_LAYOUTS[simulatorVersion]) {
+    throw new RangeError('unsupported simulatorVersion.');
+  }
+  return STAGE_LAYOUTS[simulatorVersion];
+}
+
+export function getStageNormalEnemySpawnXs(enemyCount, simulatorVersion = 4) {
+  const { min, max } = BALANCE.normalEnemyCount;
+  if (!Number.isSafeInteger(enemyCount) || enemyCount < min || enemyCount > max) {
+    throw new RangeError(`enemyCount must be an integer from ${min} to ${max}.`);
+  }
+  const { normalEnemyClusterXs } = getStageLayout(simulatorVersion);
+  return Array.from({ length: enemyCount }, (_, index) =>
+    normalEnemyClusterXs[Math.floor(index * normalEnemyClusterXs.length / enemyCount)]);
 }
 
 function grantRunXp(player, amount) {
@@ -283,9 +309,10 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
         if (normalDefeated >= normalEnemyCount && !playerDied) {
           if (state.hasBoss) {
             if (!bossSpawned) {
-              enemies.push(createEnemy('boss', BOSS_X, true, state.ticket.chapter, state.ticket.stage));
+              const bossX = getStageLayout(state.ticket.simulatorVersion).bossX;
+              enemies.push(createEnemy('boss', bossX, true, state.ticket.chapter, state.ticket.stage));
               bossSpawned = true;
-              events.push({ type: 'bossSpawned', tick: state.tick, x: BOSS_X });
+              events.push({ type: 'bossSpawned', tick: state.tick, x: bossX });
             }
           } else {
             outcome = 'clear';
@@ -303,7 +330,7 @@ function applyStageContact(state, enemies, contactPairs, player, events, randomS
     updatedPlayer.x = clamp(
       updatedPlayer.x + directionAway * BALANCE.knockbackPixels,
       PLAYER_MIN_X,
-      PLAYER_MAX_X,
+      STAGE_PLAYER_MAX_X,
     );
     if (outcome) break;
   }
@@ -346,7 +373,7 @@ export function stepRankedRun(state, inputForTick = []) {
   next.player.x = clamp(
     next.player.x + next.movementDirection * next.player.moveSpeed / TICKS_PER_SECOND,
     PLAYER_MIN_X,
-    PLAYER_MAX_X,
+    STAGE_PLAYER_MAX_X,
   );
   for (const enemy of next.enemies) moveEnemyTowardPlayer(enemy, next.player.x);
   const contacts = applyStageContact(
@@ -576,7 +603,7 @@ export function stepPvpRun(state, inputForTick = []) {
   next.player.x = clamp(
     next.player.x + next.movementDirection * next.player.moveSpeed / TICKS_PER_SECOND,
     PLAYER_MIN_X,
-    PLAYER_MAX_X,
+    PVP_PLAYER_MAX_X,
   );
   const events = [];
   const overlapping = Math.abs(next.player.x - next.opponent.x) <= (PLAYER_WIDTH + next.opponent.width) / 2;
@@ -609,7 +636,7 @@ export function stepPvpRun(state, inputForTick = []) {
       opponentHp: result.enemyHp,
     });
     const directionAway = next.player.x <= next.opponent.x ? -1 : 1;
-    next.player.x = clamp(next.player.x + directionAway * BALANCE.knockbackPixels, PLAYER_MIN_X, PLAYER_MAX_X);
+    next.player.x = clamp(next.player.x + directionAway * BALANCE.knockbackPixels, PLAYER_MIN_X, PVP_PLAYER_MAX_X);
     if (next.player.currentHp <= 0 || next.opponent.currentHp <= 0) {
       next.outcome = pvpOutcome(next.player.currentHp, next.player.maxHp, next.opponent.currentHp, next.opponent.maxHp).outcome;
     }

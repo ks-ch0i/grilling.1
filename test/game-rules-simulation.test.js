@@ -48,7 +48,7 @@ const stageTicket = (overrides = {}) => ({
   seed: 123456789,
   chapter: 1,
   stage: 1,
-  simulatorVersion: 3,
+  simulatorVersion: 4,
   balanceVersion: 2,
   issuedAtUtc: '2026-10-21T00:00:00.000Z',
   ...overrides,
@@ -152,6 +152,51 @@ test('ranked enemy counts use one ticket-seeded draw and preserve the following 
   assert.deepEqual([...seenCounts].sort((left, right) => left - right), [4, 5, 6, 7, 8, 9, 10]);
 });
 
+test('v4 stage layout uses three balanced fixed-x clusters within a 4,800px world', async () => {
+  const { getStageLayout, getStageNormalEnemySpawnXs, createRankedRun, stepRankedRun, createPvpRun, stepPvpRun } = await loadRules();
+  const layout = getStageLayout();
+
+  assert.deepEqual(layout, {
+    worldWidth: 4800,
+    normalEnemyClusterXs: [700, 1900, 3100],
+    bossX: 3600,
+  });
+  assert.throws(() => getStageLayout(3), /unsupported simulatorVersion/i);
+
+  for (let enemyCount = 4; enemyCount <= 10; enemyCount += 1) {
+    const spawnXs = getStageNormalEnemySpawnXs(enemyCount);
+    const groupCounts = layout.normalEnemyClusterXs.map((x) => spawnXs.filter((spawnX) => spawnX === x).length);
+
+    assert.equal(spawnXs.length, enemyCount);
+    assert.deepEqual(spawnXs, Array.from({ length: enemyCount }, (_, index) =>
+      layout.normalEnemyClusterXs[Math.floor(index * 3 / enemyCount)]));
+    assert.ok(Math.max(...groupCounts) - Math.min(...groupCounts) <= 1);
+  }
+  assert.throws(() => getStageNormalEnemySpawnXs(3), RangeError);
+  assert.throws(() => getStageNormalEnemySpawnXs(11), RangeError);
+
+  const stageRun = createRankedRun(stageTicket(), player({ moveSpeed: 1_000_000 }));
+  const stageAtRightEdge = stepRankedRun(stageRun, [{ tick: 0, kind: 'move', value: 1 }]).state;
+  assert.equal(stageAtRightEdge.player.x, 4755);
+
+  const pvpTicket = {
+    matchId: 'layout-pvp-bound', seed: 1, simulatorVersion: 2, balanceVersion: 2,
+    issuedAtUtc: '2026-10-21T00:00:00.000Z', timeLimitMs: 60000,
+  };
+  const pvpRun = createPvpRun(pvpTicket, player({ moveSpeed: 1_000_000 }), player({ moveSpeed: 0 }));
+  const pvpAtRightEdge = stepPvpRun(pvpRun, [{ tick: 0, kind: 'move', value: 1 }]).state;
+  assert.equal(pvpAtRightEdge.player.x, 11155);
+});
+
+test('ranked stage simulation rejects v3 tickets after the v4 switch', async () => {
+  const { createRankedRun } = await loadRules();
+
+  assert.throws(
+    () => createRankedRun(stageTicket({ simulatorVersion: 3 }), player()),
+    /unsupported simulatorVersion/i,
+  );
+});
+
 test('ranked simulation accepts only the current simulator and balance versions', async () => {
   const { createRankedRun } = await loadRules();
 
@@ -183,7 +228,7 @@ test('a stage replay produces the same clear result for the same ticket and inpu
   assert.deepEqual(summary, {
     valid: true,
     outcome: 'clear',
-    elapsedTicks: 1627,
+    elapsedTicks: 741,
     playerHp: 10000,
     rejectReason: null,
   });
@@ -255,7 +300,7 @@ test('a boss stage spawns its fixed boss after the ticket-selected normal enemy 
   }
 
   assert.ok(bossEvent);
-  assert.equal(bossEvent.x, 10500);
+  assert.equal(bossEvent.x, 3600);
   assert.equal(state.normalDefeated, expectedNormalCount);
   assert.equal(state.enemies.filter((enemy) => !enemy.isBoss).length, expectedNormalCount);
   assert.equal(state.enemies.at(-1).id, 'boss');

@@ -3,7 +3,12 @@ import { BALANCE, RARITY_COLOR, STAGE_ENEMY_MOVE_SPEEDS } from '../data/balance.
 import { resolveContact } from '../domain/combat.js';
 import { createInitialState, derivePlayerStats, rollGear, tryStoreDrop } from '../domain/gear.js';
 import { completeStage, createGoldRoom, getStageEnemyStats, getStageGoldRequirement, grantGold, grantXp, resetInvalidGoldBalance, resolveLevelUp, retryStage } from '../domain/progression.js';
-import { createRankedRun, stepRankedRun } from '@knight-run/game-rules/simulation';
+import {
+  createRankedRun,
+  getStageLayout,
+  getStageNormalEnemySpawnXs,
+  stepRankedRun,
+} from '@knight-run/game-rules/simulation';
 import { createFixedStepAccumulator, createRunInputRecorder } from '../domain/rankedRunClient.js';
 import { createButton } from '../ui/components.js';
 import { KNIGHT_ANIMATIONS, selectKnightAnimation, selectKnightFacing } from '../ui/knightAnimations.js';
@@ -11,7 +16,8 @@ import { ENEMY_ANIMATIONS, ENEMY_SPRITE_SHEETS, enemyAnimationKey, selectStageEn
 import { WholeBodyWalk, WALK_CHARACTERS } from '../ui/WholeBodyWalk.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
 
-const WORLD_WIDTH = 11200;
+const STAGE_LAYOUT = getStageLayout();
+const WORLD_WIDTH = STAGE_LAYOUT.worldWidth;
 const FLOOR_Y = 560;
 const PLAYER_WIDTH = 64;
 const ENEMY_WIDTH = 128;
@@ -323,10 +329,10 @@ export class BattleScene extends Phaser.Scene {
     const { min, max } = BALANCE.normalEnemyCount;
     this.normalEnemyCount = this.normalEnemyCountOverride ?? min + Math.floor(Math.random() * (max - min + 1));
     this.normalEnemyCountOverride = null;
-    for (let index = 0; index < this.normalEnemyCount; index += 1) {
-      const x = 700 + index * 950;
+    const spawnXs = getStageNormalEnemySpawnXs(this.normalEnemyCount);
+    spawnXs.forEach((x, index) => {
       this.createEnemy(x, false, index + 1);
-    }
+    });
     this.hasBoss = this.stage % 5 === 0;
   }
 
@@ -753,7 +759,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (!playerDied && Math.random() < BALANCE.normalDropChance) this.dropGear(enemy.x, false);
     if (!ranked && !playerDied && this.normalDefeated >= this.normalEnemyCount) {
-      if (this.hasBoss) this.createEnemy(10500, true);
+      if (this.hasBoss) this.createEnemy(STAGE_LAYOUT.bossX, true);
       else this.finishStageAfterEnemyDefeat(enemy);
     }
     this.saveState(this.gameState);

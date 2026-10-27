@@ -5,6 +5,7 @@ import * as cloudSaveRepository from '../repositories/cloudSaveRepository.js';
 import * as defaultStageRepository from '../repositories/stageRankingRepository.js';
 import { withTransaction as defaultWithTransaction } from '../database/transaction.js';
 import { parseCloudSave } from '../domain/cloudSave.js';
+import { SUPPORTED_STAGE_SIMULATOR_VERSIONS } from '../domain/gameVersions.js';
 import { parseRewardProfile } from '../domain/playerProfile.js';
 import {
   BALANCE_VERSION,
@@ -255,7 +256,8 @@ export async function submitStageResult(pool, identity, runId, body, receivedAtU
     await deps.withTransaction(pool, (transaction) => deps.repository.expireTicket(transaction, playerId, runId));
     return { status: 410, code: 'run-expired' };
   }
-  if (Number(row.SimulatorVersion) !== SIMULATOR_VERSION || Number(row.BalanceVersion) !== BALANCE_VERSION) {
+  if (!SUPPORTED_STAGE_SIMULATOR_VERSIONS.includes(Number(row.SimulatorVersion)) ||
+      Number(row.BalanceVersion) !== BALANCE_VERSION) {
     await deps.withTransaction(pool, (transaction) => deps.repository.expireTicket(transaction, playerId, runId));
     return { status: 409, code: 'unsupported-simulator-version' };
   }
