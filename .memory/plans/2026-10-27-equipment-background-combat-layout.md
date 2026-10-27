@@ -4,7 +4,7 @@
 장착 장비가 마을과 일반·랭킹·PvP 전투 캐릭터에 보이게 하고, 마을·PvP·5개 챕터 테마의 배경 아트를 적용한다. 일반·랭킹 전투 월드를 4,800px로 줄이고 4~10마리의 일반 적을 세 군집에 겹쳐 배치해 보스까지의 이동 시간을 단축한다. 일반 전투와 서버 검증은 같은 새 배치를 쓰며, 새 v4 적용 시 기존 v3 랭킹 티켓은 즉시 만료한다.
 
 ## Status
-- planned
+- in_progress
 
 ## Confirmed Decisions
 - 장비 한 종류 파일에 걷기 4컷, 전투동작 6컷, 입상 자세 장비 레이어 1컷을 넣는다. 마을 기본 입상 기사 이미지는 별도 파일로 두고, atlas의 남는 칸은 투명 처리한다.
@@ -21,9 +21,9 @@
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | 전투 월드 경계와 일반 적 군집·보스 위치를 공유 규칙에 적용하고, 기존 v3 티켓을 즉시 만료한 뒤 v4를 발급한다. | [P01](../phases/2026-10-27-equipment-background-combat-layout/P01-combat-world-layout/phase.md) |
-| P02 | `pending` | 프레임 정렬 장비 아트와 마을 입상 프리뷰를 만들고 전투·마을·PvP 렌더링에 연결한다. | [P02](../phases/2026-10-27-equipment-background-combat-layout/P02-equipment-visuals/phase.md) |
-| P03 | `pending` | 장면별 배경 아트를 만들고 챕터 테마·시차·바닥 규칙을 각 장면에 연결한다. | [P03](../phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/phase.md) |
+| P01 | `done` | 전투 월드 경계와 일반 적 군집·보스 위치를 공유 규칙에 적용하고, 기존 v3 티켓을 즉시 만료한 뒤 v4를 발급한다. | [P01](../phases/2026-10-27-equipment-background-combat-layout/P01-combat-world-layout/phase.md) |
+| P02 | `done` | 프레임 정렬 장비 아트와 마을 입상 프리뷰를 만들고 전투·마을·PvP 렌더링에 연결한다. | [P02](../phases/2026-10-27-equipment-background-combat-layout/P02-equipment-visuals/phase.md) |
+| P03 | `in_progress` | 장면별 배경 아트를 만들고 챕터 테마·시차·바닥 규칙을 각 장면에 연결한다. | [P03](../phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/phase.md) |
 
 ## Ordering and Dependencies
 - P01-T01은 공통 전투 배치 계약과 랭킹 시뮬레이터 버전 전환을 먼저 확정한다. 일반 전투의 직접 생성과 새 v4 랭킹 시뮬레이션이 같은 최신 앵커를 사용하고, 기존 v3 티켓은 전환 즉시 거부되어야 한다.

@@ -1,6 +1,6 @@
 # Task: T03 PvP Gear Rendering
 
-## Status: pending
+## Status: done
 
 ## Goal
 PvP의 사각형 플레이어/상대 표시를 기마 캐릭터로 교체하고, 티켓의 각 캐릭터 equipment snapshot에 맞는 장비 레이어를 적용한다. 두 외형은 입력 또는 로컬 저장을 변경하지 않는다.
@@ -54,10 +54,10 @@ PvP의 사각형 플레이어/상대 표시를 기마 캐릭터로 교체하고,
 - Keep existing PvP result and ticket contracts unchanged.
 
 ## Acceptance Criteria
-- [ ] PvP displays two mounted knight/horse sprites at simulation positions with rarity-matched equipment layers from the correct snapshot.
-- [ ] Player and opponent can use different slot/rarity appearances; direction flips and gait frames remain aligned.
-- [ ] HP, timer, labels, input recorder, and server result submission behave as before.
-- [ ] PvP simulator and rating versions remain unchanged.
+- [x] PvP displays two mounted knight/horse sprites at simulation positions with rarity-matched equipment layers from the correct snapshot.
+- [x] Player and opponent can use different slot/rarity appearances; direction flips and gait frames remain aligned.
+- [x] HP, timer, labels, input recorder, and server result submission behave as before.
+- [x] PvP simulator and rating versions remain unchanged.
 
 ## Validation
 - `node --test test/pvp/character-appearance.test.js test/pvp/pvpClient.test.js` — snapshot-to-view mapping, invalid ticket, and no-mutation checks pass.
@@ -76,6 +76,6 @@ Task: T03-pvp-gear-rendering
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과 — PvP appearance + client tests 20/20, Vite production build, `git diff --check`.
+- commit message: `feat(pvp): show snapshot equipment on both fighters`

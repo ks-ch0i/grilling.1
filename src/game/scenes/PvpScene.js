@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { createPvpRun, stepPvpRun } from '@knight-run/game-rules/simulation';
 import { createRunInputRecorder, RANKED_TICK_MS } from '../domain/rankedRunClient.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
+import { WholeBodyWalk, WALK_CHARACTERS } from '../ui/WholeBodyWalk.js';
+import { EquipmentAppearance } from '../ui/equipmentAppearance.js';
+import { getPvpFacingDirections, validatePvpEquipmentSnapshot } from '../ui/pvpCharacterAppearance.js';
 
 const FLOOR_Y = 560;
 const MATCH_TICKS = 60 * 60;
@@ -45,6 +48,8 @@ export class PvpScene extends Phaser.Scene {
       if (!this.ticket || !this.ticket.playerSnapshot?.combat || !this.ticket.opponentSnapshot?.combat || !this.pvpClient) {
         throw new TypeError('PvP ticket data is incomplete.');
       }
+      validatePvpEquipmentSnapshot(this.ticket.playerSnapshot.equipment);
+      validatePvpEquipmentSnapshot(this.ticket.opponentSnapshot.equipment);
       const issued = Date.parse(this.ticket.issuedAtUtc);
       const expires = Date.parse(this.ticket.expiresAtUtc);
       if (!Number.isFinite(issued) || !Number.isFinite(expires) || Date.now() >= expires) {
@@ -65,8 +70,17 @@ export class PvpScene extends Phaser.Scene {
       return;
     }
 
-    this.playerView = this.add.rectangle(this.runState.player.x, FLOOR_Y - 68, 54, 118, 0x72b7ff).setStrokeStyle(3, 0xd9efff);
-    this.opponentView = this.add.rectangle(this.runState.opponent.x, FLOOR_Y - 68, 54, 118, 0xff826f).setStrokeStyle(3, 0xffd2c7);
+    try {
+      this.playerView = this.createCharacterView(this.runState.player.x, this.ticket.playerSnapshot.equipment);
+      this.opponentView = this.createCharacterView(this.runState.opponent.x, this.ticket.opponentSnapshot.equipment);
+    } catch {
+      this.playerView?.container.destroy(true);
+      this.opponentView?.container.destroy(true);
+      this.playerView = null;
+      this.opponentView = null;
+      this.showSubmissionFailure('invalid-match-ticket');
+      return;
+    }
     const playerName = `나 · Lv.${this.ticket.playerSnapshot.character?.level ?? '?'} · ${this.ticket.playerRating ?? '—'}점`;
     const opponentName = `${this.ticket.opponentDisplayName || '상대'} · Lv.${this.ticket.opponentSnapshot.character?.level ?? '?'} · ${this.ticket.opponentRating ?? '—'}점`;
     this.add.text(32, 240, playerName, { fontFamily:'sans-serif', fontSize:'16px', color:'#b7dcff' });
@@ -82,6 +96,26 @@ export class PvpScene extends Phaser.Scene {
     this.renderCombatState();
   }
 
+  createCharacterView(x, equipment) {
+    let container;
+    try {
+      container = this.add.container(x, FLOOR_Y).setDepth(10);
+      const walkRig = new WholeBodyWalk(this, container, 'knight');
+      const metadata = this.cache.json.get('walk-knight-meta');
+      if (!Number.isFinite(metadata?.contentHeight) || metadata.contentHeight <= 0) {
+        throw new TypeError('Mounted knight texture metadata is unavailable.');
+      }
+      const appearance = new EquipmentAppearance(this, container, equipment, {
+        scale:WALK_CHARACTERS.knight.walkHeight / metadata.contentHeight,
+        origin:[0.5,244/256],
+      });
+      return { container, walkRig, appearance, lastX:x };
+    } catch (error) {
+      container?.destroy(true);
+      throw error;
+    }
+  }
+
   getInputDirection() {
     if (this.touchDirection) return this.touchDirection;
     if (this.cursors?.left?.isDown || this.cursors?.arrowLeft?.isDown) return -1;
@@ -89,7 +123,7 @@ export class PvpScene extends Phaser.Scene {
     return 0;
   }
 
-  update() {
+  update(_time, delta = 0) {
     if (this.finished || !this.runState) return;
     const elapsedMs = Date.now() - Date.parse(this.ticket.issuedAtUtc);
     const targetTick = Math.min(MATCH_TICKS, Math.max(0, Math.floor(elapsedMs / RANKED_TICK_MS)));
@@ -108,14 +142,25 @@ export class PvpScene extends Phaser.Scene {
       while (this.queuedInputs[0]?.tick === this.runState.tick) tickInputs.push(this.queuedInputs.shift());
       this.runState = stepPvpRun(this.runState, tickInputs).state;
     }
-    this.renderCombatState();
+    this.renderCombatState(delta);
     if (this.runState.outcome) this.finishMatch();
   }
 
-  renderCombatState() {
+  renderCombatState(delta = 0) {
     if (!this.runState || !this.playerView || !this.opponentView) return;
-    this.playerView.x = this.runState.player.x;
-    this.opponentView.x = this.runState.opponent.x;
+    const playerX = this.runState.player.x;
+    const opponentX = this.runState.opponent.x;
+    const facing = getPvpFacingDirections(playerX, opponentX);
+    for (const [view, x, direction] of [
+      [this.playerView, playerX, facing.player],
+      [this.opponentView, opponentX, facing.opponent],
+    ]) {
+      const moving = Math.abs(x - view.lastX) > 0.01;
+      view.container.x = x;
+      view.walkRig.follow(x, moving, direction, Math.max(0, delta / 1000));
+      view.appearance.setFacing(direction).setFrame(view.walkRig.frame);
+      view.lastX = x;
+    }
     this.playerHpFill.width = 320 * Math.max(0, this.runState.player.currentHp / this.runState.player.maxHp);
     this.opponentHpFill.width = 320 * Math.max(0, this.runState.opponent.currentHp / this.runState.opponent.maxHp);
     const secondsLeft = Math.max(0, 60 - Math.floor(this.runState.tick / 60));
@@ -181,7 +226,7 @@ export class PvpScene extends Phaser.Scene {
       ? '매치 시간이 지났거나 서버 결과를 확인하지 못했습니다. 레이팅은 서버 응답을 받을 때까지 표시하지 않습니다.'
       : '서버가 전투 기록을 확인하지 못했습니다. 레이팅은 서버 응답을 받을 때까지 표시하지 않습니다.';
     const actions = [];
-    if (!expired) {
+    if (!expired && reason !== 'invalid-match-ticket') {
       if (authRequired) actions.push({ label:'다시 인증', onClick:async()=>{
         await this.pvpClient.retryAuthentication();
         this.overlay?.destroy(true);
