@@ -1,6 +1,6 @@
 # Task: T02 Background Scene Integration
 
-## Status: pending
+## Status: done
 
 ## Goal
 BootScene에서 P03-T01의 17개 배경 에셋을 preload하고, 챕터별 전투 테마와 약한 전투 시차 레이어, 정지 마을·PvP 배경을 각 장면에 연결한다. 카메라 추적, HUD 배치, 캐릭터 동작, `FLOOR_Y=560` 충돌 규칙은 유지한다.
@@ -105,6 +105,8 @@ Task: T02-background-scene-integration
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료 — BootScene, BattleScene, TownScene, PvpScene에 배경을 연결했다.
+- [x] 검증 통과 — 배경 테스트 9/9, Vite production build, `git diff --check`.
+- [x] 런타임 결함 수정 — 전투 시작 시 유효하게 발생하는 `camera.scrollX=-520`을 배경 helper가 거부해 씬 업데이트가 중단됐다. 유한한 음수 스크롤도 허용하고 회귀 테스트를 추가했다.
+- [ ] 수동 화면 재확인 — 수정 후 Vite가 페이지를 다시 불러온 것은 확인했으나, 전투 시작 버튼을 다시 누른 결과는 아직 확인되지 않았다.
+- commit message: `feat(art): integrate scene backgrounds`

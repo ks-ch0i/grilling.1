@@ -16,6 +16,7 @@ import { ENEMY_ANIMATIONS, ENEMY_SPRITE_SHEETS, enemyAnimationKey, selectStageEn
 import { WholeBodyWalk, WALK_CHARACTERS } from '../ui/WholeBodyWalk.js';
 import { EquipmentAppearance } from '../ui/equipmentAppearance.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
+import { createBattleBackgroundLayers, updateBattleBackgroundLayers } from '../ui/sceneBackgrounds.js';
 
 const STAGE_LAYOUT = getStageLayout();
 const WORLD_WIDTH = STAGE_LAYOUT.worldWidth;
@@ -154,16 +155,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   drawWorld() {
-    this.add.rectangle(WORLD_WIDTH / 2, 360, WORLD_WIDTH, 720, 0x172331);
-    this.add.rectangle(WORLD_WIDTH / 2, 465, WORLD_WIDTH, 190, 0x253544);
-    for (let x = 300; x < WORLD_WIDTH; x += 760) {
-      const height = 90 + ((x / 760) % 4) * 24;
-      this.add.rectangle(x, FLOOR_Y - height / 2, 180, height, 0x304052, 0.55);
-      this.add.rectangle(x + 42, FLOOR_Y - height / 2 - 12, 10, 18, 0x46586a, 0.7);
-    }
+    this.backgroundLayers = createBattleBackgroundLayers(this, this.chapter);
     this.add.rectangle(WORLD_WIDTH / 2, FLOOR_Y + 80, WORLD_WIDTH, 160, 0x20252b);
     const groundLine = this.add.rectangle(WORLD_WIDTH / 2, FLOOR_Y, WORLD_WIDTH, 4, 0xb19361);
-    groundLine.setAlpha(0.85);
+    groundLine.setAlpha(0.85).setDepth(0);
   }
 
   createPlayer() {
@@ -521,6 +516,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.backgroundLayers) {
+      updateBattleBackgroundLayers(this.backgroundLayers, this.cameras.main.scrollX);
+    }
     if (this.rankedRunState) {
       this.updateRankedRun(time, delta);
       return;

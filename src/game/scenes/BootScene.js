@@ -5,6 +5,7 @@ import { ENEMY_FRAME_SIZE, ENEMY_SPRITE_SHEETS } from '../ui/enemyAnimations.js'
 import { KNIGHT_FRAME_HEIGHT, KNIGHT_FRAME_WIDTH } from '../ui/knightAnimations.js';
 import { preloadWholeBodyWalks } from '../ui/WholeBodyWalk.js';
 import { hasValidEquipmentAppearanceAssets, preloadEquipmentAppearanceAssets } from '../ui/equipmentAppearanceAssets.js';
+import { preloadSceneBackgroundAssets } from '../ui/sceneBackgroundAssets.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -19,6 +20,7 @@ export class BootScene extends Phaser.Scene {
     this.load.json('knight-actions-meta','/assets/walk/knight-actions.json');
     preloadWholeBodyWalks(this);
     preloadEquipmentAppearanceAssets(this.load);
+    preloadSceneBackgroundAssets(this.load);
     for (const spriteSheet of Object.values(ENEMY_SPRITE_SHEETS)) {
       this.load.spritesheet(spriteSheet.key, spriteSheet.path, {
         frameWidth:ENEMY_FRAME_SIZE,

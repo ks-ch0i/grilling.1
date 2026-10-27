@@ -16,6 +16,7 @@ import {
 } from '../ui/inventoryScroll.js';
 import { RankingMarquee } from '../ui/RankingMarquee.js';
 import { renderTownEquipmentPreview } from '../ui/equipmentAppearance.js';
+import { createStaticSceneBackground } from '../ui/sceneBackgrounds.js';
 
 const SLOT_LABEL = { helmet:'투구', armor:'갑옷', gloves:'장갑', boots:'신발', spear:'창', horse:'말' };
 const RARITY_LABEL = { common:'커먼', uncommon:'언커먼', rare:'레어', unique:'유니크', legendary:'레전더리' };
@@ -281,7 +282,7 @@ export class TownScene extends Phaser.Scene {
   renderTown() {
     const { progression, player, materials, gold, inventory } = this.gameState;
     const stats = derivePlayerStats(this.gameState);
-    this.add.rectangle(640, 360, 1280, 720, 0x121a23);
+    this.townBackground = createStaticSceneBackground(this, 'town');
     this.add.text(32, 58, '마창기사 · 마을', { fontFamily:'sans-serif', fontSize:'27px', color:'#f4e6bf' });
     this.add.text(345, 58, progression.chapter + '회차 · 해금 ' + progression.unlockedChapter + '-' + progression.unlockedStage, { fontFamily:'sans-serif', fontSize:'16px', color:'#cad4df' });
     this.add.text(700, 58, 'Lv.' + player.level + '  XP ' + player.xp + '/' + player.xpToNext, { fontFamily:'sans-serif', fontSize:'16px', color:'#f4e6bf' });

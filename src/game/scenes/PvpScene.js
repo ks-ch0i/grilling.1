@@ -5,6 +5,7 @@ import { RankingMarquee } from '../ui/RankingMarquee.js';
 import { WholeBodyWalk, WALK_CHARACTERS } from '../ui/WholeBodyWalk.js';
 import { EquipmentAppearance } from '../ui/equipmentAppearance.js';
 import { getPvpFacingDirections, validatePvpEquipmentSnapshot } from '../ui/pvpCharacterAppearance.js';
+import { createStaticSceneBackground } from '../ui/sceneBackgrounds.js';
 
 const FLOOR_Y = 560;
 const MATCH_TICKS = 60 * 60;
@@ -36,7 +37,7 @@ export class PvpScene extends Phaser.Scene {
 
   create() {
     this.rankingMarquee = new RankingMarquee(this, this.rankingClient);
-    this.add.rectangle(640, 360, 1280, 720, 0x121a23);
+    this.arenaBackground = createStaticSceneBackground(this, 'pvp');
     this.add.text(32, 72, '비동기 PvP · 서버 판정 대기', { fontFamily:'sans-serif', fontSize:'27px', color:'#f4e6bf' });
     this.add.text(32, 110, '상대는 공개 스냅샷 위치에 고정됩니다. 몸통 접촉으로 피해를 주고받습니다.', { fontFamily:'sans-serif', fontSize:'15px', color:'#cad4df' });
     this.add.rectangle(640, FLOOR_Y + 20, 1280, 320, 0x263342);

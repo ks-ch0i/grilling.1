@@ -43,3 +43,14 @@ export function getBattleBackgroundAssetKeys(theme) {
     front: assets.front.key,
   });
 }
+
+export function preloadSceneBackgroundAssets(load) {
+  if (typeof load?.image !== 'function') throw new TypeError('Background asset loader must provide image().');
+  for (const theme of BATTLE_BACKGROUND_THEMES) {
+    for (const asset of Object.values(BACKGROUND_ASSETS.battle[theme])) {
+      load.image(asset.key, asset.path);
+    }
+  }
+  load.image(BACKGROUND_ASSETS.town.key, BACKGROUND_ASSETS.town.path);
+  load.image(BACKGROUND_ASSETS.pvp.key, BACKGROUND_ASSETS.pvp.path);
+}
