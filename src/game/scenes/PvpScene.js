@@ -101,7 +101,7 @@ export class PvpScene extends Phaser.Scene {
     let container;
     try {
       container = this.add.container(x, FLOOR_Y).setDepth(10);
-      const walkRig = new WholeBodyWalk(this, container, 'knight');
+      const walkRig = new WholeBodyWalk(this, container, 'knight', { renderBase:false });
       const metadata = this.cache.json.get('walk-knight-meta');
       if (!Number.isFinite(metadata?.contentHeight) || metadata.contentHeight <= 0) {
         throw new TypeError('Mounted knight texture metadata is unavailable.');

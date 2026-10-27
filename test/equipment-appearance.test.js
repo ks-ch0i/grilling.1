@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { EquipmentAppearance, getEquipmentTextureKey, renderTownEquipmentPreview } from '../src/game/ui/equipmentAppearance.js';
 import {
@@ -122,7 +123,7 @@ test('equipment appearance synchronizes frames, facing, and visibility; reserved
   assert.equal(armor.destroyed, true);
 });
 
-test('Town preview places horse and standing knight side by side with current equipment', () => {
+test('Town preview places horse and knight equipment side by side without base images', () => {
   const { scene, images, containers } = makeScene();
   const previews = renderTownEquipmentPreview(scene, equipment({
     horse:{slot:'horse',rarity:'rare'},
@@ -130,11 +131,10 @@ test('Town preview places horse and standing knight side by side with current eq
   }));
 
   assert.deepEqual(containers.filter(({ x }) => x !== 0).map(({ x,y }) => [x,y]), [[556,118],[628,118]]);
-  assert.equal(previews.horseBase.key, 'walk-knight');
-  assert.equal(previews.horseBase.frame, 0);
-  assert.equal(previews.horseBase.scale, 0.25);
-  assert.equal(previews.knightBase.key, 'knight-standing');
-  assert.equal(previews.knightBase.scale, 0.25);
+  assert.deepEqual(Object.keys(previews), ['horseAppearance','knightAppearance']);
+  assert.equal(images.length, 6);
+  assert.ok(images.every(({ key }) => key.startsWith('gear-')));
+  assert.ok(!images.some(({ key }) => ['walk-knight','knight-standing'].includes(key)));
   assert.equal(images.find(({ key }) => key === 'gear-horse-rare').frame, 10);
   assert.equal(images.find(({ key }) => key === 'gear-helmet-unique').frame, 10);
   assert.deepEqual(previews.horseAppearance.layers[0].image.origin, [0.5,0.5]);
@@ -150,7 +150,7 @@ test('battle appearance frame follows the current walk or knight action frame', 
   assert.equal(getKnightEquipmentFrame({ visualAction:'defeat', walkFrame:0, spriteFrameName:'not-a-frame' }), null);
 });
 
-test('equipment preload and validation require all 30 twelve-frame sheets and the standing knight', () => {
+test('equipment preload and validation require only all 30 twelve-frame gear sheets', () => {
   const sheetLoads = [];
   const imageLoads = [];
   const scene = {
@@ -162,23 +162,27 @@ test('equipment preload and validation require all 30 twelve-frame sheets and th
   };
   preloadEquipmentAppearanceAssets(scene.load);
   assert.equal(sheetLoads.filter(({ key }) => key.startsWith('gear-')).length, EQUIPMENT_APPEARANCE_ASSETS.length);
-  assert.deepEqual(imageLoads.find(({ key }) => key === 'knight-standing'), {
-    key:'knight-standing', path:'/assets/gear/knight-standing.png',
-  });
+  assert.deepEqual(imageLoads, []);
 
   const frameNames = Array.from({ length:12 }, (_, index) => String(index));
-  const textures = new Map([
-    ['knight-standing', {}],
-    ...EQUIPMENT_APPEARANCE_ASSETS.map(({key}) => [key, {
+  const textures = new Map(EQUIPMENT_APPEARANCE_ASSETS.map(({key}) => [key, {
       getFrameNames:() => frameNames,
       has:(frame) => frameNames.includes(frame),
-    }]),
-  ]);
+  }]));
   const textureManager = { exists:(key) => textures.has(key), get:(key) => textures.get(key) };
   assert.equal(hasValidEquipmentAppearanceAssets(textureManager), true);
   textures.get(EQUIPMENT_APPEARANCE_ASSETS[0].key).has = (frame) => frame !== '11';
   assert.equal(hasValidEquipmentAppearanceAssets(textureManager), false);
   textures.get(EQUIPMENT_APPEARANCE_ASSETS[0].key).has = (frame) => frameNames.includes(frame);
-  textures.delete('knight-standing');
+  textures.delete(EQUIPMENT_APPEARANCE_ASSETS[1].key);
   assert.equal(hasValidEquipmentAppearanceAssets(textureManager), false);
+});
+
+test('BattleScene and PvpScene use gear-only player views with hidden base pose drivers', () => {
+  const battle = readFileSync(new URL('../src/game/scenes/BattleScene.js', import.meta.url), 'utf8');
+  const pvp = readFileSync(new URL('../src/game/scenes/PvpScene.js', import.meta.url), 'utf8');
+  assert.ok(battle.includes("new WholeBodyWalk(this, view, 'knight', { renderBase:false })"));
+  assert.ok(pvp.includes("new WholeBodyWalk(this, container, 'knight', { renderBase:false })"));
+  const playAnimation = battle.slice(battle.indexOf('playKnightAnimation(name)'), battle.indexOf('syncPlayerEquipmentAppearance()'));
+  assert.ok(!playAnimation.includes('sprite.setVisible(true)'));
 });

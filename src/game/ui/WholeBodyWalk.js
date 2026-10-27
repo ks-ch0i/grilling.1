@@ -19,7 +19,9 @@ export function advanceWalkPhase(phase,distance,stride) {
 }
 
 export class WholeBodyWalk {
-  constructor(scene,parent,name) {
+  constructor(scene,parent,name,{renderBase=true}={}) {
+    if(typeof renderBase!=='boolean')throw new TypeError('WholeBodyWalk renderBase must be a boolean.');
+    this.renderBase=renderBase;
     this.config=WALK_CHARACTERS[name];
     this.phase=0;
     this.lastX=parent.x;
@@ -39,9 +41,10 @@ export class WholeBodyWalk {
       this.rider.setScale(pose.height/pose.contentHeight);
       this.container.add(this.rider);
     }
+    this.container.setVisible(this.renderBase);
   }
 
-  setVisible(visible){this.container.setVisible(visible);return this;}
+  setVisible(visible){this.container.setVisible(this.renderBase&&Boolean(visible));return this;}
   setFacing(direction){this.container.scaleX=direction>0?-1:1;}
 
   follow(x,moving,direction,_delta,freeze=false) {

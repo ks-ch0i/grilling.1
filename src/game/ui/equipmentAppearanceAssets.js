@@ -47,11 +47,10 @@ export function preloadEquipmentAppearanceAssets(load) {
       frameHeight:EQUIPMENT_APPEARANCE_FRAMES.frameHeight,
     });
   }
-  load.image('knight-standing', '/assets/gear/knight-standing.png');
 }
 
 export function hasValidEquipmentAppearanceAssets(textures) {
-  if (!textures?.exists('knight-standing')) return false;
+  if (typeof textures?.exists !== 'function' || typeof textures?.get !== 'function') return false;
   return EQUIPMENT_APPEARANCE_ASSETS.every(({ key }) => {
     if (!textures.exists(key)) return false;
     const texture = textures.get(key);

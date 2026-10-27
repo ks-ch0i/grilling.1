@@ -13,7 +13,7 @@
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | 슬롯별 전신 atlas를 만들고, 모든 장면에서 베이스 픽셀 없이 장비 합성만 렌더링한다. | [P01](../phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/phase.md) |
+| P01 | `complete` | 슬롯별 전신 atlas를 만들고, 모든 장면에서 베이스 픽셀 없이 장비 합성만 렌더링한다. | [P01](../phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/phase.md) |
 
 ## Regression Traps
 - `WholeBodyWalk`는 적과 플레이어가 함께 쓴다. 플레이어의 베이스만 숨기고 적 애니메이션은 계속 표시해야 한다.

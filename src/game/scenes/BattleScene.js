@@ -179,7 +179,7 @@ export class BattleScene extends Phaser.Scene {
       .setScale(spriteScale)
       .setVisible(false);
     view.add(sprite);
-    const walkRig = new WholeBodyWalk(this, view, 'knight');
+    const walkRig = new WholeBodyWalk(this, view, 'knight', { renderBase:false });
     this.player = {
       x,
       currentHp: rankedPlayer?.currentHp ?? this.gameState.player.currentHp,
@@ -253,7 +253,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (!sprite?.anims || !this.anims.exists(key)) return false;
     this.player.walkRig.setVisible(false);
-    sprite.setVisible(true);
+    sprite.setVisible(false);
     sprite.setScale(this.player.spriteScale);
     if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key);
     this.syncPlayerEquipmentAppearance();

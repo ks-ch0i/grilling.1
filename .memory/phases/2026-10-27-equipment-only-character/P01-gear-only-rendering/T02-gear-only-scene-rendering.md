@@ -70,16 +70,16 @@
 - Assert the hidden driver still cycles 0–3 walk frames and Battle action frames map to atlas 4–9. Existing animation completion behavior is preserved.
 
 ## Acceptance Criteria
-- [ ] Town horse/rider render from equipment images only at the existing side-by-side positions.
-- [ ] Battle ordinary/ranked and both PvP fighters display no horse/rider base pixels beneath equipment layers.
-- [ ] Walk/action frame, facing, action completion, enemy visuals, and per-ticket gear snapshots remain functional.
-- [ ] Equipment asset validation no longer requires `knight-standing` but still rejects any incomplete 12-frame equipment atlas.
+- [x] Town horse/rider render from equipment images only at the existing side-by-side positions.
+- [x] Battle ordinary/ranked and both PvP fighters display no horse/rider base pixels beneath equipment layers.
+- [x] Walk/action frame, facing, action completion, enemy visuals, and per-ticket gear snapshots remain functional.
+- [x] Equipment asset validation no longer requires `knight-standing` but still rejects any incomplete 12-frame equipment atlas.
 
 ## Validation
-- `node --test test/equipment-appearance.test.js test/equipment-appearance-assets.test.js test/whole-body-walk.test.js test/knight-animation.test.js test/pvp/character-appearance.test.js test/town-profile-actions.test.js` — focused rendering/frame/PvP/Town tests pass.
-- `npm run build` — production Vite bundle succeeds.
+- `node --test test/equipment-appearance.test.js test/equipment-appearance-assets.test.js test/whole-body-walk.test.js test/knight-animation.test.js test/pvp/character-appearance.test.js test/town-profile-actions.test.js` — 37/37 tests pass.
+- `npm run build` — production Vite bundle succeeds; Vite reports the existing Phaser chunk size warning.
 - `git diff --check` — no whitespace errors.
-- Browser/manual review at `http://localhost:5173/` when the local server is available: Town preview; ordinary and ranked idle/walk/action; PvP both directions; verify no duplicate base character/horse pixels.
+- Composite PNG review covered Common, mixed rarity, Legendary and the side-by-side Town preview in T01. Browser QA was not run: Windows Computer Use could not confidently identify the active Edge URL, so no browser UI action was taken.
 
 ## Commit Message
 ```text
@@ -94,6 +94,6 @@ Task: T02-gear-only-scene-rendering
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과
+- commit: this task's planned commit

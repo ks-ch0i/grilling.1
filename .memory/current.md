@@ -1,20 +1,20 @@
 # Current Context
 
 ## Active Plan
-[장비 조합만으로 캐릭터 구성](./plans/2026-10-27-equipment-only-character.md) — in progress.
+[장비 조합만으로 캐릭터 구성](./plans/2026-10-27-equipment-only-character.md) — complete.
 
 ## Active Phase
-P01 — [장비 레이어만 렌더링](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/phase.md), status in progress.
+P01 — [장비 레이어만 렌더링](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/phase.md), status complete.
 
 ## Active Task
-[T02 장면별 장비 전용 렌더링](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/T02-gear-only-scene-rendering.md)
+None — all tasks in the equipment-only character plan are complete.
 
 ## Latest Pushed Item
 - `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
 - Result and validation are recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
 
 ## Status
-- 2026-10-27 장비 전용 캐릭터 P01-T01 완료: 30개 완전 슬롯 atlas와 원본 재생성 builder, 자산 계약 검증 및 합성 시각 검토를 마쳤다. P01-T02에서 장면의 기사·말 베이스 픽셀을 제거한다. 강화 파괴 장비 복구 세부 규칙은 별도 논의로 남겼다.
+- 2026-10-27 장비 전용 캐릭터 완료: P01-T01 `ad8992f`에서 30개 완전 슬롯 atlas와 재생성 builder를 추가했다. P01-T02에서는 Town/Battle/PvP 플레이어의 베이스 픽셀을 숨기고 포즈 드라이버를 유지했다. 37개 집중 테스트와 Vite 빌드를 통과했다. 브라우저 QA는 컴퓨터 사용 자동화가 Edge URL을 확인하지 못해 실행하지 않았다. 강화 파괴 장비 복구 세부 규칙은 별도 논의로 남겼다.
 - P01-T01 complete: shared 4,800px stage bounds, three fixed enemy clusters, 3,600px boss spawn, and immediate v3 ticket expiry/v4 issuance. Game-rules tests 30/30, API stage-run tests 20/20, Vite build, API check passed. Commit `142cf18`; worktree branch: `feat/equipment-background-combat-layout-20261027`.
 - P02-T01 complete: added 30 transparent 12-frame equipment atlases, standalone standing knight base, immutable slot/rarity manifest, and RGBA/frame/padding contract tests. Asset tests 4/4 and Vite build passed.
 - P02-T02 complete: added rarity-based gear layers in ordinary/ranked combat, walk/action/facing synchronization, the live Town horse/standing-knight preview, and BootScene asset completeness checks. Focused tests 26/26, Vite build, and `git diff --check` passed.

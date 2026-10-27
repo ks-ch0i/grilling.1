@@ -110,9 +110,6 @@ export class EquipmentAppearance {
 
 export function renderTownEquipmentPreview(scene, equipment) {
   const horseContainer = scene.add.container(556, 118);
-  const horseBase = scene.add.image(0, 0, 'walk-knight', 0).setOrigin(0.5);
-  horseBase.setScale(64 / (horseBase.height || 256));
-  horseContainer.add(horseBase);
   const horseAppearance = new EquipmentAppearance(scene, horseContainer, equipment, {
     scale:64 / 256,
     origin:[0.5, 0.5],
@@ -121,14 +118,11 @@ export function renderTownEquipmentPreview(scene, equipment) {
   });
 
   const knightContainer = scene.add.container(628, 118);
-  const knightBase = scene.add.image(0, 0, 'knight-standing').setOrigin(0.5);
-  knightBase.setScale(64 / (knightBase.height || 256));
-  knightContainer.add(knightBase);
   const knightAppearance = new EquipmentAppearance(scene, knightContainer, equipment, {
     scale:64 / 256,
     origin:[0.5, 0.5],
     slots:TOWN_KNIGHT_SLOTS,
     initialFrame:10,
   });
-  return { horseBase, horseAppearance, knightBase, knightAppearance };
+  return { horseAppearance, knightAppearance };
 }

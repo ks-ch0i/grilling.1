@@ -169,14 +169,6 @@ test('all equipment atlases are RGBA 512x1536 PNGs with a transparent padding fr
   }
 });
 
-test('the standing knight preview base is a transparent 256x256 RGBA PNG', () => {
-  const png = readFileSync(new URL('../public/assets/gear/knight-standing.png', import.meta.url));
-  const decoded = decodeRgbaPng(png);
-  assert.equal(decoded.width, FRAME_SIZE);
-  assert.equal(decoded.height, FRAME_SIZE);
-  assert.equal(decoded.hasTransparentPixel, true);
-});
-
 test('mounted rider underlay keeps transparent source dimensions for walk and action poses', () => {
   const rider = decodeRgbaPng(readFileSync(new URL('../public/assets/walk/knight-rider.png', import.meta.url)));
   assert.equal(rider.width, 1205);

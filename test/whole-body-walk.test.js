@@ -79,7 +79,7 @@ test('mounted knight keeps one rider pose while the horse walks and changes dire
   const image=(x,y,key)=>({x,y,key,height:1305,frame:0,rotation:0,
     setOrigin(){return this;},setScale(scale){this.scale=scale;return this;},setFrame(frame){this.frame=frame;return this;},
   });
-  const scene={add:{image,container:()=>({scaleX:1,add(){}})},cache:{json:{get:()=>({ground:244,frameSize:256,contentHeight:180})}}};
+  const scene={add:{image,container:()=>({scaleX:1,add(){},setVisible(visible){this.visible=visible;return this;}})},cache:{json:{get:()=>({ground:244,frameSize:256,contentHeight:180})}}};
   const walker=new WholeBodyWalk(scene,{x:0,add(){}},'knight');
   assert.equal(walker.rider.scale,150/989);
   assert.equal(walker.rider.y,-100);
@@ -90,4 +90,33 @@ test('mounted knight keeps one rider pose while the horse walks and changes dire
   }
   assert.equal(horseFrames.size,4);
   assert.equal(walker.container.scaleX,-1);
+});
+
+test('gear-only knight pose driver stays hidden while its walk frame and facing advance',()=>{
+  const containers=[];
+  const image=(x,y,key,frame)=>({x,y,key,height:1305,frame:frame??0,
+    setOrigin(){return this;},setScale(){return this;},setFrame(next){this.frame=next;return this;},
+  });
+  const scene={add:{image,container:()=>{const container={scaleX:1,visible:true,add(){},setVisible(visible){this.visible=visible;return this;}};containers.push(container);return container;}},cache:{json:{get:()=>({ground:244,frameSize:256,contentHeight:180})}}};
+  const parent={x:0,add(){}};
+  const driver=new WholeBodyWalk(scene,parent,'knight',{renderBase:false});
+
+  assert.equal(driver.container.visible,false);
+  assert.ok(driver.sprite);
+  assert.ok(driver.rider);
+  driver.setVisible(true);
+  assert.equal(driver.container.visible,false);
+  driver.follow(30,true,1,1/60);
+  assert.equal(driver.frame,1);
+  assert.equal(driver.sprite.frame,1);
+  assert.equal(driver.container.scaleX,-1);
+  driver.follow(60,true,1,1/60);
+  assert.equal(driver.frame,2);
+  assert.equal(driver.sprite.frame,2);
+  assert.equal(driver.container.visible,false);
+
+  const enemy=new WholeBodyWalk(scene,parent,'boar');
+  assert.equal(enemy.container.visible,true);
+  enemy.setVisible(false);
+  assert.equal(enemy.container.visible,false);
 });
