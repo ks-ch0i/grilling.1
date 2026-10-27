@@ -1,6 +1,6 @@
 # Task: T01 Equipment Appearance Assets
 
-## Status: pending
+## Status: done
 
 ## Goal
 각 장비 부위·희귀도 조합에 대해 투명 배경의 프레임 정렬 레이어를 만들고, 마을용 전신 입상 기사 베이스를 추가한다. 이후 렌더러가 장비 ID나 수치가 아니라 슬롯·희귀도만으로 아트를 선택할 수 있게 한다.
@@ -86,6 +86,6 @@ Task: T01-equipment-appearance-assets
 ```
 
 ## Progress
-- [ ] 구현 완료
-- [ ] 검증 통과
-- commit: pending
+- [x] 구현 완료
+- [x] 검증 통과: asset contract 4/4, 30 atlas PNGs + standing PNG, Vite build, `git diff --check`
+- [x] commit 예정: `feat(art): add equipment appearance sheets`
