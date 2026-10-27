@@ -69,7 +69,7 @@ test('Town appearance preview uses only the equipped rarity and is reconstructed
   const images = [];
   const scene = { add:{
     container(x, y) {
-      return { type:'Container', x, y, children:[], add(child) { this.children.push(child); } };
+      return { type:'Container', x, y, children:[], add(child) { this.children.push(child); }, setScale(x,y) { this.scaleX=x; this.scaleY=y; return this; }, destroy() {} };
     },
     image(x, y, key, frame) {
       const image = {

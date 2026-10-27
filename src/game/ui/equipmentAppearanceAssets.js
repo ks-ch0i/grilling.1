@@ -30,7 +30,7 @@ export const EQUIPMENT_APPEARANCE_ASSETS = Object.freeze(
     slot,
     rarity,
     key:`gear-${slot}-${rarity}`,
-    path:`/assets/gear/${slot}-${rarity}.png`,
+    path:`/assets/gear-aligned/${slot}-${rarity}.png`,
   }))),
 );
 

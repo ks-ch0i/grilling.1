@@ -46,6 +46,14 @@ for(const name of Object.keys(WALK_CHARACTERS))for(const suffix of ['','-actions
   });
 }
 
+test('knight action atlas keeps six 256px frames on the shared 244px ground',()=>{
+  const meta=JSON.parse(readFileSync(new URL('../public/assets/walk/knight-actions.json',import.meta.url),'utf8'));
+  assert.equal(meta.frameSize,256);
+  assert.equal(meta.frameCount,6);
+  assert.equal(meta.ground,244);
+  assert.equal(meta.contentHeight,188);
+});
+
 test('gait depends on distance, with the same phase at different render rates',()=>{
   for(const {stride} of Object.values(WALK_CHARACTERS)){
     let at30=0,at120=0;
@@ -73,6 +81,8 @@ test('mounted knight keeps one rider pose while the horse walks and changes dire
   });
   const scene={add:{image,container:()=>({scaleX:1,add(){}})},cache:{json:{get:()=>({ground:244,frameSize:256,contentHeight:180})}}};
   const walker=new WholeBodyWalk(scene,{x:0,add(){}},'knight');
+  assert.equal(walker.rider.scale,150/989);
+  assert.equal(walker.rider.y,-100);
   const riderPose={...walker.rider};const horseFrames=new Set();
   for(let i=1;i<=8;i++){
     walker.follow(i*15,true,i<5?-1:1,1/60);horseFrames.add(walker.sprite.frame);

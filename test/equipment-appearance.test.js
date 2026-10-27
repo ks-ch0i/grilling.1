@@ -16,6 +16,7 @@ function makeScene() {
       x, y, key, frame, visible:true, flipX:false, destroyed:false,
       width:256, height:256,
       setOrigin(...origin) { this.origin=origin; return this; },
+      setPosition(x,y) { this.x=x; this.y=y; return this; },
       setScale(scale) { this.scale=scale; return this; },
       setVisible(visible) { this.visible=visible; return this; },
       setTexture(nextKey) { this.key=nextKey; this.frame=0; return this; },
@@ -29,7 +30,7 @@ function makeScene() {
   const scene = { add:{
     image,
     container(x, y) {
-      const parent = { type:'Container', x, y, children:[], add(child) { this.children.push(child); return this; } };
+      const parent = { type:'Container', x, y, children:[], add(child) { this.children.push(child); return this; }, setScale(x,y) { this.scaleX=x; this.scaleY=y; return this; }, destroy() { this.destroyed=true; } };
       containers.push(parent);
       return parent;
     },
@@ -57,11 +58,33 @@ test('equipment appearance validates keys and builds ordered, rarity-based layer
   const appearance = new EquipmentAppearance(scene, parent, gear, { scale:1.25 });
 
   assert.deepEqual(appearance.layers.map(({ slot }) => slot), ['horse','armor','boots','gloves','helmet','spear']);
-  assert.deepEqual(parent.children, appearance.layers.map(({ image }) => image));
+  assert.deepEqual(parent.children, [appearance.container]);
+  assert.deepEqual(appearance.container.children, appearance.layers.map(({ image }) => image));
   assert.equal(appearance.layers.find(({ slot }) => slot === 'helmet').image.key, 'gear-helmet-rare');
-  assert.equal(appearance.layers.find(({ slot }) => slot === 'helmet').image.scale, 1.25);
+  assert.equal(appearance.container.scaleX, 1.25);
   assert.equal(appearance.layers.find(({ slot }) => slot === 'armor').image.visible, false);
   assert.deepEqual(gear, original);
+});
+
+test('mounted layers share an anchor and mirror together while action scale follows the base', () => {
+  const { scene } = makeScene();
+  const parent = { type:'Container', children:[], add(child) { this.children.push(child); } };
+  const appearance = new EquipmentAppearance(scene, parent, equipment({ helmet:{slot:'helmet',rarity:'rare'} }), { scale:1, actionScale:1.2 });
+  for (const {image} of appearance.layers) {
+    assert.equal(image.x, 0);
+    assert.equal(image.y, 0);
+    assert.deepEqual(image.origin, [0.5,244/256]);
+  }
+  appearance.setFacing(1).setFrame(0);
+  assert.equal(appearance.container.scaleX, -1);
+  assert.equal(appearance.container.scaleY, 1);
+  appearance.setFrame(4);
+  assert.equal(appearance.container.scaleX, -1.2);
+  assert.equal(appearance.container.scaleY, 1.2);
+  appearance.setFacing(-1).setFrame(9);
+  assert.equal(appearance.container.scaleX, 1.2);
+  appearance.setFrame(3);
+  assert.equal(appearance.container.scaleX, 1);
 });
 
 test('equipment appearance synchronizes frames, facing, and visibility; reserved frames are rejected', () => {
@@ -79,11 +102,11 @@ test('equipment appearance synchronizes frames, facing, and visibility; reserved
   assert.throws(() => appearance.setFrame(11), RangeError);
   assert.throws(() => appearance.setFrame(1.5), TypeError);
   appearance.setFacing(-1);
-  assert.equal(armor.flipX, false);
+  assert.equal(appearance.container.scaleX, 1);
   appearance.setFacing(0);
-  assert.equal(armor.flipX, false);
+  assert.equal(appearance.container.scaleX, 1);
   appearance.setFacing(1);
-  assert.equal(armor.flipX, true);
+  assert.equal(appearance.container.scaleX, -1);
   appearance.setEquipment(equipment());
   assert.equal(armor.visible, false);
   appearance.setVisible(false);
@@ -106,7 +129,7 @@ test('Town preview places horse and standing knight side by side with current eq
     helmet:{slot:'helmet',rarity:'unique'},
   }));
 
-  assert.deepEqual(containers.map(({ x,y }) => [x,y]), [[556,118],[628,118]]);
+  assert.deepEqual(containers.filter(({ x }) => x !== 0).map(({ x,y }) => [x,y]), [[556,118],[628,118]]);
   assert.equal(previews.horseBase.key, 'walk-knight');
   assert.equal(previews.horseBase.frame, 0);
   assert.equal(previews.horseBase.scale, 0.25);
@@ -114,6 +137,8 @@ test('Town preview places horse and standing knight side by side with current eq
   assert.equal(previews.knightBase.scale, 0.25);
   assert.equal(images.find(({ key }) => key === 'gear-horse-rare').frame, 10);
   assert.equal(images.find(({ key }) => key === 'gear-helmet-unique').frame, 10);
+  assert.deepEqual(previews.horseAppearance.layers[0].image.origin, [0.5,0.5]);
+  assert.equal(previews.knightAppearance.container.scaleX, 0.25);
   assert.deepEqual(previews.horseAppearance.layers.map(({ slot }) => slot), ['horse']);
   assert.deepEqual(previews.knightAppearance.layers.map(({ slot }) => slot), ['armor','boots','gloves','helmet','spear']);
 });

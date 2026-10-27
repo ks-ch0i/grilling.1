@@ -10,6 +10,7 @@ export function getEquipmentTextureKey(slot, rarity) {
 export class EquipmentAppearance {
   constructor(scene, parent, equipment, {
     scale,
+    actionScale = scale,
     origin = [0.5, 244 / 256],
     slots = LAYER_ORDER,
     initialFrame = 0,
@@ -18,9 +19,7 @@ export class EquipmentAppearance {
       throw new TypeError('Equipment appearance requires a Phaser container parent.');
     }
     if (!Number.isFinite(scale) || scale <= 0) throw new TypeError('Equipment scale must be a positive finite number.');
-    if (!Array.isArray(origin) || origin.length !== 2 || origin.some((part) => !Number.isFinite(part))) {
-      throw new TypeError('Equipment origin must contain two finite numbers.');
-    }
+    if (!Number.isFinite(actionScale) || actionScale <= 0) throw new TypeError('Action scale must be a positive finite number.');
     this.assertFrame(initialFrame);
     if (!Array.isArray(slots) || slots.some((slot) => !LAYER_ORDER.includes(slot)) || new Set(slots).size !== slots.length) {
       throw new RangeError('Equipment slots must be a unique list of supported slots.');
@@ -29,7 +28,10 @@ export class EquipmentAppearance {
     this.scene = scene;
     this.parent = parent;
     this.scale = scale;
-    this.origin = [...origin];
+    this.actionScale = actionScale;
+    this.direction = -1;
+    this.container = scene.add.container(0, 0);
+    parent.add(this.container);
     this.frameIndex = initialFrame;
     this.visible = true;
     this.destroyed = false;
@@ -38,13 +40,13 @@ export class EquipmentAppearance {
       const item = equipment?.[slot] ?? null;
       const key = item ? getEquipmentTextureKey(slot, item.rarity) : getEquipmentTextureKey(slot, 'common');
       const image = scene.add.image(0, 0, key, initialFrame)
-        .setOrigin(...this.origin)
-        .setScale(scale)
+        .setOrigin(...origin)
         .setVisible(Boolean(item));
-      parent.add(image);
+      this.container.add(image);
       return { slot, image, equipped:Boolean(item) };
     });
     this.setEquipment(equipment);
+    this.setFrame(initialFrame);
   }
 
   assertFrame(frameIndex) {
@@ -75,13 +77,20 @@ export class EquipmentAppearance {
     this.assertFrame(frameIndex);
     this.frameIndex = frameIndex;
     for (const { image } of this.layers) image.setFrame(frameIndex);
+    this.updateScale();
     return this;
   }
 
   setFacing(direction) {
     if (direction !== -1 && direction !== 1) return this;
-    for (const { image } of this.layers) image.setFlipX(direction > 0);
+    this.direction = direction;
+    this.updateScale();
     return this;
+  }
+
+  updateScale() {
+    const scale = this.frameIndex >= 4 && this.frameIndex <= 9 ? this.actionScale : this.scale;
+    this.container.setScale(this.direction > 0 ? -scale : scale, scale);
   }
 
   setVisible(visible) {
@@ -95,6 +104,7 @@ export class EquipmentAppearance {
     this.destroyed = true;
     for (const { image } of this.layers) image.destroy();
     this.layers.length = 0;
+    this.container.destroy();
   }
 }
 

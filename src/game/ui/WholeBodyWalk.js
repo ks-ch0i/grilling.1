@@ -3,7 +3,7 @@ export const WALK_CHARACTERS = Object.freeze({
   brute:{height:178,stride:48},
   warlord:{height:242,stride:48},
   boar:{height:106,stride:52},
-  knight:{height:190,walkHeight:145,stride:120,rider:{height:150,x:8,y:-94,origin:[.64,.66]}},
+  knight:{height:190,walkHeight:145,stride:120,rider:{height:150,contentHeight:989,x:8,y:-100,origin:[.64,.66]}},
 });
 
 export function preloadWholeBodyWalks(scene) {
@@ -33,9 +33,10 @@ export class WholeBodyWalk {
     this.container.add(this.sprite);
     if(this.config.rider){
       const pose=this.config.rider;
+      if(!Number.isFinite(pose.contentHeight)||pose.contentHeight<=0)throw new TypeError('Mounted rider content height is invalid.');
       this.rider=scene.add.image(pose.x,pose.y,'knight-rider')
         .setOrigin(...pose.origin);
-      this.rider.setScale(pose.height/this.rider.height);
+      this.rider.setScale(pose.height/pose.contentHeight);
       this.container.add(this.rider);
     }
   }

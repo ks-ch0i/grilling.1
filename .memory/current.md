@@ -1,13 +1,13 @@
 # Current Context
 
 ## Active Plan
-[기사 장비·배경 아트와 전투 거리 조정](./plans/2026-10-27-equipment-background-combat-layout.md) — complete.
+[장비 레이어 전체 정렬](./plans/2026-10-27-equipment-layer-alignment.md) — done.
 
 ## Active Phase
-P03 — [장면 배경](./phases/2026-10-27-equipment-background-combat-layout/P03-scene-backgrounds/phase.md), status done.
+P01 — [장비 레이어 정렬](./phases/2026-10-27-equipment-layer-alignment/P01-layer-alignment/phase.md), status done.
 
 ## Active Task
-없음 — 현재 계획의 모든 Task 완료.
+None — P01-T01 complete.
 
 ## Latest Pushed Item
 - `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
@@ -57,4 +57,6 @@ P03 — [장면 배경](./phases/2026-10-27-equipment-background-combat-layout/P
 - 대상 구독·리소스 그룹이 정해지지 않아 what-if와 실제 배포가 보류 상태다. 이번 계획에서도 Azure 리소스 생성·배포·실환경 검증은 제외한다.
 
 ## Next Step
-No active task. The current plan is complete. The post-fix battle button still needs a manual click check in the local browser; no push or deployment was performed.
+`$memory-execute` — execute P01-T01 from [the active blueprint](./phases/2026-10-27-equipment-layer-alignment/P01-layer-alignment/T01-neutral-rider-and-layer-layout.md).
+
+- 2026-10-27 layer repair: replaced shared arbitrary per-slot transforms with 30 pose-aligned atlases; offline composites reviewed across walk/action/Town poses and rarity samples. Focused client tests 36/36; build passed; git diff --check passed. Manual browser verification remains available.

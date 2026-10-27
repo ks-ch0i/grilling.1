@@ -108,7 +108,7 @@ export class PvpScene extends Phaser.Scene {
       }
       const appearance = new EquipmentAppearance(this, container, equipment, {
         scale:WALK_CHARACTERS.knight.walkHeight / metadata.contentHeight,
-        origin:[0.5,244/256],
+        layout:'mounted',
       });
       return { container, walkRig, appearance, lastX:x };
     } catch (error) {

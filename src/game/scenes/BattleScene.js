@@ -191,7 +191,7 @@ export class BattleScene extends Phaser.Scene {
       walkRig,
       equipmentAppearance:new EquipmentAppearance(this, view, this.gameState.equipment, {
         scale:spriteScale,
-        origin:[0.5,244/256],
+        layout:'mounted',
       }),
       facingDirection:1,
       visualMoving:false,

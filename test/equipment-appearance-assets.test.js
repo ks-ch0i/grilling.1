@@ -22,6 +22,10 @@ function decodeRgbaPng(buffer) {
   let bitDepth;
   let colorType;
   let interlace;
+  let contentLeft;
+  let contentTop;
+  let contentRight;
+  let contentBottom;
   for (let offset = 8; offset < buffer.length;) {
     const length = buffer.readUInt32BE(offset);
     const type = buffer.toString('ascii', offset + 4, offset + 8);
@@ -41,10 +45,15 @@ function decodeRgbaPng(buffer) {
   assert.equal(interlace, 0);
 
   const stride = width * 4;
+  contentLeft = width;
+  contentTop = height;
+  contentRight = -1;
+  contentBottom = -1;
   const raw = inflateSync(Buffer.concat(chunks));
   let previous = Buffer.alloc(stride);
   let paddingIsTransparent = true;
   let hasTransparentPixel = false;
+  const frameBounds = Array.from({ length:12 }, () => ({ minX:256, minY:256, maxX:-1, maxY:-1 }));
   for (let y = 0, offset = 0; y < height; y++) {
     const filter = raw[offset++];
     const row = Buffer.from(raw.subarray(offset, offset + stride));
@@ -64,11 +73,28 @@ function decodeRgbaPng(buffer) {
     for (let x = 0; x < width; x++) {
       const alpha = row[x * 4 + 3];
       if (alpha < 255) hasTransparentPixel = true;
+      if (alpha >= 32) {
+        if (width === 512 && height === 1536) {
+          const frame = Math.floor(y / 256) * 2 + Math.floor(x / 256);
+          const box = frameBounds[frame];
+          box.minX = Math.min(box.minX, x % 256); box.maxX = Math.max(box.maxX, x % 256);
+          box.minY = Math.min(box.minY, y % 256); box.maxY = Math.max(box.maxY, y % 256);
+        }
+        contentLeft = Math.min(contentLeft, x);
+        contentTop = Math.min(contentTop, y);
+        contentRight = Math.max(contentRight, x);
+        contentBottom = Math.max(contentBottom, y);
+      }
       if (y >= FRAME_SIZE * 5 && x >= FRAME_SIZE && alpha !== 0) paddingIsTransparent = false;
     }
     previous = row;
   }
-  return { width, height, hasTransparentPixel, paddingIsTransparent };
+  return {
+    width, height, hasTransparentPixel, paddingIsTransparent, frameBounds,
+    contentBounds:contentRight < 0 ? null : {
+      x:contentLeft, y:contentTop, width:contentRight-contentLeft+1, height:contentBottom-contentTop+1,
+    },
+  };
 }
 
 function paeth(left, up, upLeft) {
@@ -101,7 +127,7 @@ test('equipment appearance manifest covers every slot and rarity with stable atl
     slot,
     rarity,
     key: `gear-${slot}-${rarity}`,
-    path: `/assets/gear/${slot}-${rarity}.png`,
+    path: `/assets/gear-aligned/${slot}-${rarity}.png`,
   })));
   assert.deepEqual(EQUIPMENT_APPEARANCE_ASSETS, expected);
   assert.equal(Object.isFrozen(EQUIPMENT_APPEARANCE_ASSETS), true);
@@ -121,6 +147,11 @@ test('all equipment atlases are RGBA 512x1536 PNGs with a transparent padding fr
     assert.equal(decoded.height, ATLAS_HEIGHT, `${asset.path} height`);
     assert.equal(decoded.hasTransparentPixel, true, `${asset.path} alpha`);
     assert.equal(decoded.paddingIsTransparent, true, `${asset.path} padding frame`);
+    for (let frame=0; frame<11; frame++) assert.ok(decoded.frameBounds[frame].maxX >= 0, `${asset.path} frame ${frame}`);
+    const walk=decoded.frameBounds[0];
+    const centerY=(walk.minY+walk.maxY)/2;
+    const expectedY={helmet:[50,90],armor:[85,135],gloves:[95,140],boots:[150,200],spear:[75,120],horse:[125,195]}[asset.slot];
+    assert.ok(centerY >= expectedY[0] && centerY <= expectedY[1], `${asset.path} walk body alignment: ${centerY}`);
   }
 });
 
@@ -130,4 +161,17 @@ test('the standing knight preview base is a transparent 256x256 RGBA PNG', () =>
   assert.equal(decoded.width, FRAME_SIZE);
   assert.equal(decoded.height, FRAME_SIZE);
   assert.equal(decoded.hasTransparentPixel, true);
+});
+
+test('mounted rider underlay keeps transparent source dimensions for walk and action poses', () => {
+  const rider = decodeRgbaPng(readFileSync(new URL('../public/assets/walk/knight-rider.png', import.meta.url)));
+  assert.equal(rider.width, 1205);
+  assert.equal(rider.height, 1305);
+  assert.equal(rider.hasTransparentPixel, true);
+  assert.deepEqual(rider.contentBounds, { x:573, y:233, width:437, height:989 });
+
+  const actions = decodeRgbaPng(readFileSync(new URL('../public/assets/walk/knight-actions.png', import.meta.url)));
+  assert.equal(actions.width, 512);
+  assert.equal(actions.height, 768);
+  assert.equal(actions.hasTransparentPixel, true);
 });
