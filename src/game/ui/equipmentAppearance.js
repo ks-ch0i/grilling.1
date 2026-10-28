@@ -1,10 +1,14 @@
-import { equipmentAppearanceTextureKey } from './equipmentAppearanceAssets.js';
+import { EQUIPMENT_SLOTS, equipmentAppearanceTextureKey } from './equipmentAppearanceAssets.js';
 
-const LAYER_ORDER = Object.freeze(['horse','armor','boots','gloves','helmet','spear']);
+const LAYER_ORDER = Object.freeze([
+  ['horse','back'], ['spear','back'], ['armor','back'], ['boots','back'],
+  ['gloves','back'], ['helmet','back'], ['horse','front'], ['armor','front'],
+  ['boots','front'], ['spear','front'], ['gloves','front'], ['helmet','front'],
+]);
 const TOWN_KNIGHT_SLOTS = Object.freeze(['armor','boots','gloves','helmet','spear']);
 
-export function getEquipmentTextureKey(slot, rarity) {
-  return equipmentAppearanceTextureKey(slot, rarity);
+export function getEquipmentTextureKey(slot, rarity, part = 'back') {
+  return equipmentAppearanceTextureKey(slot, rarity, part);
 }
 
 export class EquipmentAppearance {
@@ -12,7 +16,7 @@ export class EquipmentAppearance {
     scale,
     actionScale = scale,
     origin = [0.5, 244 / 256],
-    slots = LAYER_ORDER,
+    slots = EQUIPMENT_SLOTS,
     initialFrame = 0,
   } = {}) {
     if (!scene?.add || !parent || parent.type !== 'Container' || typeof parent.add !== 'function') {
@@ -21,7 +25,7 @@ export class EquipmentAppearance {
     if (!Number.isFinite(scale) || scale <= 0) throw new TypeError('Equipment scale must be a positive finite number.');
     if (!Number.isFinite(actionScale) || actionScale <= 0) throw new TypeError('Action scale must be a positive finite number.');
     this.assertFrame(initialFrame);
-    if (!Array.isArray(slots) || slots.some((slot) => !LAYER_ORDER.includes(slot)) || new Set(slots).size !== slots.length) {
+    if (!Array.isArray(slots) || slots.some((slot) => !EQUIPMENT_SLOTS.includes(slot)) || new Set(slots).size !== slots.length) {
       throw new RangeError('Equipment slots must be a unique list of supported slots.');
     }
 
@@ -35,15 +39,15 @@ export class EquipmentAppearance {
     this.frameIndex = initialFrame;
     this.visible = true;
     this.destroyed = false;
-    const orderedSlots = LAYER_ORDER.filter((slot) => slots.includes(slot));
-    this.layers = orderedSlots.map((slot) => {
+    const orderedSlots = LAYER_ORDER.filter(([slot]) => slots.includes(slot));
+    this.layers = orderedSlots.map(([slot, part]) => {
       const item = equipment?.[slot] ?? null;
-      const key = item ? getEquipmentTextureKey(slot, item.rarity) : getEquipmentTextureKey(slot, 'common');
+      const key = item ? getEquipmentTextureKey(slot, item.rarity, part) : getEquipmentTextureKey(slot, 'common', part);
       const image = scene.add.image(0, 0, key, initialFrame)
         .setOrigin(...origin)
         .setVisible(Boolean(item));
       this.container.add(image);
-      return { slot, image, equipped:Boolean(item) };
+      return { slot, part, image, equipped:Boolean(item) };
     });
     this.setEquipment(equipment);
     this.setFrame(initialFrame);
@@ -60,7 +64,7 @@ export class EquipmentAppearance {
     }
     const updates = this.layers.map((layer) => {
       const item = equipment[layer.slot] ?? null;
-      return { layer, item, key:item ? getEquipmentTextureKey(layer.slot, item.rarity) : null };
+      return { layer, item, key:item ? getEquipmentTextureKey(layer.slot, item.rarity, layer.part) : null };
     });
     for (const { layer, item, key } of updates) {
       layer.equipped = Boolean(item);

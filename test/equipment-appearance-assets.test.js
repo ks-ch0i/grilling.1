@@ -118,17 +118,18 @@ test('equipment appearance manifest covers every slot and rarity with stable atl
     town: 10,
     padding: 11,
   });
-  assert.equal(EQUIPMENT_APPEARANCE_ASSETS.length, 30);
+  assert.equal(EQUIPMENT_APPEARANCE_ASSETS.length, 60);
   assert.equal(Object.isFrozen(EQUIPMENT_SLOTS), true);
   assert.equal(Object.isFrozen(EQUIPMENT_RARITIES), true);
   assert.equal(Object.isFrozen(EQUIPMENT_APPEARANCE_FRAMES), true);
 
-  const expected = EQUIPMENT_SLOTS.flatMap((slot) => EQUIPMENT_RARITIES.map((rarity) => ({
+  const expected = EQUIPMENT_SLOTS.flatMap((slot) => EQUIPMENT_RARITIES.flatMap((rarity) => ['back','front'].map((part) => ({
     slot,
     rarity,
-    key: `gear-${slot}-${rarity}`,
-    path: `/assets/gear-aligned/${slot}-${rarity}.png`,
-  })));
+    part,
+    key: `gear-${slot}-${rarity}${part === 'front' ? '-front' : ''}`,
+    path: `/assets/gear-aligned/${slot}-${rarity}${part === 'front' ? '-front' : ''}.png`,
+  }))));
   assert.deepEqual(EQUIPMENT_APPEARANCE_ASSETS, expected);
   assert.equal(Object.isFrozen(EQUIPMENT_APPEARANCE_ASSETS), true);
 });
@@ -140,6 +141,8 @@ test('equipment texture keys reject unsupported slot or rarity names', () => {
 });
 
 test('all equipment atlases are RGBA 512x1536 PNGs with a transparent padding frame', () => {
+  const framesBySlot = new Map();
+  const groundByRarity = new Map();
   for (const asset of EQUIPMENT_APPEARANCE_ASSETS) {
     const png = readFileSync(new URL(`../public${asset.path}`, import.meta.url));
     const decoded = decodeRgbaPng(png);
@@ -147,25 +150,17 @@ test('all equipment atlases are RGBA 512x1536 PNGs with a transparent padding fr
     assert.equal(decoded.height, ATLAS_HEIGHT, `${asset.path} height`);
     assert.equal(decoded.hasTransparentPixel, true, `${asset.path} alpha`);
     assert.equal(decoded.paddingIsTransparent, true, `${asset.path} padding frame`);
-    for (let frame=0; frame<11; frame++) assert.ok(decoded.frameBounds[frame].maxX >= 0, `${asset.path} frame ${frame}`);
-    if (asset.rarity === 'common') {
-      const bounds=decoded.frameBounds[0];
-      const width=bounds.maxX-bounds.minX+1;
-      const height=bounds.maxY-bounds.minY+1;
-      const minimum={
-        helmet:[60,60],
-        armor:[80,100],
-        gloves:[30,50],
-        boots:[45,70],
-        spear:[100,12],
-        horse:[150,100],
-      }[asset.slot];
-      assert.ok(width >= minimum[0] && height >= minimum[1], `${asset.path} must contain its complete slot silhouette: ${width}x${height}`);
-    }
-    const walk=decoded.frameBounds[0];
-    const centerY=(walk.minY+walk.maxY)/2;
-    const expectedY={helmet:[50,90],armor:[135,165],gloves:[95,150],boots:[185,225],spear:[120,155],horse:[125,195]}[asset.slot];
-    assert.ok(centerY >= expectedY[0] && centerY <= expectedY[1], `${asset.path} walk body alignment: ${centerY}`);
+    const name = `${asset.slot}-${asset.rarity}`;
+    const frames = framesBySlot.get(name) ?? Array(11).fill(false);
+    for (let frame=0; frame<11; frame++) frames[frame] ||= decoded.frameBounds[frame].maxX >= 0;
+    framesBySlot.set(name, frames);
+    const ground = groundByRarity.get(asset.rarity) ?? Array(10).fill(-1);
+    for (let frame=0; frame<10; frame++) ground[frame] = Math.max(ground[frame], decoded.frameBounds[frame].maxY);
+    groundByRarity.set(asset.rarity, ground);
+  }
+  for (const [name, frames] of framesBySlot) for (let frame=0; frame<11; frame++) assert.ok(frames[frame], `${name} frame ${frame} must have at least one visible fragment`);
+  for (const [rarity, frames] of groundByRarity) for (let frame=0; frame<10; frame++) {
+    assert.ok(frames[frame] >= 240 && frames[frame] <= 245, `${rarity} frame ${frame} must meet the ground anchor: ${frames[frame]}`);
   }
 });
 

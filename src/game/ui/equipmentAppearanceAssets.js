@@ -15,6 +15,8 @@ export const EQUIPMENT_RARITIES = Object.freeze([
   'legendary',
 ]);
 
+export const EQUIPMENT_PARTS = Object.freeze(['back', 'front']);
+
 export const EQUIPMENT_APPEARANCE_FRAMES = Object.freeze({
   frameWidth:256,
   frameHeight:256,
@@ -26,18 +28,20 @@ export const EQUIPMENT_APPEARANCE_FRAMES = Object.freeze({
 });
 
 export const EQUIPMENT_APPEARANCE_ASSETS = Object.freeze(
-  EQUIPMENT_SLOTS.flatMap((slot) => EQUIPMENT_RARITIES.map((rarity) => Object.freeze({
+  EQUIPMENT_SLOTS.flatMap((slot) => EQUIPMENT_RARITIES.flatMap((rarity) => EQUIPMENT_PARTS.map((part) => Object.freeze({
     slot,
     rarity,
-    key:`gear-${slot}-${rarity}`,
-    path:`/assets/gear-aligned/${slot}-${rarity}.png`,
-  }))),
+    part,
+    key:`gear-${slot}-${rarity}${part === 'front' ? '-front' : ''}`,
+    path:`/assets/gear-aligned/${slot}-${rarity}${part === 'front' ? '-front' : ''}.png`,
+  })))),
 );
 
-export function equipmentAppearanceTextureKey(slot, rarity) {
+export function equipmentAppearanceTextureKey(slot, rarity, part = 'back') {
   if (!EQUIPMENT_SLOTS.includes(slot)) throw new RangeError(`Unsupported equipment slot: ${slot}`);
   if (!EQUIPMENT_RARITIES.includes(rarity)) throw new RangeError(`Unsupported equipment rarity: ${rarity}`);
-  return `gear-${slot}-${rarity}`;
+  if (!EQUIPMENT_PARTS.includes(part)) throw new RangeError(`Unsupported equipment part: ${part}`);
+  return `gear-${slot}-${rarity}${part === 'front' ? '-front' : ''}`;
 }
 
 export function preloadEquipmentAppearanceAssets(load) {

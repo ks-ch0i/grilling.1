@@ -58,7 +58,7 @@ test('equipment appearance validates keys and builds ordered, rarity-based layer
   const original = structuredClone(gear);
   const appearance = new EquipmentAppearance(scene, parent, gear, { scale:1.25 });
 
-  assert.deepEqual(appearance.layers.map(({ slot }) => slot), ['horse','armor','boots','gloves','helmet','spear']);
+  assert.deepEqual(appearance.layers.map(({ slot,part }) => `${slot}-${part}`), ['horse-back','spear-back','armor-back','boots-back','gloves-back','helmet-back','horse-front','armor-front','boots-front','spear-front','gloves-front','helmet-front']);
   assert.deepEqual(parent.children, [appearance.container]);
   assert.deepEqual(appearance.container.children, appearance.layers.map(({ image }) => image));
   assert.equal(appearance.layers.find(({ slot }) => slot === 'helmet').image.key, 'gear-helmet-rare');
@@ -132,15 +132,15 @@ test('Town preview places horse and knight equipment side by side without base i
 
   assert.deepEqual(containers.filter(({ x }) => x !== 0).map(({ x,y }) => [x,y]), [[556,118],[628,118]]);
   assert.deepEqual(Object.keys(previews), ['horseAppearance','knightAppearance']);
-  assert.equal(images.length, 6);
+  assert.equal(images.length, 12);
   assert.ok(images.every(({ key }) => key.startsWith('gear-')));
   assert.ok(!images.some(({ key }) => ['walk-knight','knight-standing'].includes(key)));
   assert.equal(images.find(({ key }) => key === 'gear-horse-rare').frame, 10);
   assert.equal(images.find(({ key }) => key === 'gear-helmet-unique').frame, 10);
   assert.deepEqual(previews.horseAppearance.layers[0].image.origin, [0.5,0.5]);
   assert.equal(previews.knightAppearance.container.scaleX, 0.25);
-  assert.deepEqual(previews.horseAppearance.layers.map(({ slot }) => slot), ['horse']);
-  assert.deepEqual(previews.knightAppearance.layers.map(({ slot }) => slot), ['armor','boots','gloves','helmet','spear']);
+  assert.deepEqual(previews.horseAppearance.layers.map(({ slot }) => slot), ['horse','horse']);
+  assert.deepEqual(previews.knightAppearance.layers.map(({ slot,part }) => `${slot}-${part}`), ['spear-back','armor-back','boots-back','gloves-back','helmet-back','armor-front','boots-front','spear-front','gloves-front','helmet-front']);
 });
 
 test('battle appearance frame follows the current walk or knight action frame', async () => {
@@ -150,7 +150,7 @@ test('battle appearance frame follows the current walk or knight action frame', 
   assert.equal(getKnightEquipmentFrame({ visualAction:'defeat', walkFrame:0, spriteFrameName:'not-a-frame' }), null);
 });
 
-test('equipment preload and validation require only all 30 twelve-frame gear sheets', () => {
+test('equipment preload and validation require all 60 twelve-frame gear sheets', () => {
   const sheetLoads = [];
   const imageLoads = [];
   const scene = {

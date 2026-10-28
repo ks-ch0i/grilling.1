@@ -1,19 +1,24 @@
 # Current Context
 
 ## Active Plan
-[장비 조합만으로 캐릭터 구성](./plans/2026-10-27-equipment-only-character.md) — complete.
+[완성된 장비 조합 캐릭터](./plans/2026-10-28-coherent-equipment-character.md) — complete.
 
 ## Active Phase
-P01 — [장비 레이어만 렌더링](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/phase.md), status complete.
+P01 — [장비 조합 캐릭터 완성](./phases/2026-10-28-coherent-equipment-character/P01-coherent-character/phase.md), status complete.
 
 ## Active Task
-None — all tasks in the equipment-only character plan are complete.
+None — P01-T01 and P01-T02 complete.
 
 ## Latest Pushed Item
-- `e28fca0` — `feat(combat): add chasing enemies and steady-rider sprite animation` (also includes the preceding local guest startup/canvas sizing fix `70c2656`).
-- Result and validation are recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
+- `5e3056e` — `fix(gear): render characters from equipment only`, pushed on `origin/feat/equipment-background-combat-layout-20261027`. The rejected visuals were replaced in two later local commits, which have not been pushed.
+- Earlier `e28fca0` enemy animation work is recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
 
 ## Status
+- 2026-10-28 T02 완료: 60개 앞뒤 atlas와 공통 좌표 렌더러를 적용하고 테스트 19/19, 빌드, 재생성 확인 및 로컬 시각 검증을 수행했다. 랭킹·PvP 시각 검증은 테스트 티켓/스냅샷으로 수행했으며 실제 서버 검증은 하지 않았다.
+- 2026-10-28 T01 완료: 사용자가 Common 기마 재합성 샘플을 확인했고 `76afe5b`로 커밋했다. T02에서 나머지 자세·희귀도와 실제 장면 연동을 진행한다.
+- 2026-10-28 T01: 사용자 승인으로 코드 마스크 분리, 12개 조각 및 실제 256×256 재합성 샘플을 제작했다. 슬롯별 제거 검토와 픽셀 재합성 확인 후 사용자에게 샘플을 제시했다. 사용자 확인 전 상태는 in progress다.
+- 2026-10-28 T01 진행 중: 기준 그림과 개별 추출 시안을 `P01-coherent-character/references/drafts/`에 보관했다. 추출 시 창이 이동하고 갑옷 다리가 다시 그려져 같은 좌표에서 결합할 수 없어, 재합성과 사용자 확인은 아직 수행하지 않았다.
+- 2026-10-28 새 계획 수립: T01은 완성 기마 샘플과 분리·재합성 결과에 대한 사용자 확인을 기다린다. 확인 후 T02에서 전체 동작·희귀도와 장면에 확장한다. 이전 작업의 시각 결과는 사용자가 거부했다.
 - 2026-10-27 장비 전용 캐릭터 완료: P01-T01 `ad8992f`에서 30개 완전 슬롯 atlas와 재생성 builder를 추가했다. P01-T02에서는 Town/Battle/PvP 플레이어의 베이스 픽셀을 숨기고 포즈 드라이버를 유지했다. 37개 집중 테스트와 Vite 빌드를 통과했다. 브라우저 QA는 컴퓨터 사용 자동화가 Edge URL을 확인하지 못해 실행하지 않았다. 강화 파괴 장비 복구 세부 규칙은 별도 논의로 남겼다.
 - P01-T01 complete: shared 4,800px stage bounds, three fixed enemy clusters, 3,600px boss spawn, and immediate v3 ticket expiry/v4 issuance. Game-rules tests 30/30, API stage-run tests 20/20, Vite build, API check passed. Commit `142cf18`; worktree branch: `feat/equipment-background-combat-layout-20261027`.
 - P02-T01 complete: added 30 transparent 12-frame equipment atlases, standalone standing knight base, immutable slot/rarity manifest, and RGBA/frame/padding contract tests. Asset tests 4/4 and Vite build passed.
@@ -59,6 +64,6 @@ None — all tasks in the equipment-only character plan are complete.
 - 강화 파괴 장비 복구 — 기능 추가는 확정됐지만 보관 기간, 비용/재료, 가능 조건, 재시도와 UI는 별도 논의 후 계획한다. 현재 Active Plan에서는 강화 파괴 규칙을 바꾸지 않는다.
 
 ## Next Step
-`$memory-execute` — execute P01-T01 from [the active blueprint](./phases/2026-10-27-equipment-only-character/P01-gear-only-rendering/T01-complete-equipment-atlases.md).
+완료된 계획의 [시각 검증 기록](./phases/2026-10-28-coherent-equipment-character/P01-coherent-character/references/qa-results.md)을 참고한다. 다음 작업은 별도 결정이 필요하다.
 
 - 2026-10-27 layer repair: replaced shared arbitrary per-slot transforms with 30 pose-aligned atlases; offline composites reviewed across walk/action/Town poses and rarity samples. Focused client tests 36/36; build passed; git diff --check passed. Manual browser verification remains available.

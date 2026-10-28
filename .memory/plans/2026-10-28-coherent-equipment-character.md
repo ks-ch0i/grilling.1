@@ -11,4 +11,4 @@
 ## Phases
 | Phase | Status | Summary | Blueprint |
 | :--- | :--- | :--- | :--- |
-| P01 | `in_progress` | 기마 샘플 확인 후 전체 장비 아트와 장면 렌더링 완성 | [P01](../phases/2026-10-28-coherent-equipment-character/P01-coherent-character/phase.md) |
+| P01 | `done` | 기마 샘플 확인 후 전체 장비 아트와 장면 렌더링 완성 | [P01](../phases/2026-10-28-coherent-equipment-character/P01-coherent-character/phase.md) |
