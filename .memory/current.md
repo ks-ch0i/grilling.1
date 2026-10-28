@@ -10,7 +10,7 @@ P01 — [장비 조합 캐릭터 완성](./phases/2026-10-28-coherent-equipment-
 None — P01-T01 and P01-T02 complete.
 
 ## Latest Pushed Item
-- `5e3056e` — `fix(gear): render characters from equipment only`, pushed on `origin/feat/equipment-background-combat-layout-20261027`. The rejected visuals were replaced in two later local commits, which have not been pushed.
+- `a620287` — `feat(gear): assemble coherent equipment characters`, the completed feature item on `feat/equipment-background-combat-layout-20261027`. Check the branch's remote tracking status for push confirmation.
 - Earlier `e28fca0` enemy animation work is recorded in [Enemy Chase and Animated Enemy Sprites](./decisions/2026-10-25-enemy-chase-sprites.md).
 
 ## Status
