@@ -792,9 +792,9 @@ export class BattleScene extends Phaser.Scene {
     this.saveState(this.gameState);
   }
 
-  collectDrops() {
+  collectDrops({ all = false } = {}) {
     for (const drop of this.groundDrops) {
-      if (!drop.view.active || Math.abs(this.player.x - drop.x) > 45) continue;
+      if (!drop.view.active || (!all && Math.abs(this.player.x - drop.x) > 45)) continue;
       const result = tryStoreDrop(this.gameState, drop.item);
       if (!result.ok) continue;
       this.gameState = result.state;
@@ -997,8 +997,9 @@ export class BattleScene extends Phaser.Scene {
       this.showGoldRewardFailure(completed.reason, this.stageGoldRequirement);
       return;
     }
+    this.collectDrops({ all: true });
     this.finished=true;
-    this.gameState={...completed.state,progression:{...completed.state.progression,chapter:completed.nextChapter,currentStage:completed.nextStage}};
+    this.gameState={...completed.state,inventory:this.gameState.inventory,progression:{...completed.state.progression,chapter:completed.nextChapter,currentStage:completed.nextStage}};
     this.player.currentHp=this.gameState.player.currentHp;
     this.saveState(this.gameState);
     this.submitRankedClear();

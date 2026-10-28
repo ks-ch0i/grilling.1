@@ -449,3 +449,22 @@ test('compareStageRank orders farther progress, faster times, then stable player
   ].sort(compareStageRank);
   assert.deepEqual(rows.map((row) => row.playerId), ['a', 'z', 'b', 'a']);
 });
+
+
+test('v5 clear awards all generated drops while v4 keeps historical replay semantics', async () => {
+  const { resolveStageDrops } = await import('@knight-run/game-rules/rewards');
+  const ticket = { runId: RUN_ID, seed: 123456, chapter: 1, stage: 1, simulatorVersion: 5, balanceVersion: 2, issuedAtUtc: ISSUED_AT.toISOString() };
+  const { inputs, replay } = makeClearInputs(ticket);
+  const drops = resolveStageDrops(ticket, replay.defeatedEnemies, []).drops;
+  assert.ok(drops.length > 0);
+  assert.deepEqual(replay.collectedDropOrdinals, drops.map(({ ordinal }) => ordinal));
+  const oldReplay = makeClearInputs({ ...ticket, simulatorVersion: 4 }).replay;
+  assert.ok(oldReplay.collectedDropOrdinals.length < drops.length);
+  const repository = createStageRepository();
+  seedIssuedTicket(repository);
+  repository.tickets.get(RUN_ID).SimulatorVersion = 5;
+  const { submitStageResult } = await loadStageRunService();
+  const result = await submitStageResult({}, identityA, RUN_ID, { inputs }, new Date('2026-10-21T02:02:00.000Z'), createStageDependencies(repository));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.state.inventory.map(({ id }) => id), drops.map(({ item }) => item.id));
+});

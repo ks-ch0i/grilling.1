@@ -1,6 +1,25 @@
 # Current Context
 
 ## Active Plan
+[스테이지 클리어 자동 습득](./plans/2026-10-28-stage-clear-auto-loot.md)
+
+## Active Phase
+[P01 자동 습득](./phases/2026-10-28-stage-clear-auto-loot/P01-auto-loot/phase.md)
+
+## Active Task
+None — T01 complete.
+
+## Status
+- T01 complete: client 236 tests, API 150 tests, build passed.
+
+## Next Step
+후속 작업 없음. 배포 보류.
+
+## Previous Context
+
+# Current Context
+
+## Active Plan
 [완성된 장비 조합 캐릭터](./plans/2026-10-28-coherent-equipment-character.md) — complete.
 
 ## Active Phase

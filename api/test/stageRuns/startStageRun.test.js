@@ -37,7 +37,7 @@ test('startStageRun issues an immutable seeded ticket from the matching cloud re
   assert.equal(result.status, 201);
   assert.equal(result.ticket.runId, 'aaaaaaaa-1111-4111-8111-111111111111');
   assert.equal(result.ticket.seed, 123456);
-  assert.equal(result.ticket.simulatorVersion, 4);
+  assert.equal(result.ticket.simulatorVersion, 5);
   assert.equal(result.ticket.balanceVersion, 2);
   assert.equal(result.ticket.issuedAtUtc, '2026-10-21T02:00:00.000Z');
   assert.equal(result.ticket.expiresAtUtc, '2026-10-21T02:30:00.000Z');
@@ -53,7 +53,7 @@ test('startStageRun issues an immutable seeded ticket from the matching cloud re
   }, { level: 3, xp: 12, xpToNext: 100, pendingLevelUps: 1, replayXpMultiplier: 1 });
   assert.equal(repository.calls.createTicket[0].playerId, PLAYER_ID);
   assert.equal(repository.calls.createTicket[0].expectedSaveRevision, 7);
-  assert.equal(repository.calls.createTicket[0].simulatorVersion, 4);
+  assert.equal(repository.calls.createTicket[0].simulatorVersion, 5);
   assert.equal(repository.calls.createTicket[0].balanceVersion, 2);
 });
 
@@ -79,7 +79,7 @@ test('startStageRun derives its snapshot from a legacy v1 cloud save', async () 
   assert.equal(repository.saves.get(PLAYER_ID).SchemaVersion, 1);
 });
 
-test('startStageRun expires an active v3 ticket before issuing a v4 ticket', async () => {
+test('startStageRun expires an active v3 ticket before issuing a v5 ticket', async () => {
   const previousRunId = 'cccccccc-3333-4333-8333-333333333333';
   const repository = createStageRepository({ existingTicket: {
     RunId: previousRunId,
@@ -103,7 +103,7 @@ test('startStageRun expires an active v3 ticket before issuing a v4 ticket', asy
 
   assert.equal(result.status, 201);
   assert.equal(repository.tickets.get(previousRunId).Status, 'expired');
-  assert.equal(repository.tickets.get(RUN_ID).SimulatorVersion, 4);
+  assert.equal(repository.tickets.get(RUN_ID).SimulatorVersion, 5);
   assert.equal(repository.tickets.get(RUN_ID).BalanceVersion, 2);
 });
 
@@ -149,4 +149,17 @@ test('startStageRun allows a previously cleared stage and rejects an existing ac
   const active = await startStageRun({}, identityA, { chapter: 1, stage: 1, expectedSaveRevision: 7 }, dependencies);
   assert.equal(active.status, 409);
   assert.equal(active.code, 'active-run-exists');
+});
+
+
+test('startStageRun preserves an unexpired v4 run while issuing v5 for new runs', async () => {
+  const previousRunId = 'cccccccc-3333-4333-8333-333333333333';
+  const repository = createStageRepository({ existingTicket: {
+    RunId: previousRunId, PlayerId: PLAYER_ID, SimulatorVersion: 4, BalanceVersion: 2,
+    IssuedAtUtc: new Date('2026-10-21T01:59:00.000Z'), ExpiresAtUtc: new Date('2026-10-21T02:30:00.000Z'), Status: 'issued',
+  } });
+  const { startStageRun } = await loadStageRunService();
+  const result = await startStageRun({}, identityA, { chapter: 1, stage: 1, expectedSaveRevision: 7 }, createStageDependencies(repository));
+  assert.equal(result.code, 'active-run-exists');
+  assert.equal(repository.tickets.get(previousRunId).Status, 'issued');
 });

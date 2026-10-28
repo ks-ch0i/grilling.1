@@ -4,13 +4,14 @@ import { resolveStageDrops, xpRequiredForLevel } from './rewards.js';
 
 const TICKS_PER_SECOND = 60;
 const STAGE_LAYOUTS = Object.freeze({
-  4: Object.freeze({
+  5: Object.freeze({
     worldWidth: 4800,
     normalEnemyClusterXs: Object.freeze([700, 1900, 3100]),
     bossX: 3600,
   }),
+  4: Object.freeze({ worldWidth: 4800, normalEnemyClusterXs: Object.freeze([700, 1900, 3100]), bossX: 3600 }),
 });
-const STAGE_WORLD_WIDTH = STAGE_LAYOUTS[4].worldWidth;
+const STAGE_WORLD_WIDTH = STAGE_LAYOUTS[5].worldWidth;
 const PVP_WORLD_WIDTH = 11200;
 const PLAYER_WIDTH = 64;
 const NORMAL_ENEMY_WIDTH = 128;
@@ -38,7 +39,7 @@ function assertTicket(ticket) {
   if (!Number.isInteger(ticket.stage) || ticket.stage < 1 || ticket.stage > 10) {
     throw new RangeError('stage must be an integer from 1 to 10.');
   }
-  if (ticket.simulatorVersion !== 4) throw new RangeError('unsupported simulatorVersion.');
+  if (![4, 5].includes(ticket.simulatorVersion)) throw new RangeError('unsupported simulatorVersion.');
   if (ticket.balanceVersion !== 2) throw new RangeError('unsupported balanceVersion.');
   if (typeof ticket.issuedAtUtc !== 'string' || !ticket.issuedAtUtc) throw new TypeError('issuedAtUtc must be a non-empty string.');
 }
@@ -149,14 +150,14 @@ function nextRandom(randomState) {
   return { state, value: state / 0x100000000 };
 }
 
-export function getStageLayout(simulatorVersion = 4) {
+export function getStageLayout(simulatorVersion = 5) {
   if (!Number.isInteger(simulatorVersion) || !STAGE_LAYOUTS[simulatorVersion]) {
     throw new RangeError('unsupported simulatorVersion.');
   }
   return STAGE_LAYOUTS[simulatorVersion];
 }
 
-export function getStageNormalEnemySpawnXs(enemyCount, simulatorVersion = 4) {
+export function getStageNormalEnemySpawnXs(enemyCount, simulatorVersion = 5) {
   const { min, max } = BALANCE.normalEnemyCount;
   if (!Number.isSafeInteger(enemyCount) || enemyCount < min || enemyCount > max) {
     throw new RangeError(`enemyCount must be an integer from ${min} to ${max}.`);
@@ -423,7 +424,9 @@ function invalidStageResult(reason, playerSnapshot, elapsedTicks = 0) {
 }
 
 function stageResult(state, playerPath) {
-  const { collectedDropOrdinals } = resolveStageDrops(state.ticket, state.defeatedEnemies, playerPath);
+  const { collectedDropOrdinals } = resolveStageDrops(state.ticket, state.defeatedEnemies, playerPath, {
+    autoCollect: state.ticket.simulatorVersion === 5 && state.outcome === 'clear',
+  });
   return {
     valid: state.outcome === 'clear' || state.outcome === 'death',
     outcome: state.outcome,

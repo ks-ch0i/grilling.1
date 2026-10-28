@@ -36,7 +36,7 @@ function ticket(currentProfile, overrides = {}) {
   return {
     runId: '11111111-1111-4111-8111-111111111111',
     seed: 123456789,
-    simulatorVersion: 3,
+    simulatorVersion: 5,
     balanceVersion: 2,
     chapter: 1,
     stage: 1,
@@ -296,7 +296,7 @@ test('invalid replay/profile, ungenerated ordinals and numeric overflow use type
 test('replay output exposes kill, drop-pickup and validated level-up events only for terminal runs', () => {
   const ticketData = {
     runId: 'replay-events', seed: 123456789, chapter: 1, stage: 1,
-    simulatorVersion: 3, balanceVersion: 2, issuedAtUtc: '2026-10-21T00:00:00.000Z',
+    simulatorVersion: 5, balanceVersion: 2, issuedAtUtc: '2026-10-21T00:00:00.000Z',
   };
   const terminal = replayRankedRun(ticketData, {
     maxHp: 10000, currentHp: 10000, attack: 1000, defense: 1000,
@@ -317,4 +317,15 @@ test('replay output exposes kill, drop-pickup and validated level-up events only
   assert.ok(Array.isArray(terminal.collectedDropOrdinals));
   assert.equal(incomplete.valid, false);
   assert.equal(Object.hasOwn(incomplete, 'defeatedEnemies'), false);
+});
+
+
+test('clear auto collection includes every generated drop regardless of path', () => {
+  const stageTicket = ticket(profile(), { stage: 5 });
+  const defeated = [enemy('enemy-1', { tick: 1, x: 700, dropEligible: true }), enemy('boss', { boss: true, tick: 2, x: 3600, dropEligible: true })];
+  const ground = resolveStageDrops(stageTicket, defeated, []);
+  const collected = resolveStageDrops(stageTicket, defeated, [], { autoCollect: true });
+  assert.ok(ground.drops.length > 0);
+  assert.deepEqual(ground.collectedDropOrdinals, []);
+  assert.deepEqual(collected.collectedDropOrdinals, collected.drops.map((drop) => drop.ordinal));
 });

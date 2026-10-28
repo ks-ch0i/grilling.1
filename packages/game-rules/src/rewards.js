@@ -87,7 +87,7 @@ function validateDropTicket(ticket) {
       !Number.isSafeInteger(ticket.seed) || ticket.seed < 1 || ticket.seed > 0xffffffff ||
       !Number.isSafeInteger(ticket.chapter) || ticket.chapter < 1 ||
       !Number.isSafeInteger(ticket.stage) || ticket.stage < 1 || ticket.stage > 10 ||
-      ticket.balanceVersion !== 2 || ticket.simulatorVersion !== 4) {
+      ticket.balanceVersion !== 2 || ![4, 5].includes(ticket.simulatorVersion)) {
     rewardError('invalid-stage', 'The stage ticket is outside the current reward rules.');
   }
 }
@@ -114,11 +114,11 @@ function rollStageDrops(ticket, defeatedEnemies) {
   return drops;
 }
 
-export function resolveStageDrops(ticket, defeatedEnemies, playerPath) {
+export function resolveStageDrops(ticket, defeatedEnemies, playerPath, { autoCollect = false } = {}) {
   const drops = rollStageDrops(ticket, defeatedEnemies);
   const collectedDropOrdinals = [];
   for (const drop of drops) {
-    if (playerPath.some((position) => position.tick > drop.tick && Math.abs(position.x - drop.x) <= 45)) {
+    if (autoCollect || playerPath.some((position) => position.tick > drop.tick && Math.abs(position.x - drop.x) <= 45)) {
       collectedDropOrdinals.push(drop.ordinal);
     }
   }

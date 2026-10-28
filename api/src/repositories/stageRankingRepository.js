@@ -1,4 +1,5 @@
 import sql from 'mssql';
+import { SUPPORTED_STAGE_SIMULATOR_VERSIONS } from '../domain/gameVersions.js';
 import * as cloudSaveRepository from './cloudSaveRepository.js';
 import * as playerProfileRepository from './playerProfileRepository.js';
 import { parseCloudSave } from '../domain/cloudSave.js';
@@ -38,13 +39,14 @@ export async function createTicket(transaction, input) {
   await new sql.Request(transaction)
     .input('PlayerId', sql.UniqueIdentifier, input.playerId)
     .input('NowUtc', sql.DateTime2, input.issuedAtUtc)
+    .input('PreviousSimulatorVersion', sql.Int, SUPPORTED_STAGE_SIMULATOR_VERSIONS[0])
     .input('SimulatorVersion', sql.Int, input.simulatorVersion)
     .input('BalanceVersion', sql.Int, input.balanceVersion)
     .query(`
       UPDATE dbo.StageRunTickets
       SET Status = N'expired'
       WHERE PlayerId = @PlayerId AND Status = N'issued' AND
-        (ExpiresAtUtc <= @NowUtc OR SimulatorVersion <> @SimulatorVersion OR BalanceVersion <> @BalanceVersion);
+        (ExpiresAtUtc <= @NowUtc OR SimulatorVersion NOT IN (@PreviousSimulatorVersion, @SimulatorVersion) OR BalanceVersion <> @BalanceVersion);
     `);
 
   const active = await new sql.Request(transaction)

@@ -158,7 +158,7 @@ export function createStageRepository({ revision = 7, state = makeSaveState(), e
       }
       for (const ticket of tickets.values()) {
         if (ticket.PlayerId === input.playerId && ticket.Status === 'issued' &&
-            (ticket.ExpiresAtUtc <= input.issuedAtUtc || ticket.SimulatorVersion !== input.simulatorVersion ||
+            (ticket.ExpiresAtUtc <= input.issuedAtUtc || ![4, input.simulatorVersion].includes(ticket.SimulatorVersion) ||
              ticket.BalanceVersion !== input.balanceVersion)) {
           ticket.Status = 'expired';
         }

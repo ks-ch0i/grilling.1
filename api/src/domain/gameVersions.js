@@ -1,4 +1,4 @@
-export const SIMULATOR_VERSION = 4;
-export const SUPPORTED_STAGE_SIMULATOR_VERSIONS = Object.freeze([SIMULATOR_VERSION]);
+export const SIMULATOR_VERSION = 5;
+export const SUPPORTED_STAGE_SIMULATOR_VERSIONS = Object.freeze([4, SIMULATOR_VERSION]);
 export const BALANCE_VERSION = 2;
 export const PVP_SIMULATOR_VERSION = 2;
